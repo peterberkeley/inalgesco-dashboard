@@ -48,33 +48,28 @@
   </div>
 
   <script>
-  // ----- CONFIG -----
-  const AIO_USERNAME = "Inalgescotest";               // Adafruit IO username
-  const AIO_KEY      = "aio_TTKM91AwfXeUcuJxnvzGBxSzGtQr"; // **public dev key – change for production**
-  const FEED_KEY     = "yellowboard.gps";             // Feed key
-  const LIMIT        = 5;                              // How many points to fetch
-  const POLL_MS      = 10_000;                         // Poll interval (ms)
-  // -------------------
+  // ----- CONFIG (no key needed for public feed) -----
+  const AIO_USERNAME = "Inalgescotest";      // Adafruit IO username
+  const FEED_KEY     = "yellowboard.gps";    // Feed key (public)
+  const LIMIT        = 5;                     // How many points to fetch
+  const POLL_MS      = 10_000;                // Poll interval (ms)
+  // -------------------------------------------------
 
   let map, marker, polyline;
 
   async function fetchFeed(limit = 1) {
     const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${FEED_KEY}/data?limit=${limit}`;
-    const res = await fetch(url, {
-      headers: { "X-AIO-Key": AIO_KEY }
-    });
+    const res = await fetch(url);             // no X-AIO-Key header for public feed
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   }
 
   function renderLatest(obj) {
-    const lat = parseFloat(obj.lat).toFixed(6);
-    const lon = parseFloat(obj.lon).toFixed(6);
-    const rows = [];
-    for (const [k,v] of Object.entries(obj)) {
-      rows.push(`<tr><th>${k}</th><td>${v}</td></tr>`);
-    }
+    const lat = Number.parseFloat(obj.lat).toFixed(6);
+    const lon = Number.parseFloat(obj.lon).toFixed(6);
+    const rows = Object.entries(obj).map(([k,v]) => `<tr><th>${k}</th><td>${v}</td></tr>`);
     document.getElementById("latest").innerHTML = rows.join("");
+
     // Map initialise / update
     if (!map) {
       map = L.map('map').setView([lat, lon], 13);
@@ -89,8 +84,10 @@
   }
 
   function renderHistory(arr) {
+    const header = `<tr><th>ts</th><th>lat</th><th>lon</th><th>sats</th></tr>`;
     const rows = arr.map(o => `<tr><td>${o.ts}</td><td>${o.lat}</td><td>${o.lon}</td><td>${o.sats}</td></tr>`);
-    document.getElementById("history").innerHTML = "<tr><th>ts</th><th>lat</th><th>lon</th><th>sats</th></tr>" + rows.join("");
+    document.getElementById("history").innerHTML = header + rows.join("");
+
     if (polyline) {
       const pts = arr.map(o => [o.lat, o.lon]);
       polyline.setLatLngs(pts);
@@ -102,9 +99,7 @@
     try {
       const data = await fetchFeed(LIMIT);
       const parsed = data.map(d => {
-        let obj;
-        try { obj = JSON.parse(d.value); } catch(e) { obj = { raw: d.value }; }
-        return obj;
+        try { return JSON.parse(d.value); } catch { return { raw: d.value }; }
       });
       if (parsed.length) {
         renderLatest(parsed[0]);
@@ -117,7 +112,7 @@
     }
   }
 
-  // Initial kick‑off
+  // Initial kick-off
   poll();
   </script>
 </body>
