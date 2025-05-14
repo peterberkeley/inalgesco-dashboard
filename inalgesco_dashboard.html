@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inalgesco Logger Dashboard</title>
+  <!-- Leaflet map library -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f5f5f5; }
+    header { padding: 1rem; background: #ffd500; }
+    h1 { margin: 0; font-size: 1.5rem; }
+    #map { height: 400px; }
+
+    .card {
+      background: #fff;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin: 1rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #fafafa; }
+    .flex { display: flex; flex-wrap: wrap; gap: 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Inalgesco GPS / Temperature Feed</h1>
+  </header>
+
+  <div class="flex">
+    <div class="card" style="flex:1 1 350px">
+      <h2>Latest Fix</h2>
+      <table id="latest"></table>
+    </div>
+    <div class="card" style="flex:1 1 350px">
+      <h2>Last 5 Points</h2>
+      <table id="history"></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Map</h2>
+    <div id="map"></div>
+  </div>
+
+  <script>
+  // ----- CONFIG -----
+  const AIO_USERNAME = "Inalgescotest";               // Adafruit IO username
+  const AIO_KEY      = "aio_rnnF12VuF1g8jqTk1otGP4JxNlxe"; // **public dev key – change for production**
+  const FEED_KEY     = "yellowboard.gps";             // Feed key
+  const LIMIT        = 5;                              // How many points to fetch
+  const POLL_MS      = 10_000;                         // Poll interval (ms)
+  // -------------------
+
+  let map, marker, polyline;
+
+  async function fetchFeed(limit = 1) {
+    const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${FEED_KEY}/data?limit=${limit}`;
+    const res = await fetch(url, {
+      headers: { "X-AIO-Key": AIO_KEY }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  function renderLatest(obj) {
+    const lat = parseFloat(obj.lat).toFixed(6);
+    const lon = parseFloat(obj.lon).toFixed(6);
+    const rows = [];
+    for (const [k,v] of Object.entries(obj)) {
+      rows.push(`<tr><th>${k}</th><td>${v}</td></tr>`);
+    }
+    document.getElementById("latest").innerHTML = rows.join("");
+    // Map initialise / update
+    if (!map) {
+      map = L.map('map').setView([lat, lon], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+      marker = L.marker([lat, lon]).addTo(map);
+      polyline = L.polyline([], { weight: 3 }).addTo(map);
+    } else {
+      marker.setLatLng([lat, lon]);
+    }
+  }
+
+  function renderHistory(arr) {
+    const rows = arr.map(o => `<tr><td>${o.ts}</td><td>${o.lat}</td><td>${o.lon}</td><td>${o.sats}</td></tr>`);
+    document.getElementById("history").innerHTML = "<tr><th>ts</th><th>lat</th><th>lon</th><th>sats</th></tr>" + rows.join("");
+    if (polyline) {
+      const pts = arr.map(o => [o.lat, o.lon]);
+      polyline.setLatLngs(pts);
+      map.fitBounds(polyline.getBounds(), { padding: [50,50] });
+    }
+  }
+
+  async function poll() {
+    try {
+      const data = await fetchFeed(LIMIT);
+      const parsed = data.map(d => {
+        let obj;
+        try { obj = JSON.parse(d.value); } catch(e) { obj = { raw: d.value }; }
+        return obj;
+      });
+      if (parsed.length) {
+        renderLatest(parsed[0]);
+        renderHistory(parsed);
+      }
+    } catch(err) {
+      console.error(err);
+    } finally {
+      setTimeout(poll, POLL_MS);
+    }
+  }
+
+  // Initial kick‑off
+  poll();
+  </script>
+</body>
+</html>
