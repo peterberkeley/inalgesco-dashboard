@@ -1,0 +1,2 @@
+# inalgesco-dashboard
+Inalgesco Datalogger
