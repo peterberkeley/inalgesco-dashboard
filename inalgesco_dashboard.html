@@ -17,11 +17,11 @@
   <style>
     /* -------------  COLOURS  ------------- */
     :root {
-      --brand-yellow: #ffd500;
-      --brand-dark:   #222;   /* almost‑black for text */
-      --brand-grey:   #626262;
+      --brand-light:  #d9eaf8; /* pulled from logo */
+      --brand-mid:    #00a2e8; /* brighter accent */
+      --brand-dark:   #002d5a; /* deep navy for text */
       --card-bg:      #ffffff;
-      --bg:           #f5f5f5;
+      --bg:           #f0f8ff;
     }
 
     /* -------------  BASE  ------------- */
@@ -36,7 +36,7 @@
 
     /* -------------  HEADER  ------------- */
     header{
-      background:linear-gradient(90deg,var(--brand-yellow) 0%,#ffbd00 100%);
+      background:linear-gradient(90deg,var(--brand-light) 0%,var(--brand-mid) 100%);
       padding:0.75rem 1rem;
       display:flex;
       align-items:center;
@@ -44,12 +44,12 @@
       box-shadow:0 2px 6px rgba(0,0,0,0.1);
     }
     header img{
-      height:40px;
+      height:46px;
       width:auto;
     }
     header h1{
       margin:0;
-      font-size:1.35rem;
+      font-size:1.4rem;
       font-weight:600;
       letter-spacing:0.01em;
     }
@@ -72,8 +72,8 @@
 
     /* -------------  TABLE  ------------- */
     table{ width:100%; border-collapse:collapse; font-size:0.92rem; }
-    th,td{ padding:0.45rem 0.35rem; text-align:left; border-bottom:1px solid #eee; }
-    th{ background:#fafafa; font-weight:600; }
+    th,td{ padding:0.45rem 0.35rem; text-align:left; border-bottom:1px solid #e3eef7; }
+    th{ background:#f7fbff; font-weight:600; }
 
     /* -------------  MAP  ------------- */
     #map{ height:420px; border-radius:0.75rem; overflow:hidden; }
