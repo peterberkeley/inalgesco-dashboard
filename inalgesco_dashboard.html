@@ -1,87 +1,187 @@
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include "AdafruitIO_WiFi.h"
-#include <Wire.h>
-#include <RTClib.h>
-#include <ArduinoJson.h>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inalgesco Datalogger Dashboard</title>
 
-// Replace with your Wi-Fi and Adafruit IO credentials
-#define IO_USERNAME  "Inalgescotest"
-#define IO_KEY       "your_aio_key_here"
-#define WIFI_SSID    "Four Winds"
-#define WIFI_PASS    "deirdre68"
+  <!-- Fonts and Leaflet -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-// Set up Adafruit IO
-AdafruitIO_WiFi io(IO_USERNAME, IO_KEY, WIFI_SSID, WIFI_PASS);
-AdafruitIO_Feed *gpsFeed = io.feed("yellowboard.gps");
+  <style>
+    :root {
+      --brand-light:#d9eaf8; --brand-mid:#00a2e8; --brand-dark:#002d5a;
+      --card-bg:#fff; --bg:#f0f8ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--brand-dark);
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      background: linear-gradient(90deg, var(--brand-light) 0%, var(--brand-mid) 100%);
+      padding: .75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      box-shadow: 0 2px 6px #0002;
+    }
+    header img { height: 46px; }
+    header h1 {
+      margin: 0;
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+    .flex {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: .75rem;
+      padding: 1rem;
+      flex: 1 1 350px;
+      box-shadow: 0 4px 10px #00000014;
+      animation: fadeIn .4s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; }
+    }
+    h2 {
+      margin: 0 0 .5rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .92rem;
+    }
+    th, td {
+      padding: .45rem .35rem;
+      text-align: left;
+      border-bottom: 1px solid #e3eef7;
+    }
+    th { background: #f7fbff; font-weight: 600; }
+    #map {
+      height: 420px;
+      border-radius: .75rem;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
+    <h1>Inalgesco Datalogger</h1>
+  </header>
 
-// RTC object
-RTC_DS3231 rtc;
+  <div class="flex">
+    <div class="card">
+      <h2>Latest Fix</h2>
+      <table id="latest"></table>
+    </div>
+    <div class="card">
+      <h2>Last 5 Points</h2>
+      <table id="history"></table>
+    </div>
+  </div>
 
-// Simulated sensors (replace with real sensor readings)
-float getNR1() { return 23.5; }  // replace with real sensor code
-float getNR2() { return 24.7; }
-float getNR3() { return 22.9; }
-float getLatitude() { return 51.5074; } // replace with GPS parsing
-float getLongitude() { return -0.1278; }
-int getSatCount() { return 7; }  // e.g., from GPS library
-bool hasFix() { return true; }
+  <div class="card" style="margin:1rem">
+    <h2>Map View</h2>
+    <div id="map"></div>
+  </div>
 
-void setup() {
-  Serial.begin(115200);
-  while (!Serial);
+  <script>
+    const AIO_USERNAME = "Inalgescotest";
+    const FEED_KEY = "yellowboard.gps";
+    const LIMIT = 5;
+    const POLL_MS = 10_000;
 
-  // Connect to Adafruit IO
-  Serial.print("Connecting to Adafruit IO");
-  io.connect();
-  while (io.status() < AIO_CONNECTED) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println(" connected!");
+    let map, marker, polyline;
 
-  // Initialize RTC
-  if (!rtc.begin()) {
-    Serial.println("Couldn't find RTC. Halting.");
-    while (true);
-  }
+    async function fetchFeed(limit = 1) {
+      const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${FEED_KEY}/data?limit=${limit}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
 
-  if (rtc.lostPower()) {
-    Serial.println("RTC lost power, setting to compile time.");
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  }
-}
+    function row(label, val) {
+      return `<tr><th>${label}</th><td>${val}</td></tr>`;
+    }
 
-void loop() {
-  io.run();
+    function renderLatest(o) {
+      const localTime = o.ts ? new Date(o.ts).toLocaleString() : "–";
+      const rows = [
+        row("local", localTime),
+        row("ts (UTC)", o.ts),
+        row("fix", o.fix),
+        row("lat", o.lat?.toFixed?.(6) ?? "–"),
+        row("lon", o.lon?.toFixed?.(6) ?? "–"),
+        row("sats", o.sats ?? "–"),
+        row("NR1 °C", o.nr1?.toFixed?.(1) ?? "–"),
+        row("NR2 °C", o.nr2?.toFixed?.(1) ?? "–"),
+        row("NR3 °C", o.nr3?.toFixed?.(1) ?? "–")
+      ].join("");
+      document.getElementById("latest").innerHTML = rows;
 
-  DateTime now = rtc.now();
+      if (o.fix) {
+        const lat = o.lat, lon = o.lon;
+        if (!map) {
+          map = L.map('map').setView([lat, lon], 13);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            { attribution: '© OpenStreetMap' }).addTo(map);
+          marker = L.marker([lat, lon]).addTo(map);
+          polyline = L.polyline([], { weight: 3 }).addTo(map);
+        } else marker.setLatLng([lat, lon]);
+      }
+    }
 
-  // ISO 8601 timestamp in UTC
-  char isoTimestamp[25];
-  snprintf(isoTimestamp, sizeof(isoTimestamp), "%04d-%02d-%02dT%02d:%02d:%02dZ",
-           now.year(), now.month(), now.day(),
-           now.hour(), now.minute(), now.second());
+    function renderHistory(arr) {
+      const header = `<tr><th>ts</th><th>lat</th><th>lon</th><th>nr1</th><th>nr2</th><th>nr3</th></tr>`;
+      const rows = arr.map(o =>
+        `<tr><td>${o.ts}</td><td>${o.lat?.toFixed?.(4) ?? "–"}</td><td>${o.lon?.toFixed?.(4) ?? "–"}</td>
+         <td>${o.nr1?.toFixed?.(1) ?? "–"}</td><td>${o.nr2?.toFixed?.(1) ?? "–"}</td><td>${o.nr3?.toFixed?.(1) ?? "–"}</td></tr>`
+      );
+      document.getElementById("history").innerHTML = header + rows.join("");
 
-  // Construct JSON
-  StaticJsonDocument<256> doc;
-  doc["ts"] = isoTimestamp;
-  doc["fix"] = hasFix();
-  doc["lat"] = getLatitude();
-  doc["lon"] = getLongitude();
-  doc["sats"] = getSatCount();
-  doc["nr1"] = getNR1();
-  doc["nr2"] = getNR2();
-  doc["nr3"] = getNR3();
+      const fixPts = arr.filter(o => o.fix);
+      if (polyline && fixPts.length) {
+        polyline.setLatLngs(fixPts.map(o => [o.lat, o.lon]));
+        map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+      }
+    }
 
-  // Serialize to string
-  char payload[300];
-  serializeJson(doc, payload, sizeof(payload));
+    async function poll() {
+      try {
+        const feed = await fetchFeed(LIMIT);
+        const parsed = feed.map(d => {
+          try { return JSON.parse(d.value); }
+          catch { return { raw: d.value }; }
+        });
+        if (parsed.length) {
+          renderLatest(parsed[0]);
+          renderHistory(parsed);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setTimeout(poll, POLL_MS);
+      }
+    }
 
-  // Send to Adafruit IO
-  Serial.print("Sending: ");
-  Serial.println(payload);
-  gpsFeed->save(payload);
-
-  delay(10000); // poll every 10 seconds
-}
+    poll();
+  </script>
+</body>
+</html>
