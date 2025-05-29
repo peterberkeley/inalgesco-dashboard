@@ -51,8 +51,8 @@
 
 <script>
 /* ---------- CONFIG ---------- */
-const USER   = "Inalgescodatalogger";
-const FEEDS  = {
+const USER = "Inalgescodatalogger";
+const FEEDS = {
   gps:    "gps",
   signal: "signal",
   volt:   "volt",
@@ -61,59 +61,62 @@ const FEEDS  = {
   nr2:    "nr2",
   nr3:    "nr3"
 };
-const LIMIT  = 5;            // points on map / table
-const POLL_MS= 10000;
+const LIMIT   = 5;          // GPS points to show
+const POLL_MS = 10000;      // 10-s refresh
 
 /* ---------- helpers ---------- */
 const api = (feed,lim=1)=>
   `https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data?limit=${lim}`;
 
 async function getJSON(feed,lim=1){
-  const r=await fetch(api(feed,lim)); if(!r.ok) throw r.text(); return r.json();
+  const r=await fetch(api(feed,lim));
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
 }
-function td(x){return `<td>${x}</td>`;}
-function fmt(v,p=1){return v==null?"–":v.toFixed?.(p)??v;}
+const td=x=>`<td>${x}</td>`;
+const fmt=(v,p=1)=>v==null?"–":(typeof v==="number"?v.toFixed(p):v);
 
 let map,marker,poly;
 
-/* ---------- render latest card ---------- */
-function renderLatest(data){
+/* ---------- render latest ---------- */
+function renderLatest(d){
   const rows=[
-    ["local",new Date(data.gps.ts).toLocaleString()],
-    ["fix",   data.gps.fix],
-    ["lat",   fmt(data.gps.lat,6)],
-    ["lon",   fmt(data.gps.lon,6)],
-    ["alt m", fmt(data.gps.alt,1)],
-    ["sats",  data.gps.sats??"–"],
-    ["speed km/h", fmt(data.speed,1)],
-    ["RSSI dBm",   data.signal],
-    ["volt mV",    data.volt],
-    ["NR1 °C",     fmt(data.nr1,1)],
-    ["NR2 °C",     fmt(data.nr2,1)],
-    ["NR3 °C",     fmt(data.nr3,1)]
+    ["local", new Date(d.gps.ts).toLocaleString()],
+    ["fix",   d.gps.fix],
+    ["lat",   fmt(d.gps.lat,6)],
+    ["lon",   fmt(d.gps.lon,6)],
+    ["alt m", fmt(d.gps.alt,1)],
+    ["sats",  d.gps.sats??"–"],
+    ["speed km/h", fmt(d.speed,1)],
+    ["RSSI dBm", d.signal],
+    ["volt mV", d.volt],
+    ["NR1 °C", fmt(d.nr1,1)],
+    ["NR2 °C", fmt(d.nr2,1)],
+    ["NR3 °C", fmt(d.nr3,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
-  latest.innerHTML=rows;
+  latest.innerHTML = rows;
 
-  if(data.gps.fix){
-    const {lat,lon}=data.gps;
+  if(d.gps.fix){
+    const {lat,lon}=d.gps;
     if(!map){
       map=L.map('map').setView([lat,lon],13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         {attribution:'© OpenStreetMap'}).addTo(map);
       marker=L.marker([lat,lon]).addTo(map);
-      poly=L.polyline([],{weight:3}).addTo(map);
+      poly=L.polyline([], {weight:3}).addTo(map);
     }else marker.setLatLng([lat,lon]);
   }
 }
 
 /* ---------- render history ---------- */
 function renderHist(list){
-  const head="<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th></tr>";
-  history.innerHTML=head+list.map(o=>
-    `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}</tr>`
-  ).join("");
+  history.innerHTML =
+    "<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th></tr>" +
+    list.map(o=>
+      `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}</tr>`
+    ).join("");
 
-  if(poly) {
+  if(poly){
     const pts=list.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
     poly.setLatLngs(pts);
     if(pts.length) map.fitBounds(poly.getBounds(),{padding:[40,40]});
@@ -123,24 +126,22 @@ function renderHist(list){
 /* ---------- poll loop ---------- */
 async function poll(){
   try{
-    /* fetch latest plain feeds in parallel */
-    const [gpsHist,signal,volt,speed,nr1,nr2,nr3]=await Promise.all([
+    const [gps,signal,volt,speed,nr1,nr2,nr3] = await Promise.all([
       getJSON(FEEDS.gps ,LIMIT),
-      getJSON(FEEDS.signal),getJSON(FEEDS.volt),
-      getJSON(FEEDS.speed), getJSON(FEEDS.nr1),
-      getJSON(FEEDS.nr2),  getJSON(FEEDS.nr3)
+      getJSON(FEEDS.signal), getJSON(FEEDS.volt),
+      getJSON(FEEDS.speed),  getJSON(FEEDS.nr1),
+      getJSON(FEEDS.nr2),    getJSON(FEEDS.nr3)
     ]);
 
-    /* parse gps JSON list */
-    const gpsParsed=gpsHist.map(d=>JSON.parse(d.value));
-    const latest={
+    const gpsParsed = gps.map(d=>JSON.parse(d.value));
+    const latest = {
       gps: gpsParsed[0]||{},
-      signal: signal[0]?.value??"–",
-      volt:   volt[0]?.value??"–",
-      speed:  speed[0]?.value??"–",
-      nr1:    nr1[0]?.value??"–",
-      nr2:    nr2[0]?.value??"–",
-      nr3:    nr3[0]?.value??"–"
+      signal: signal[0]?.value ?? "–",
+      volt:   volt[0]?.value ?? "–",
+      speed:  speed[0]?.value ?? "–",
+      nr1:    nr1[0]?.value ?? "–",
+      nr2:    nr2[0]?.value ?? "–",
+      nr3:    nr3[0]?.value ?? "–"
     };
 
     renderLatest(latest);
