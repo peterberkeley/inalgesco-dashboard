@@ -1,187 +1,154 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Inalgesco Datalogger Dashboard</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inalgesco Datalogger Dashboard</title>
 
-  <!-- Fonts and Leaflet -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<!-- Fonts & Leaflet -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <style>
-    :root {
-      --brand-light:#d9eaf8; --brand-mid:#00a2e8; --brand-dark:#002d5a;
-      --card-bg:#fff; --bg:#f0f8ff;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--brand-dark);
-      font-family: 'Inter', system-ui, sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
-    header {
-      background: linear-gradient(90deg, var(--brand-light) 0%, var(--brand-mid) 100%);
-      padding: .75rem 1rem;
-      display: flex;
-      align-items: center;
-      gap: .75rem;
-      box-shadow: 0 2px 6px #0002;
-    }
-    header img { height: 46px; }
-    header h1 {
-      margin: 0;
-      font-size: 1.4rem;
-      font-weight: 600;
-    }
-    .flex {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      padding: 1rem;
-    }
-    .card {
-      background: var(--card-bg);
-      border-radius: .75rem;
-      padding: 1rem;
-      flex: 1 1 350px;
-      box-shadow: 0 4px 10px #00000014;
-      animation: fadeIn .4s ease-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; }
-    }
-    h2 {
-      margin: 0 0 .5rem;
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .92rem;
-    }
-    th, td {
-      padding: .45rem .35rem;
-      text-align: left;
-      border-bottom: 1px solid #e3eef7;
-    }
-    th { background: #f7fbff; font-weight: 600; }
-    #map {
-      height: 420px;
-      border-radius: .75rem;
-      overflow: hidden;
-    }
-  </style>
+<style>
+  :root{--brand-light:#d9eaf8;--brand-mid:#00a2e8;--brand-dark:#002d5a;
+        --card-bg:#fff;--bg:#f0f8ff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--brand-dark);
+       font-family:'Inter',system-ui,sans-serif}
+  header{background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
+          padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;
+          box-shadow:0 2px 6px #0002}
+  header img{height:46px} header h1{margin:0;font-size:1.4rem;font-weight:600}
+  .flex{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem}
+  .card{background:var(--card-bg);border-radius:.75rem;padding:1rem;
+        flex:1 1 350px;box-shadow:0 4px 10px #0001;animation:fade .4s}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}
+                  to{opacity:1}}
+  h2{margin:0 0 .5rem;font-size:1.1rem;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
+  th{background:#f7fbff;font-weight:600}
+  #map{height:420px;border-radius:.75rem;overflow:hidden}
+</style>
 </head>
 <body>
-  <header>
-    <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
-    <h1>Inalgesco Datalogger</h1>
-  </header>
+<header>
+  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
+  <h1>Inalgesco Datalogger</h1>
+</header>
 
-  <div class="flex">
-    <div class="card">
-      <h2>Latest Fix</h2>
-      <table id="latest"></table>
-    </div>
-    <div class="card">
-      <h2>Last 5 Points</h2>
-      <table id="history"></table>
-    </div>
-  </div>
+<div class="flex">
+  <div class="card"><h2>Latest Fix & Sensors</h2><table id="latest"></table></div>
+  <div class="card"><h2>Last 5 GPS Points</h2><table id="history"></table></div>
+</div>
 
-  <div class="card" style="margin:1rem">
-    <h2>Map View</h2>
-    <div id="map"></div>
-  </div>
+<div class="card" style="margin:1rem">
+  <h2>Map View</h2><div id="map"></div>
+</div>
 
-  <script>
-    const AIO_USERNAME = "Inalgescotest";
-    const FEED_KEY = "yellowboard.gps";
-    const LIMIT = 5;
-    const POLL_MS = 10_000;
+<script>
+/* ---------- CONFIG ---------- */
+const USER   = "Inalgescodatalogger";
+const FEEDS  = {
+  gps:    "gps",
+  signal: "signal",
+  volt:   "volt",
+  speed:  "speed",
+  nr1:    "nr1",
+  nr2:    "nr2",
+  nr3:    "nr3"
+};
+const LIMIT  = 5;            // points on map / table
+const POLL_MS= 10000;
 
-    let map, marker, polyline;
+/* ---------- helpers ---------- */
+const api = (feed,lim=1)=>
+  `https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data?limit=${lim}`;
 
-    async function fetchFeed(limit = 1) {
-      const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${FEED_KEY}/data?limit=${limit}`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    }
+async function getJSON(feed,lim=1){
+  const r=await fetch(api(feed,lim)); if(!r.ok) throw r.text(); return r.json();
+}
+function td(x){return `<td>${x}</td>`;}
+function fmt(v,p=1){return v==null?"–":v.toFixed?.(p)??v;}
 
-    function row(label, val) {
-      return `<tr><th>${label}</th><td>${val}</td></tr>`;
-    }
+let map,marker,poly;
 
-    function renderLatest(o) {
-      const localTime = o.ts ? new Date(o.ts).toLocaleString() : "–";
-      const rows = [
-        row("local", localTime),
-        row("ts (UTC)", o.ts),
-        row("fix", o.fix),
-        row("lat", o.lat?.toFixed?.(6) ?? "–"),
-        row("lon", o.lon?.toFixed?.(6) ?? "–"),
-        row("sats", o.sats ?? "–"),
-        row("NR1 °C", o.nr1?.toFixed?.(1) ?? "–"),
-        row("NR2 °C", o.nr2?.toFixed?.(1) ?? "–"),
-        row("NR3 °C", o.nr3?.toFixed?.(1) ?? "–")
-      ].join("");
-      document.getElementById("latest").innerHTML = rows;
+/* ---------- render latest card ---------- */
+function renderLatest(data){
+  const rows=[
+    ["local",new Date(data.gps.ts).toLocaleString()],
+    ["fix",   data.gps.fix],
+    ["lat",   fmt(data.gps.lat,6)],
+    ["lon",   fmt(data.gps.lon,6)],
+    ["alt m", fmt(data.gps.alt,1)],
+    ["sats",  data.gps.sats??"–"],
+    ["speed km/h", fmt(data.speed,1)],
+    ["RSSI dBm",   data.signal],
+    ["volt mV",    data.volt],
+    ["NR1 °C",     fmt(data.nr1,1)],
+    ["NR2 °C",     fmt(data.nr2,1)],
+    ["NR3 °C",     fmt(data.nr3,1)]
+  ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
+  latest.innerHTML=rows;
 
-      if (o.fix) {
-        const lat = o.lat, lon = o.lon;
-        if (!map) {
-          map = L.map('map').setView([lat, lon], 13);
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            { attribution: '© OpenStreetMap' }).addTo(map);
-          marker = L.marker([lat, lon]).addTo(map);
-          polyline = L.polyline([], { weight: 3 }).addTo(map);
-        } else marker.setLatLng([lat, lon]);
-      }
-    }
+  if(data.gps.fix){
+    const {lat,lon}=data.gps;
+    if(!map){
+      map=L.map('map').setView([lat,lon],13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {attribution:'© OpenStreetMap'}).addTo(map);
+      marker=L.marker([lat,lon]).addTo(map);
+      poly=L.polyline([],{weight:3}).addTo(map);
+    }else marker.setLatLng([lat,lon]);
+  }
+}
 
-    function renderHistory(arr) {
-      const header = `<tr><th>ts</th><th>lat</th><th>lon</th><th>nr1</th><th>nr2</th><th>nr3</th></tr>`;
-      const rows = arr.map(o =>
-        `<tr><td>${o.ts}</td><td>${o.lat?.toFixed?.(4) ?? "–"}</td><td>${o.lon?.toFixed?.(4) ?? "–"}</td>
-         <td>${o.nr1?.toFixed?.(1) ?? "–"}</td><td>${o.nr2?.toFixed?.(1) ?? "–"}</td><td>${o.nr3?.toFixed?.(1) ?? "–"}</td></tr>`
-      );
-      document.getElementById("history").innerHTML = header + rows.join("");
+/* ---------- render history ---------- */
+function renderHist(list){
+  const head="<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th></tr>";
+  history.innerHTML=head+list.map(o=>
+    `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}</tr>`
+  ).join("");
 
-      const fixPts = arr.filter(o => o.fix);
-      if (polyline && fixPts.length) {
-        polyline.setLatLngs(fixPts.map(o => [o.lat, o.lon]));
-        map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
-      }
-    }
+  if(poly) {
+    const pts=list.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
+    poly.setLatLngs(pts);
+    if(pts.length) map.fitBounds(poly.getBounds(),{padding:[40,40]});
+  }
+}
 
-    async function poll() {
-      try {
-        const feed = await fetchFeed(LIMIT);
-        const parsed = feed.map(d => {
-          try { return JSON.parse(d.value); }
-          catch { return { raw: d.value }; }
-        });
-        if (parsed.length) {
-          renderLatest(parsed[0]);
-          renderHistory(parsed);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setTimeout(poll, POLL_MS);
-      }
-    }
+/* ---------- poll loop ---------- */
+async function poll(){
+  try{
+    /* fetch latest plain feeds in parallel */
+    const [gpsHist,signal,volt,speed,nr1,nr2,nr3]=await Promise.all([
+      getJSON(FEEDS.gps ,LIMIT),
+      getJSON(FEEDS.signal),getJSON(FEEDS.volt),
+      getJSON(FEEDS.speed), getJSON(FEEDS.nr1),
+      getJSON(FEEDS.nr2),  getJSON(FEEDS.nr3)
+    ]);
 
-    poll();
-  </script>
+    /* parse gps JSON list */
+    const gpsParsed=gpsHist.map(d=>JSON.parse(d.value));
+    const latest={
+      gps: gpsParsed[0]||{},
+      signal: signal[0]?.value??"–",
+      volt:   volt[0]?.value??"–",
+      speed:  speed[0]?.value??"–",
+      nr1:    nr1[0]?.value??"–",
+      nr2:    nr2[0]?.value??"–",
+      nr3:    nr3[0]?.value??"–"
+    };
+
+    renderLatest(latest);
+    renderHist(gpsParsed);
+  }catch(e){console.error(e);}
+  finally{setTimeout(poll,POLL_MS);}
+}
+poll();
+</script>
 </body>
 </html>
