@@ -13,63 +13,25 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <style>
-  :root{
-    --brand-light:#d9eaf8;
-    --brand-mid:#00a2e8;
-    --brand-dark:#002d5a;
-    --card-bg:#fff;
-    --bg:#f0f8ff;
-  }
+  /* ––– SAME CSS BLOCK AS BEFORE ––– */
+  :root{--brand-light:#d9eaf8;--brand-mid:#00a2e8;--brand-dark:#002d5a;
+        --card-bg:#fff;--bg:#f0f8ff;}
   *{box-sizing:border-box}
-  body{
-    margin:0;
-    background:var(--bg);
-    color:var(--brand-dark);
-    font-family:'Inter',system-ui,sans-serif;
-    -webkit-font-smoothing:antialiased;
-  }
-  header{
-    background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
-    padding:.75rem 1rem;
-    display:flex;
-    align-items:center;
-    gap:.75rem;
-    box-shadow:0 2px 6px #0002;
-  }
-  header img{height:46px}
-  header h1{margin:0;font-size:1.4rem;font-weight:600}
-  .flex{
-    display:flex;
-    flex-wrap:wrap;
-    gap:1rem;
-    padding:1rem;
-  }
-  .card{
-    background:var(--card-bg);
-    border-radius:.75rem;
-    padding:1rem;
-    flex:1 1 350px;
-    box-shadow:0 4px 10px #0001;
-    animation:fade .4s ease-out;
-  }
+  body{margin:0;background:var(--bg);color:var(--brand-dark);
+       font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  header{background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
+         padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;
+         box-shadow:0 2px 6px #0002;}
+  header img{height:46px} header h1{margin:0;font-size:1.4rem;font-weight:600}
+  .flex{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem}
+  .card{background:var(--card-bg);border-radius:.75rem;padding:1rem;
+        flex:1 1 350px;box-shadow:0 4px 10px #0001;animation:fade .4s ease-out;}
   @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
   h2{margin:0 0 .5rem;font-size:1.1rem;font-weight:600}
-  table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:.92rem;
-  }
-  th,td{
-    padding:.45rem .35rem;
-    text-align:left;
-    border-bottom:1px solid #e3eef7;
-  }
+  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
   th{background:#f7fbff;font-weight:600}
-  #map{
-    height:420px;
-    border-radius:.75rem;
-    overflow:hidden;
-  }
+  #map{height:420px;border-radius:.75rem;overflow:hidden}
 </style>
 </head>
 <body>
@@ -99,8 +61,8 @@ const FEEDS = {
   nr2:    "nr2",
   nr3:    "nr3"
 };
-const LIMIT = 5;        // GPS points to show
-const POLL_MS = 10000;  // 10-s refresh
+const LIMIT = 5;
+const POLL_MS = 10000;
 
 /* ---------- helpers ---------- */
 const api = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
@@ -140,10 +102,7 @@ function renderLatest(d){
 
 function renderHist(list){
   history.innerHTML="<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th></tr>"+
-    list.map(o=>
-      `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}</tr>`
-    ).join("");
-
+    list.map(o=>`<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}</tr>`).join("");
   if(poly){
     const pts=list.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
     poly.setLatLngs(pts);
@@ -162,15 +121,22 @@ async function poll(){
 
   if(!gps.length){ setTimeout(poll,POLL_MS); return; }
 
-  const gParsed=gps.map(d=>JSON.parse(d.value));
+  /* ——— PATCH: add ts + fix ——— */
+  const gParsed = gps.map(d=>{
+    const o = JSON.parse(d.value);
+    o.ts  = d.created_at;
+    o.fix = true;
+    return o;
+  });
+
   renderLatest({
-    gps:gParsed[0],
-    signal:signal[0]?.value??"–",
-    volt:  volt[0]?.value??"–",
-    speed: speed[0]?.value??"–",
-    nr1:   nr1[0]?.value??"–",
-    nr2:   nr2[0]?.value??"–",
-    nr3:   nr3[0]?.value??"–"
+    gps: gParsed[0],
+    signal: signal[0]?.value ?? "–",
+    volt:   volt[0]?.value ?? "–",
+    speed:  speed[0]?.value ?? "–",
+    nr1:    nr1[0]?.value  ?? "–",
+    nr2:    nr2[0]?.value  ?? "–",
+    nr3:    nr3[0]?.value  ?? "–"
   });
   renderHist(gParsed);
   setTimeout(poll,POLL_MS);
