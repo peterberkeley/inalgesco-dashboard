@@ -13,21 +13,21 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <style>
+  /* ——— basics / cards / table / map ——— */
   :root{--brand-light:#d9eaf8;--brand-mid:#00a2e8;--brand-dark:#002d5a;
         --card-bg:#fff;--bg:#f0f8ff;}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--brand-dark);
        font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
   header{background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
-         padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;
-         box-shadow:0 2px 6px #0002;}
+         padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;box-shadow:0 2px 6px #0002;}
   header img{height:46px} header h1{margin:0;font-size:1.4rem;font-weight:600}
   .flex{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem}
-  .card{background:var(--card-bg);border-radius:.75rem;padding:1rem;
-        flex:1 1 350px;box-shadow:0 4px 10px #0001;animation:fade .4s ease-out;}
+  .card{background:var(--card-bg);border-radius:.75rem;padding:1rem;flex:1 1 350px;
+        box-shadow:0 4px 10px #0001;animation:fade .4s ease-out;}
   @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
   h2{margin:0 0 .5rem;font-size:1.1rem;font-weight:600}
-  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  table{width:100%;border-collapse:collapse;font-size:.9rem}
   th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
   th{background:#f7fbff;font-weight:600}
   #map{height:420px;border-radius:.75rem;overflow:hidden}
@@ -41,7 +41,7 @@
 
 <div class="flex">
   <div class="card"><h2>Latest Fix &amp; Sensors</h2><table id="latest"></table></div>
-  <div class="card"><h2>Last&nbsp;5&nbsp;Records</h2><table id="history"></table></div>
+  <div class="card"><h2>Last 50 Records</h2><table id="history"></table></div>
 </div>
 
 <div class="card" style="margin:1rem">
@@ -51,67 +51,63 @@
 <script>
 /* ---------- CONFIG ---------- */
 const USER = "Inalgescodatalogger";
-const FEEDS = { gps:"gps", signal:"signal", volt:"volt", speed:"speed",
-                nr1:"nr1", nr2:"nr2", nr3:"nr3" };
-const LIMIT = 5, POLL_MS = 10000;
+const FEEDS = {
+  gps:    "gps",
+  signal: "signal",
+  volt:   "volt",
+  speed:  "speed",
+  nr1:    "nr1",
+  nr2:    "nr2",
+  nr3:    "nr3"
+};
+const LIMIT   = 50;          // ← was 5
+const POLL_MS = 10000;
 
 /* ---------- helpers ---------- */
-const api  = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
-const td   = x => `<td>${x}</td>`;
-const fmt  = (v,p=1)=>v==null?"–":(typeof v==="number"?v.toFixed(p):(+v).toFixed?.(p)??v);
-async function safeFetch(key,lim=1){
-  try{ const r=await fetch(api(key,lim)); return r.ok? r.json():[]; }
+const api = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
+const td  = x => `<td>${x}</td>`;
+const fmt = (v,p=1)=>v==null?"–":(typeof v==="number"?v.toFixed(p):(+v).toFixed?.(p)??v);
+async function safeFetch(k,l=1){
+  try{ const r=await fetch(api(k,l)); return r.ok? r.json():[]; }
   catch{ return []; }
 }
-
-/* cache DOM refs */
-const latestEl = document.getElementById("latest");
-const histEl   = document.getElementById("history");
 
 let map,marker,poly;
 
 /* ---------- render ---------- */
 function renderLatest(d){
-  const rows = [
-    ["local", new Date(d.gps.ts).toLocaleString()],
-    ["fix",   d.gps.fix],
-    ["lat",   fmt(d.gps.lat,6)], ["lon", fmt(d.gps.lon,6)],
-    ["alt m", fmt(d.gps.alt,1)], ["sats", d.gps.sats ?? "–"],
-    ["speed km/h", fmt(d.speed,1)],
-    ["RSSI dBm", d.signal], ["volt mV", d.volt],
-    ["NR1 °C", fmt(d.nr1,1)], ["NR2 °C", fmt(d.nr2,1)], ["NR3 °C", fmt(d.nr3,1)]
+  const rows=[
+    ["local",new Date(d.gps.ts).toLocaleString()],
+    ["fix",d.gps.fix],
+    ["lat",fmt(d.gps.lat,6)],["lon",fmt(d.gps.lon,6)],
+    ["alt m",fmt(d.gps.alt,1)],["sats",d.gps.sats??"–"],
+    ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
+    ["volt mV",d.volt],["NR1 °C",fmt(d.nr1,1)],
+    ["NR2 °C",fmt(d.nr2,1)],["NR3 °C",fmt(d.nr3,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
-  latestEl.innerHTML = rows;
+  latest.innerHTML=rows;
 
   if(d.gps.fix){
     const {lat,lon}=d.gps;
     if(!map){
-      map = L.map('map').setView([lat,lon],13);
+      map=L.map('map').setView([lat,lon],13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         {attribution:'© OpenStreetMap'}).addTo(map);
-      marker = L.marker([lat,lon]).addTo(map);
-      poly   = L.polyline([], {weight:3}).addTo(map);
+      marker=L.marker([lat,lon]).addTo(map);
+      poly=L.polyline([], {weight:3}).addTo(map);
     }else marker.setLatLng([lat,lon]);
   }
 }
 
-function renderHist(gpsArr,sigArr,voltArr,spdArr,n1Arr,n2Arr,n3Arr){
-  const rows = gpsArr.map((o,i)=>`
-    <tr>${td(o.ts)}
-        ${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}
-        ${td(fmt(spdArr[i]??null,1))}
-        ${td(fmt(n1Arr[i]??null,1))}
-        ${td(fmt(n2Arr[i]??null,1))}
-        ${td(fmt(n3Arr[i]??null,1))}
-        ${td(sigArr[i]??"–")}${td(voltArr[i]??"–")}</tr>`).join("");
-
-  histEl.innerHTML =
-    "<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th>"
-   +"<th>NR1</th><th>NR2</th><th>NR3</th><th>RSSI</th><th>volt</th></tr>"
-   + rows;
+function renderHist(list){
+  const hdr="<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th><th>nr1</th><th>nr2</th><th>nr3</th></tr>";
+  history.innerHTML= hdr + list.map(o=>
+    `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}
+         ${td(fmt(o.nr1,1))}${td(fmt(o.nr2,1))}${td(fmt(o.nr3,1))}</tr>`
+  ).join("");
 
   if(poly){
-    const pts = gpsArr.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
+    const pts=list.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
     poly.setLatLngs(pts);
     if(pts.length) map.fitBounds(poly.getBounds(),{padding:[40,40]});
   }
@@ -121,37 +117,34 @@ function renderHist(gpsArr,sigArr,voltArr,spdArr,n1Arr,n2Arr,n3Arr){
 async function poll(){
   const [gps,signal,volt,speed,nr1,nr2,nr3] = await Promise.all([
     safeFetch(FEEDS.gps ,LIMIT),
-    safeFetch(FEEDS.signal, LIMIT), safeFetch(FEEDS.volt, LIMIT),
-    safeFetch(FEEDS.speed , LIMIT), safeFetch(FEEDS.nr1 , LIMIT),
-    safeFetch(FEEDS.nr2  , LIMIT),  safeFetch(FEEDS.nr3 , LIMIT)
+    safeFetch(FEEDS.signal), safeFetch(FEEDS.volt),
+    safeFetch(FEEDS.speed),  safeFetch(FEEDS.nr1),
+    safeFetch(FEEDS.nr2),    safeFetch(FEEDS.nr3)
   ]);
 
   if(!gps.length){ setTimeout(poll,POLL_MS); return; }
 
   const gParsed = gps.map(d=>{
-    const o = JSON.parse(d.value);
+    const o=JSON.parse(d.value);
     o.ts  = d.created_at;
     o.fix = true;
+    o.nr1 = +nr1.find(x=>x.created_at===d.created_at)?.value || null;
+    o.nr2 = +nr2.find(x=>x.created_at===d.created_at)?.value || null;
+    o.nr3 = +nr3.find(x=>x.created_at===d.created_at)?.value || null;
+    o.speed = +speed.find(x=>x.created_at===d.created_at)?.value || null;
     return o;
   });
 
-  const sigArr  = signal.map(d=>d.value);
-  const voltArr = volt.map(d=>d.value);
-  const spdArr  = speed.map(d=>+d.value);
-  const n1Arr   = nr1.map(d=>+d.value);
-  const n2Arr   = nr2.map(d=>+d.value);
-  const n3Arr   = nr3.map(d=>+d.value);
-
   renderLatest({
-    gps: gParsed[0],
-    signal: sigArr[0] ?? "–",
-    volt:   voltArr[0]?? "–",
-    speed:  spdArr[0] ?? "–",
-    nr1:    n1Arr[0]  ?? "–",
-    nr2:    n2Arr[0]  ?? "–",
-    nr3:    n3Arr[0]  ?? "–"
+    gps:gParsed[0],
+    signal:signal[0]?.value??"–",
+    volt:  volt[0]?.value??"–",
+    speed: speed[0]?.value??"–",
+    nr1:   nr1[0]?.value ??"–",
+    nr2:   nr2[0]?.value ??"–",
+    nr3:   nr3[0]?.value ??"–"
   });
-  renderHist(gParsed,sigArr,voltArr,spdArr,n1Arr,n2Arr,n3Arr);
+  renderHist(gParsed);
   setTimeout(poll,POLL_MS);
 }
 poll();
