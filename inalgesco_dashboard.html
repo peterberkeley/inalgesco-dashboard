@@ -1,54 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Inalgesco Datalogger Dashboard</title>
-
-<!-- Fonts & Leaflet -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<style>
-  :root{--brand-light:#d9eaf8;--brand-mid:#00a2e8;--brand-dark:#002d5a;
-        --card-bg:#fff;--bg:#f0f8ff;}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--brand-dark);
-       font-family:'Inter',system-ui,sans-serif}
-  header{background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
-          padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;
-          box-shadow:0 2px 6px #0002}
-  header img{height:46px} header h1{margin:0;font-size:1.4rem;font-weight:600}
-  .flex{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem}
-  .card{background:var(--card-bg);border-radius:.75rem;padding:1rem;
-        flex:1 1 350px;box-shadow:0 4px 10px #0001;animation:fade .4s}
-  @keyframes fade{from{opacity:0;transform:translateY(6px)}
-                  to{opacity:1}}
-  h2{margin:0 0 .5rem;font-size:1.1rem;font-weight:600}
-  table{width:100%;border-collapse:collapse;font-size:.92rem}
-  th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
-  th{background:#f7fbff;font-weight:600}
-  #map{height:420px;border-radius:.75rem;overflow:hidden}
-</style>
-</head>
-<body>
-<header>
-  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
-  <h1>Inalgesco Datalogger</h1>
-</header>
-
-<div class="flex">
-  <div class="card"><h2>Latest Fix & Sensors</h2><table id="latest"></table></div>
-  <div class="card"><h2>Last 5 GPS Points</h2><table id="history"></table></div>
-</div>
-
-<div class="card" style="margin:1rem">
-  <h2>Map View</h2><div id="map"></div>
-</div>
-
 <script>
 /* ---------- CONFIG ---------- */
 const USER = "Inalgescodatalogger";
@@ -61,24 +10,26 @@ const FEEDS = {
   nr2:    "nr2",
   nr3:    "nr3"
 };
-const LIMIT   = 5;          // GPS points to show
-const POLL_MS = 10000;      // 10-s refresh
+const LIMIT   = 5;
+const POLL_MS = 10000;
 
 /* ---------- helpers ---------- */
 const api = (feed,lim=1)=>
   `https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data?limit=${lim}`;
 
-async function getJSON(feed,lim=1){
-  const r=await fetch(api(feed,lim));
-  if(!r.ok) throw new Error(await r.text());
-  return r.json();
+async function safeFetch(feed, lim = 1) {
+  try {
+    const r = await fetch(api(feed, lim));
+    if (!r.ok) return [];              // 404 or 401 → treat as empty
+    return r.json();
+  } catch { return []; }
 }
 const td=x=>`<td>${x}</td>`;
 const fmt=(v,p=1)=>v==null?"–":(typeof v==="number"?v.toFixed(p):v);
 
 let map,marker,poly;
 
-/* ---------- render latest ---------- */
+/* ---------- render ---------- */
 function renderLatest(d){
   const rows=[
     ["local", new Date(d.gps.ts).toLocaleString()],
@@ -108,7 +59,6 @@ function renderLatest(d){
   }
 }
 
-/* ---------- render history ---------- */
 function renderHist(list){
   history.innerHTML =
     "<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th></tr>" +
@@ -126,16 +76,20 @@ function renderHist(list){
 /* ---------- poll loop ---------- */
 async function poll(){
   try{
-    const [gps,signal,volt,speed,nr1,nr2,nr3] = await Promise.all([
-      getJSON(FEEDS.gps ,LIMIT),
-      getJSON(FEEDS.signal), getJSON(FEEDS.volt),
-      getJSON(FEEDS.speed),  getJSON(FEEDS.nr1),
-      getJSON(FEEDS.nr2),    getJSON(FEEDS.nr3)
+    const results = await Promise.allSettled([
+      safeFetch(FEEDS.gps ,LIMIT),
+      safeFetch(FEEDS.signal), safeFetch(FEEDS.volt),
+      safeFetch(FEEDS.speed),  safeFetch(FEEDS.nr1),
+      safeFetch(FEEDS.nr2),    safeFetch(FEEDS.nr3)
     ]);
 
+    const [gps,signal,volt,speed,nr1,nr2,nr3] = results.map(r=>r.value||[]);
+
     const gpsParsed = gps.map(d=>JSON.parse(d.value));
+    if (!gpsParsed.length) throw new Error("No GPS data yet");
+
     const latest = {
-      gps: gpsParsed[0]||{},
+      gps: gpsParsed[0],
       signal: signal[0]?.value ?? "–",
       volt:   volt[0]?.value ?? "–",
       speed:  speed[0]?.value ?? "–",
@@ -146,10 +100,8 @@ async function poll(){
 
     renderLatest(latest);
     renderHist(gpsParsed);
-  }catch(e){console.error(e);}
-  finally{setTimeout(poll,POLL_MS);}
+  }catch(e){ console.warn(e.message); }
+  finally{ setTimeout(poll,POLL_MS); }
 }
 poll();
 </script>
-</body>
-</html>
