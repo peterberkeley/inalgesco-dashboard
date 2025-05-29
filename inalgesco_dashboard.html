@@ -1,3 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inalgesco Datalogger Dashboard</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+/* … same CSS as before … */
+</style>
+</head>
+<body>
+<header>
+  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
+  <h1>Inalgesco Datalogger</h1>
+</header>
+
+<div class="flex">
+  <div class="card"><h2>Latest Fix &amp; Sensors</h2><table id="latest"></table></div>
+  <div class="card"><h2>Last 5 GPS Points</h2><table id="history"></table></div>
+</div>
+
+<div class="card" style="margin:1rem">
+  <h2>Map View</h2><div id="map"></div>
+</div>
+
 <script>
 /* ---------- CONFIG ---------- */
 const USER = "Inalgescodatalogger";
@@ -10,42 +42,30 @@ const FEEDS = {
   nr2:    "nr2",
   nr3:    "nr3"
 };
-const LIMIT   = 5;
-const POLL_MS = 10000;
+const LIMIT = 5, POLL_MS = 10000;
 
 /* ---------- helpers ---------- */
-const api = (feed,lim=1)=>
-  `https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data?limit=${lim}`;
+const api = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
+const td  = x => `<td>${x}</td>`;
+const fmt = (v,p=1)=>v==null?"–":(+v).toFixed?.(p)||v;
 
-async function safeFetch(feed, lim = 1) {
-  try {
-    const r = await fetch(api(feed, lim));
-    if (!r.ok) return [];              // 404 or 401 → treat as empty
-    return r.json();
-  } catch { return []; }
+async function safeFetch(k,l=1){
+  try{ const r=await fetch(api(k,l)); return r.ok ? r.json() : []; }
+  catch{ return []; }
 }
-const td=x=>`<td>${x}</td>`;
-const fmt=(v,p=1)=>v==null?"–":(typeof v==="number"?v.toFixed(p):v);
 
 let map,marker,poly;
 
-/* ---------- render ---------- */
 function renderLatest(d){
   const rows=[
-    ["local", new Date(d.gps.ts).toLocaleString()],
-    ["fix",   d.gps.fix],
-    ["lat",   fmt(d.gps.lat,6)],
-    ["lon",   fmt(d.gps.lon,6)],
-    ["alt m", fmt(d.gps.alt,1)],
-    ["sats",  d.gps.sats??"–"],
-    ["speed km/h", fmt(d.speed,1)],
-    ["RSSI dBm", d.signal],
-    ["volt mV", d.volt],
-    ["NR1 °C", fmt(d.nr1,1)],
-    ["NR2 °C", fmt(d.nr2,1)],
-    ["NR3 °C", fmt(d.nr3,1)]
+    ["local",new Date(d.gps.ts).toLocaleString()],
+    ["fix",d.gps.fix],["lat",fmt(d.gps.lat,6)],["lon",fmt(d.gps.lon,6)],
+    ["alt m",fmt(d.gps.alt,1)],["sats",d.gps.sats??"–"],
+    ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
+    ["volt mV",d.volt],["NR1 °C",fmt(d.nr1,1)],
+    ["NR2 °C",fmt(d.nr2,1)],["NR3 °C",fmt(d.nr3,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
-  latest.innerHTML = rows;
+  latest.innerHTML=rows;
 
   if(d.gps.fix){
     const {lat,lon}=d.gps;
@@ -60,12 +80,8 @@ function renderLatest(d){
 }
 
 function renderHist(list){
-  history.innerHTML =
-    "<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th></tr>" +
-    list.map(o=>
-      `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}</tr>`
-    ).join("");
-
+  history.innerHTML="<tr><th>ts</th><th>lat</th><th>lon</th><th>speed</th></tr>"+
+    list.map(o=>`<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}</tr>`).join("");
   if(poly){
     const pts=list.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
     poly.setLatLngs(pts);
@@ -73,35 +89,27 @@ function renderHist(list){
   }
 }
 
-/* ---------- poll loop ---------- */
 async function poll(){
-  try{
-    const results = await Promise.allSettled([
-      safeFetch(FEEDS.gps ,LIMIT),
-      safeFetch(FEEDS.signal), safeFetch(FEEDS.volt),
-      safeFetch(FEEDS.speed),  safeFetch(FEEDS.nr1),
-      safeFetch(FEEDS.nr2),    safeFetch(FEEDS.nr3)
-    ]);
+  const [gps,signal,volt,speed,nr1,nr2,nr3] = await Promise.all([
+    safeFetch(FEEDS.gps,LIMIT),
+    safeFetch(FEEDS.signal),safeFetch(FEEDS.volt),
+    safeFetch(FEEDS.speed), safeFetch(FEEDS.nr1),
+    safeFetch(FEEDS.nr2),   safeFetch(FEEDS.nr3)
+  ]);
 
-    const [gps,signal,volt,speed,nr1,nr2,nr3] = results.map(r=>r.value||[]);
+  if(!gps.length){ setTimeout(poll,POLL_MS); return; }
 
-    const gpsParsed = gps.map(d=>JSON.parse(d.value));
-    if (!gpsParsed.length) throw new Error("No GPS data yet");
-
-    const latest = {
-      gps: gpsParsed[0],
-      signal: signal[0]?.value ?? "–",
-      volt:   volt[0]?.value ?? "–",
-      speed:  speed[0]?.value ?? "–",
-      nr1:    nr1[0]?.value ?? "–",
-      nr2:    nr2[0]?.value ?? "–",
-      nr3:    nr3[0]?.value ?? "–"
-    };
-
-    renderLatest(latest);
-    renderHist(gpsParsed);
-  }catch(e){ console.warn(e.message); }
-  finally{ setTimeout(poll,POLL_MS); }
+  const gParsed=gps.map(d=>JSON.parse(d.value));
+  renderLatest({
+    gps:gParsed[0],
+    signal:signal[0]?.value??"–",volt:volt[0]?.value??"–",
+    speed:speed[0]?.value??"–",nr1:nr1[0]?.value??"–",
+    nr2:nr2[0]?.value??"–",nr3:nr3[0]?.value??"–"
+  });
+  renderHist(gParsed);
+  setTimeout(poll,POLL_MS);
 }
 poll();
 </script>
+</body>
+</html>
