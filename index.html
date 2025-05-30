@@ -100,20 +100,20 @@ function renderLatest(d){
 }
 const historyTbl = document.getElementById('records');
 function renderHist(list){
-  const hdr="<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th><th>nr1</th><th>nr2</th><th>nr3</th></tr>";
-  historyTbl.innerHTML =
-  hdr + list.map(o =>
-    `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}
-         ${td(fmt(o.nr1,1))}${td(fmt(o.nr2,1))}${td(fmt(o.nr3,1))}</tr>`
-  ).join("");historyTbl.innerHTML = hdr + list.map(o => …
-    `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}
-         ${td(fmt(o.nr1,1))}${td(fmt(o.nr2,1))}${td(fmt(o.nr3,1))}</tr>`
-  ).join("");
+  const hdr =
+    "<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th>" +
+    "<th>nr1</th><th>nr2</th><th>nr3</th></tr>";
 
-  if(poly){
-    const pts=list.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
+  historyTbl.innerHTML =
+    hdr + list.map(o =>
+      `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}
+           ${td(fmt(o.nr1,1))}${td(fmt(o.nr2,1))}${td(fmt(o.nr3,1))}</tr>`
+    ).join("");
+
+  if (poly) {
+    const pts = list.filter(o => o.fix).map(o => [o.lat, o.lon]);
     poly.setLatLngs(pts);
-    if(pts.length) map.fitBounds(poly.getBounds(),{padding:[40,40]});
+    if (pts.length) map.fitBounds(poly.getBounds(), { padding: [40, 40] });
   }
 }
 
