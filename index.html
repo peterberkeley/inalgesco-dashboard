@@ -44,12 +44,22 @@
   <div class="card"><h2>Last 50 Records</h2><table id="records"></table></div>
 </div>
 
+<!-- Export card -->
+<div class="card" style="margin:1rem">
+  <h2>Export data → CSV</h2>
+  <label>Start <input type="datetime-local" id="start"></label>
+  <label style="margin-left:.5rem">End <input type="datetime-local" id="end"></label>
+  <button id="dlBtn">Download CSV</button>
+  <span id="expStatus" style="margin-left:.5rem;font-size:.9rem"></span>
+  <table id="preview" style="margin-top:1rem"></table>
+</div>
+
 <div class="card" style="margin:1rem">
   <h2>Map View</h2><div id="map"></div>
 </div>
 
 <script>
-/* ---------- CONFIG ---------- */
+/************************* CONFIG *************************/
 const USER = "Inalgescodatalogger";
 const FEEDS = {
   gps:    "gps",
@@ -60,10 +70,10 @@ const FEEDS = {
   nr2:    "nr2",
   nr3:    "nr3"
 };
-const LIMIT   = 50;          // ← was 5
-const POLL_MS = 10000;
+const LIMIT   = 50;          // number of records to display
+const POLL_MS = 10000;       // dashboard refresh period (ms)
 
-/* ---------- helpers ---------- */
+/************************* HELPERS *************************/
 const api = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
 const td  = x => `<td>${x}</td>`;
 const fmt = (v,p=1)=>v==null?"–":(typeof v==="number"?v.toFixed(p):(+v).toFixed?.(p)??v);
@@ -74,7 +84,7 @@ async function safeFetch(k,l=1){
 
 let map,marker,poly;
 
-/* ---------- render ---------- */
+/************************* RENDER LATEST *************************/
 function renderLatest(d){
   const rows=[
     ["local",new Date(d.gps.ts).toLocaleString()],
@@ -91,156 +101,55 @@ function renderLatest(d){
     const {lat,lon}=d.gps;
     if(!map){
       map=L.map('map').setView([lat,lon],13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        {attribution:'© OpenStreetMap'}).addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
       marker=L.marker([lat,lon]).addTo(map);
       poly=L.polyline([], {weight:3}).addTo(map);
     }else marker.setLatLng([lat,lon]);
   }
 }
+
+/************************* RENDER HISTORY *************************/
 const historyTbl = document.getElementById('records');
 function renderHist(list){
   const hdr =
-    "<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th>" +
+    "<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th>"+
     "<th>nr1</th><th>nr2</th><th>nr3</th></tr>";
 
   historyTbl.innerHTML =
     hdr + list.map(o =>
-      `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}
-           ${td(fmt(o.nr1,1))}${td(fmt(o.nr2,1))}${td(fmt(o.nr3,1))}</tr>`
+      `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}`+
+      `${td(fmt(o.nr1,1))}${td(fmt(o.nr2,1))}${td(fmt(o.nr3,1))}</tr>`
     ).join("");
 
   if (poly) {
-    const pts = list.filter(o => o.fix).map(o => [o.lat, o.lon]);
+    const pts=list.filter(o=>o.fix).map(o=>[o.lat,o.lon]);
     poly.setLatLngs(pts);
-    if (pts.length) map.fitBounds(poly.getBounds(), { padding: [40, 40] });
+    if (pts.length) map.fitBounds(poly.getBounds(),{padding:[40,40]});
   }
 }
 
-/* ---------- poll loop ---------- */
+/************************* POLL LOOP *************************/
 async function poll(){
   const [gps,signal,volt,speed,nr1,nr2,nr3] = await Promise.all([
     safeFetch(FEEDS.gps ,LIMIT),
-    safeFetch(FEEDS.signal), safeFetch(FEEDS.volt),
-    safeFetch(FEEDS.speed),  safeFetch(FEEDS.nr1),
-    safeFetch(FEEDS.nr2),    safeFetch(FEEDS.nr3)
+    safeFetch(FEEDS.signal ,LIMIT),  // fetch LIMIT for proper matching
+    safeFetch(FEEDS.volt   ,LIMIT),
+    safeFetch(FEEDS.speed  ,LIMIT),
+    safeFetch(FEEDS.nr1    ,LIMIT),
+    safeFetch(FEEDS.nr2    ,LIMIT),
+    safeFetch(FEEDS.nr3    ,LIMIT)
   ]);
 
   if(!gps.length){ setTimeout(poll,POLL_MS); return; }
 
+  // quick index helpers for non‑gps feeds
+  const idx = arr => Object.fromEntries(arr.map(x=>[x.created_at,x]));
+  const sigI=idx(signal), vI=idx(volt), spI=idx(speed), n1I=idx(nr1), n2I=idx(nr2), n3I=idx(nr3);
+
   const gParsed = gps.map(d=>{
-    const o=JSON.parse(d.value);
-    o.ts  = d.created_at;
-    o.fix = true;
-    o.nr1 = +nr1.find(x=>x.created_at===d.created_at)?.value || null;
-    o.nr2 = +nr2.find(x=>x.created_at===d.created_at)?.value || null;
-    o.nr3 = +nr3.find(x=>x.created_at===d.created_at)?.value || null;
-    o.speed = +speed.find(x=>x.created_at===d.created_at)?.value || null;
-    return o;
-  });
-
-  renderLatest({
-    gps:gParsed[0],
-    signal:signal[0]?.value??"–",
-    volt:  volt[0]?.value??"–",
-    speed: speed[0]?.value??"–",
-    nr1:   nr1[0]?.value ??"–",
-    nr2:   nr2[0]?.value ??"–",
-    nr3:   nr3[0]?.value ??"–"
-  });
-  renderHist(gParsed);
-  setTimeout(poll,POLL_MS);
-}
-poll();
-</script>
-</body>
-</html>
-
-/* ---------- small helpers ---------- */
-const toISO = el =>
-  new Date(el.value).toISOString();           // converts local → RFC-3339Z
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-async function fetchRange(feed, start, end) {
-  let page = 0, out = [];
-  while (true) {
-    const url = api(feed, 1000)
-              + `&start_time=${encodeURIComponent(start)}`
-              + `&end_time=${encodeURIComponent(end)}`
-              + `&page=${page}`;
-    const r   = await fetch(url, { /* add headers { "X-AIO-Key": "..."} if feeds are private */});
-    if (!r.ok) break;
-    const block = await r.json();
-    out = out.concat(block);
-    if (block.length < 1000) break;           // last page
-    page += 1;
-    await sleep(150);                         // polite spacing
-  }
-  return out;
-}
-
-function mergeFeeds(gps, signal, volt, speed, nr1, nr2, nr3) {
-  const idx = (arr) => Object.fromEntries(arr.map(x => [x.created_at, x]));
-  const sig = idx(signal), v = idx(volt),
-        sp  = idx(speed), n1 = idx(nr1),
-        n2  = idx(nr2),  n3 = idx(nr3);
-  return gps.map(g => {
-    const o   = JSON.parse(g.value);
+    const o = JSON.parse(d.value);
     return {
-      ts:    g.created_at,
-      lat:   o.lat,  lon: o.lon,  alt: o.alt,
-      sats:  o.sats, speed: +sp[g.created_at]?.value || "",
-      signal: sig[g.created_at]?.value || "",
-      volt:   v[g.created_at]?.value  || "",
-      nr1:    n1[g.created_at]?.value || "",
-      nr2:    n2[g.created_at]?.value || "",
-      nr3:    n3[g.created_at]?.value || ""
-    };
-  });
-}
-
-function toCSV(rows) {
-  const hdr = ["ts","lat","lon","alt","sats","speed","signal","volt","nr1","nr2","nr3"].join(",");
-  const body = rows.map(r => [
-    r.ts, r.lat, r.lon, r.alt, r.sats,
-    r.speed, r.signal, r.volt, r.nr1, r.nr2, r.nr3
-  ].join(",")).join("\n");
-  return hdr + "\n" + body;
-}
-
-/* ---------- hook up the button ---------- */
-dlBtn.addEventListener("click", async () => {
-  const s = start.value, e = end.value;
-  if (!s || !e) return alert("Pick both start and end time.");
-  expStatus.textContent = "Fetching…";
-  const [gps, signal, volt, speed, nr1, nr2, nr3] = await Promise.all([
-    fetchRange(FEEDS.gps,    toISO(start), toISO(end)),
-    fetchRange(FEEDS.signal, toISO(start), toISO(end)),
-    fetchRange(FEEDS.volt,   toISO(start), toISO(end)),
-    fetchRange(FEEDS.speed,  toISO(start), toISO(end)),
-    fetchRange(FEEDS.nr1,    toISO(start), toISO(end)),
-    fetchRange(FEEDS.nr2,    toISO(start), toISO(end)),
-    fetchRange(FEEDS.nr3,    toISO(start), toISO(end))
-  ]);
-  const rows = mergeFeeds(gps, signal, volt, speed, nr1, nr2, nr3);
-  expStatus.textContent = `${rows.length} rows`;
-
-  /* --- optional on-screen preview (first 10) --- */
-  preview.innerHTML =
-    "<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th><th>nr1</th><th>nr2</th><th>nr3</th></tr>" +
-    rows.slice(0,10).map(r =>
-      `<tr><td>${r.ts}</td><td>${fmt(r.lat,4)}</td><td>${fmt(r.lon,4)}</td>` +
-      `<td>${fmt(r.speed,1)}</td><td>${fmt(r.nr1,1)}</td>` +
-      `<td>${fmt(r.nr2,1)}</td><td>${fmt(r.nr3,1)}</td></tr>`
-    ).join("");
-
-  /* --- trigger CSV download --- */
-  const csv = toCSV(rows);
-  const blob = new Blob([csv], { type: "text/csv" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download =
-    `inalgesco_${s.replace(/[^0-9]/g,"")}_${e.replace(/[^0-9]/g,"")}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-});
+      ts: d.created_at,
+      fix: true,
+      lat:o.lat, lon:o.lon, alt:o.alt, sats:o.sats,
+      speed: +spI
