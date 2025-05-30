@@ -155,3 +155,92 @@ poll();
 </script>
 </body>
 </html>
+
+/* ---------- small helpers ---------- */
+const toISO = el =>
+  new Date(el.value).toISOString();           // converts local → RFC-3339Z
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function fetchRange(feed, start, end) {
+  let page = 0, out = [];
+  while (true) {
+    const url = api(feed, 1000)
+              + `&start_time=${encodeURIComponent(start)}`
+              + `&end_time=${encodeURIComponent(end)}`
+              + `&page=${page}`;
+    const r   = await fetch(url, { /* add headers { "X-AIO-Key": "..."} if feeds are private */});
+    if (!r.ok) break;
+    const block = await r.json();
+    out = out.concat(block);
+    if (block.length < 1000) break;           // last page
+    page += 1;
+    await sleep(150);                         // polite spacing
+  }
+  return out;
+}
+
+function mergeFeeds(gps, signal, volt, speed, nr1, nr2, nr3) {
+  const idx = (arr) => Object.fromEntries(arr.map(x => [x.created_at, x]));
+  const sig = idx(signal), v = idx(volt),
+        sp  = idx(speed), n1 = idx(nr1),
+        n2  = idx(nr2),  n3 = idx(nr3);
+  return gps.map(g => {
+    const o   = JSON.parse(g.value);
+    return {
+      ts:    g.created_at,
+      lat:   o.lat,  lon: o.lon,  alt: o.alt,
+      sats:  o.sats, speed: +sp[g.created_at]?.value || "",
+      signal: sig[g.created_at]?.value || "",
+      volt:   v[g.created_at]?.value  || "",
+      nr1:    n1[g.created_at]?.value || "",
+      nr2:    n2[g.created_at]?.value || "",
+      nr3:    n3[g.created_at]?.value || ""
+    };
+  });
+}
+
+function toCSV(rows) {
+  const hdr = ["ts","lat","lon","alt","sats","speed","signal","volt","nr1","nr2","nr3"].join(",");
+  const body = rows.map(r => [
+    r.ts, r.lat, r.lon, r.alt, r.sats,
+    r.speed, r.signal, r.volt, r.nr1, r.nr2, r.nr3
+  ].join(",")).join("\n");
+  return hdr + "\n" + body;
+}
+
+/* ---------- hook up the button ---------- */
+dlBtn.addEventListener("click", async () => {
+  const s = start.value, e = end.value;
+  if (!s || !e) return alert("Pick both start and end time.");
+  expStatus.textContent = "Fetching…";
+  const [gps, signal, volt, speed, nr1, nr2, nr3] = await Promise.all([
+    fetchRange(FEEDS.gps,    toISO(start), toISO(end)),
+    fetchRange(FEEDS.signal, toISO(start), toISO(end)),
+    fetchRange(FEEDS.volt,   toISO(start), toISO(end)),
+    fetchRange(FEEDS.speed,  toISO(start), toISO(end)),
+    fetchRange(FEEDS.nr1,    toISO(start), toISO(end)),
+    fetchRange(FEEDS.nr2,    toISO(start), toISO(end)),
+    fetchRange(FEEDS.nr3,    toISO(start), toISO(end))
+  ]);
+  const rows = mergeFeeds(gps, signal, volt, speed, nr1, nr2, nr3);
+  expStatus.textContent = `${rows.length} rows`;
+
+  /* --- optional on-screen preview (first 10) --- */
+  preview.innerHTML =
+    "<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th><th>nr1</th><th>nr2</th><th>nr3</th></tr>" +
+    rows.slice(0,10).map(r =>
+      `<tr><td>${r.ts}</td><td>${fmt(r.lat,4)}</td><td>${fmt(r.lon,4)}</td>` +
+      `<td>${fmt(r.speed,1)}</td><td>${fmt(r.nr1,1)}</td>` +
+      `<td>${fmt(r.nr2,1)}</td><td>${fmt(r.nr3,1)}</td></tr>`
+    ).join("");
+
+  /* --- trigger CSV download --- */
+  const csv = toCSV(rows);
+  const blob = new Blob([csv], { type: "text/csv" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download =
+    `inalgesco_${s.replace(/[^0-9]/g,"")}_${e.replace(/[^0-9]/g,"")}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
