@@ -98,10 +98,10 @@ function renderLatest(d){
     }else marker.setLatLng([lat,lon]);
   }
 }
-
+const historyTbl = document.getElementById('records');
 function renderHist(list){
   const hdr="<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th><th>nr1</th><th>nr2</th><th>nr3</th></tr>";
-  history.innerHTML= hdr + list.map(o=>
+  historyTbl.innerHTML = hdr + list.map(o => …
     `<tr>${td(o.ts)}${td(fmt(o.lat,4))}${td(fmt(o.lon,4))}${td(fmt(o.speed,1))}
          ${td(fmt(o.nr1,1))}${td(fmt(o.nr2,1))}${td(fmt(o.nr3,1))}</tr>`
   ).join("");
