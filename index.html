@@ -134,11 +134,16 @@ const merge=(g,s,v,p,n1,n2,n3)=>g.map(row=>{const o=JSON.parse(row.value);
     volt:v[row.created_at]?.value||"",nr1:n1[row.created_at]?.value||"",
     nr2:n2[row.created_at]?.value||"",nr3:n3[row.created_at]?.value||""};
 });
-const toCSV=rows=>{
-  const hdr="ts,lat,lon,alt,sats,speed,signal,volt,nr1,nr2,nr3";
-  const body=rows.map(r=>[r.ts,r.lat,r.lon,r.alt,r.sats,r.speed,r.signal,
-                          r.volt,r.nr1,r.nr2,r.nr3].join(",")).join("\\n");
-  return hdr+"\\n"+body;
+const toCSV = rows => {
+  const hdr = "date,time,lat,lon,alt,sats,speed,signal,volt,nr1,nr2,nr3";
+  const body = rows.map(r => {
+    const d   = new Date(r.ts);
+    const day = d.toISOString().substring(0,10);   // YYYY-MM-DD
+    const tim = d.toISOString().substring(11,19);  // HH:MM:SS
+    return [day, tim, r.lat, r.lon, r.alt, r.sats,
+            r.speed, r.signal, r.volt, r.nr1, r.nr2, r.nr3].join(",");
+  }).join("\r\n");             // CRLF so Excel splits rows
+  return hdr + "\r\n" + body;
 };
 
 /* === UI hooks === */
