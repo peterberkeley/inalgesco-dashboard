@@ -168,7 +168,7 @@ function drawLive(d){
     ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
     ["volt mV",d.volt],
     ["NR1 °F",fmt(d.nr1,1)],["NR2 °F",fmt(d.nr2,1)],
-    ["NR3 °F",fmt(d.nr3,1)],["NR4 °F",fmt(d.nr4,1)]
+    ["NR3 °F",fmt(d.nr3,1)], ["NR4 °F",fmt(d.nr4,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
 
   if(d.gps.fix&&!isNaN(d.gps.lat)&&!isNaN(d.gps.lon)){
@@ -207,6 +207,62 @@ async function poll(){
 }
 
 poll();
+
+function getISO(id) {
+  const val = document.getElementById(id).value;
+  return val ? new Date(val).toISOString() : null;
+}
+
+async function downloadCSV() {
+  const start = getISO("start");
+  const end = getISO("end");
+  const status = document.getElementById("expStatus");
+  const preview = document.getElementById("preview");
+  status.textContent = "Fetching...";
+
+  let allData = {};
+  let allTimestamps = new Set();
+
+  for (let key in FEEDS) {
+    const params = new URLSearchParams({ limit: 1000 });
+    if (start) params.append("start_time", start);
+    if (end)   params.append("end_time", end);
+
+    const url = `https://io.adafruit.com/api/v2/${USER}/feeds/${FEEDS[key]}/data?${params}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (Array.isArray(data)) {
+      allData[key] = data;
+      data.forEach(d => allTimestamps.add(d.created_at));
+    }
+  }
+
+  const sortedTimestamps = Array.from(allTimestamps).sort();
+  const headers = ["Timestamp", ...Object.keys(FEEDS)];
+  let rows = [headers.join(",")];
+
+  sortedTimestamps.forEach(ts => {
+    let row = [ts];
+    for (let key of Object.keys(FEEDS)) {
+      let entry = allData[key]?.find(d => d.created_at === ts);
+      row.push(entry?.value ?? "");
+    }
+    rows.push(row.join(","));
+  });
+
+  preview.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>` +
+    rows.slice(1, 11).map(r => `<tr>${r.split(",").map(c => `<td>${c}</td>`).join("")}</tr>`).join("");
+
+  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `inalgesco-${Date.now()}.csv`;
+  a.click();
+
+  status.textContent = `Downloaded ${rows.length - 1} rows.`;
+}
+
+document.getElementById("dlBtn").addEventListener("click", downloadCSV);
 </script>
 </body>
 </html>
