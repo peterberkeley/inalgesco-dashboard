@@ -115,10 +115,10 @@ let map,marker,poly,path=[];
 
 /* === charts === */
 const SENSORS=[
-  {id:"nr1",label:"NR1 °C",col:getProp('--g1')},
-  {id:"nr2",label:"NR2 °C",col:getProp('--g2')},
-  {id:"nr3",label:"NR3 °C",col:getProp('--g3')},
-  {id:"nr4",label:"NR4 °C",col:getProp('--g4')}
+  {id:"nr1",label:"NR1 °F",col:getProp('--g1')},
+  {id:"nr2",label:"NR2 °F",col:getProp('--g2')},
+  {id:"nr3",label:"NR3 °F",col:getProp('--g3')},
+  {id:"nr4",label:"NR4 °F",col:getProp('--g4')}
 ];
 function getProp(p){return getComputedStyle(document.documentElement).getPropertyValue(p).trim();}
 function makeChart(box,s){
@@ -158,8 +158,8 @@ function drawLive(d){
     ["alt m",fmt(d.gps.alt,1)],["sats",d.gps.sats??"–"],
     ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
     ["volt mV",d.volt],
-    ["NR1 °C",fmt(d.nr1,1)],["NR2 °C",fmt(d.nr2,1)],
-    ["NR3 °C",fmt(d.nr3,1)],["NR4 °C",fmt(d.nr4,1)]
+    ["NR1 °F",fmt(d.nr1,1)],["NR2 °F",fmt(d.nr2,1)],
+    ["NR3 °F",fmt(d.nr3,1)],["NR4 °F",fmt(d.nr4,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
 
   if(d.gps.fix&&!isNaN(d.gps.lat)&&!isNaN(d.gps.lon)){
