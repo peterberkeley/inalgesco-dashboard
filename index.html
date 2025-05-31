@@ -140,6 +140,17 @@ SENSORS.forEach(s => {
   makeChart(div, s);
 });
 
+(async () => {
+  await Promise.all(SENSORS.map(async s => {
+    const rows = await get(FEEDS[s.id], HIST);
+    if (!rows.length) return;
+    rows.reverse();
+    s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
+    s.chart.data.datasets[0].data = rows.map(r => +r.value);
+    s.chart.update();
+  }));
+})();
+
 function push(sensor,val,ts){
   const s=SENSORS.find(x=>x.id===sensor); if(!s) return;
   const c=s.chart;
