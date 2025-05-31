@@ -33,8 +33,11 @@
   th{background:#f7fbff;font-weight:600}
   #map{height:420px;border-radius:.75rem;overflow:hidden}
 
-  .grid4{display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:minmax(220px,1fr);gap:1rem;}
-  .chart-box canvas{width:100%!important;height:100%!important}
+  /* ==== fixed‑size 2×2 chart grid ==== */
+  .grid4{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,260px);gap:1rem;}
+  .chart-box{display:flex;flex-direction:column;height:100%;}
+  .chart-box h2{margin:0 0 .25rem;font-size:.95rem;font-weight:600}
+  .chart-box canvas{flex:1 1 auto;width:100%!important;height:100%!important}
 </style>
 </head>
 <body>
@@ -62,9 +65,7 @@
 
   <!-- right column: live charts & map -->
   <div>
-    <div class="grid4" id="charts">
-      <!-- chart cards injected here -->
-    </div>
+    <div class="grid4" id="charts"></div>
     <div class="card" style="margin-top:1rem"><h2>Map View</h2><div id="map"></div></div>
   </div>
 </div>
@@ -86,7 +87,7 @@ async function get(feed,l=1){try{const r=await fetch(api(feed,l));return r.ok?r.
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const toISO=e=>new Date(e.value).toISOString();
 const idx=a=>Object.fromEntries(a.map(x=>[x.created_at,x]));
-function isoToHHMM(ts){return ts.substring(11,19);}  // HH:MM:SS
+const isoToHHMM=ts=>ts.substring(11,19);
 
 /**** map state ****/
 let map,marker,poly,path=[];
@@ -98,20 +99,15 @@ const SENSORS=[
   {id:"nr3", label:"NR3 °C", color:getComputedStyle(document.documentElement).getPropertyValue('--g3')},
   {id:"nr4", label:"NR4 °C", color:getComputedStyle(document.documentElement).getPropertyValue('--g4')}
 ];
-let charts={};
+let chartsContainer=document.getElementById('charts');
 
 function createChart(sensor){
   const card=document.createElement("div");card.className="card chart-box";
   card.innerHTML=`<h2>${sensor.label}</h2><canvas></canvas>`;
-  charts.appendChild?charts.appendChild(card):document.getElementById('charts').appendChild(card);
+  chartsContainer.appendChild(card);
   const ctx=card.querySelector('canvas').getContext('2d');
-  const chart=new Chart(ctx,{type:'line',data:{labels:[],datasets:[{label:sensor.label,data:[],borderColor:sensor.color.trim(),borderWidth:2,pointRadius:0,tension:.25}]},options:{animation:false,responsive:true,maintainAspectRatio:false,scales:{x:{ticks:{maxRotation:0}}}}});
-  return chart;
+  return new Chart(ctx,{type:'line',data:{labels:[],datasets:[{label:sensor.label,data:[],borderColor:sensor.color.trim(),borderWidth:2,pointRadius:0,tension:.25}]},options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:0}}}}});
 }
-
-/**** init ****/
-// build chart containers
-charts=document.getElementById('charts');
 SENSORS.forEach(s=>{s.chart=createChart(s);});
 
 /**** load historic ****/  
@@ -119,7 +115,7 @@ async function loadHistoric(){
   await Promise.all(SENSORS.map(async s=>{
     const rows=await get(F[s.id],HIST);
     if(!rows.length) return;
-    rows.reverse();                        // oldest → newest
+    rows.reverse();
     const c=s.chart;
     c.data.labels=rows.map(r=>isoToHHMM(r.created_at));
     c.data.datasets[0].data=rows.map(r=>+r.value);
@@ -173,12 +169,10 @@ async function poll(){
     signal:sig[0]?.value??"–",volt:vlt[0]?.value??"–",speed:spd[0]?.value??"–",
     nr1:n1[0]?.value??"–",nr2:n2[0]?.value??"–",nr3:n3[0]?.value??"–",nr4:n4[0]?.value??"–"
   });
-  // charts
   if(n1[0]) pushPoint('nr1',n1[0].value,n1[0].created_at);
   if(n2[0]) pushPoint('nr2',n2[0].value,n2[0].created_at);
   if(n3[0]) pushPoint('nr3',n3[0].value,n3[0].created_at);
   if(n4[0]) pushPoint('nr4',n4[0].value,n4[0].created_at);
-
   setTimeout(poll,POLL);
 }
 poll();
@@ -198,47 +192,4 @@ async function fetchRange(feed,s,e){
 const merge=(g,s,v,p,n1,n2,n3,n4)=>g.map(row=>{const o=JSON.parse(row.value);
   return{ts:row.created_at,lat:o.lat,lon:o.lon,alt:o.alt,sats:o.sats,
     speed:p[row.created_at]?.value||"",signal:s[row.created_at]?.value||"",
-    volt:v[row.created_at]?.value||"",nr1:n1[row.created_at]?.value||"",
-    nr2:n2[row.created_at]?.value||"",nr3:n3[row.created_at]?.value||"",
-    nr4:n4[row.created_at]?.value||""};
-});
-const toCSV = rows => {
-  const hdr = "date,time,lat,lon,alt,sats,speed,signal,volt,nr1,nr2,nr3,nr4";
-  const body = rows.map(r => {
-    const d   = new Date(r.ts);
-    const day = d.toISOString().substring(0,10);
-    const tim = d.toISOString().substring(11,19);
-    return [day,tim,r.lat,r.lon,r.alt,r.sats,r.speed,r.signal,r.volt,r.nr1,r.nr2,r.nr3,r.nr4].join(",");
-  }).join("\r\n");
-  return hdr+"\r\n"+body;
-};
-
-/**** UI hooks ****/
-dlBtn.addEventListener("click",async()=>{
-  if(!start.value||!end.value){alert("Pick both start and end time.");return;}
-  expStatus.textContent="Fetching…";
-  const feeds=[fetchRange(F.gps,toISO(start),toISO(end)),
-               fetchRange(F.signal,toISO(start),toISO(end)),
-               fetchRange(F.volt,toISO(start),toISO(end)),
-               fetchRange(F.speed,toISO(start),toISO(end)),
-               fetchRange(F.nr1,toISO(start),toISO(end)),
-               fetchRange(F.nr2,toISO(start),toISO(end)),
-               fetchRange(F.nr3,toISO(start),toISO(end)),
-               fetchRange(F.nr4,toISO(start),toISO(end))];
-  const [g,sig,vlt,spd,nr1,nr2,nr3,nr4]=await Promise.all(feeds);
-  const rows=merge(g,idx(sig),idx(vlt),idx(spd),idx(nr1),idx(nr2),idx(nr3),idx(nr4));
-  expStatus.textContent=`${rows.length} rows`;
-  preview.innerHTML="<tr><th>ts</th><th>lat</th><th>lon</th><th>spd</th><th>nr1</th><th>nr2</th><th>nr3</th><th>nr4</th></tr>"+
-    rows.slice(0,10).map(r=>`<tr><td>${r.ts}</td><td>${fmt(r.lat,4)}</td>`+
-    `<td>${fmt(r.lon,4)}</td><td>${fmt(r.speed,1)}</td>`+
-    `<td>${fmt(r.nr1,1)}</td><td>${fmt(r.nr2,1)}</td>`+
-    `<td>${fmt(r.nr3,1)}</td><td>${fmt(r.nr4,1)}</td></tr>`).join("");
-  const blob=new Blob([toCSV(rows)],{type:"text/csv"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=`inalgesco_${start.value}_${end.value}.csv`.replace(/[:T-]/g,"");
-  a.click(); URL.revokeObjectURL(a.href);
-});
-</script>
-</body>
-</html>
+    volt:v[row.created_at]?.value||"",nr1:n1
