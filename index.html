@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
 <title>Inalgesco Datalogger Dashboard</title>
 
 <!-- Fonts, Leaflet & Chart.js -->
@@ -14,35 +14,51 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
 <style>
-  :root{--brand-light:#d9eaf8;--brand-mid:#00a2e8;--brand-dark:#002d5a;
-        --card-bg:#fff;--bg:#f0f8ff;--g1:#e91e63;--g2:#3f51b5;--g3:#009688;--g4:#ff9800;}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--brand-dark);
-       font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
-  header{background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
-         padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;
-         box-shadow:0 2px 6px #0002;}
-  header img{height:46px} header h1{margin:0;font-size:1.4rem;font-weight:600}
+:root{
+  --brand-light:#d9eaf8;--brand-mid:#00a2e8;--brand-dark:#002d5a;
+  --card-bg:#fff;--bg:#f0f8ff;
+  --g1:#e91e63;--g2:#3f51b5;--g3:#009688;--g4:#ff9800;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--brand-dark);
+  font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+}
+header{
+  background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
+  padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;
+  box-shadow:0 2px 6px #0002;
+}
+header img{height:46px}
+header h1{margin:0;font-size:1.4rem;font-weight:600}
 
-  .dashboard{display:grid;grid-template-columns:320px 1fr;gap:1rem;margin:1rem;}
-  .card{background:var(--card-bg);border-radius:.75rem;padding:1rem;box-shadow:0 4px 10px #0001;animation:fade .4s ease-out;}
-  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
-  h2{margin:0 0 .5rem;font-size:1.1rem;font-weight:600}
-  table{width:100%;border-collapse:collapse;font-size:.9rem}
-  th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
-  th{background:#f7fbff;font-weight:600}
-  #map{height:420px;border-radius:.75rem;overflow:hidden}
+.dashboard{display:grid;grid-template-columns:320px 1fr;gap:1rem;margin:1rem;}
+.card{
+  background:var(--card-bg);border-radius:.75rem;padding:1rem;
+  box-shadow:0 4px 10px #0001;animation:fade .4s ease-out;
+}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+h2{margin:0 0 .5rem;font-size:1.1rem;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
+th{background:#f7fbff;font-weight:600}
+#map{height:420px;border-radius:.75rem;overflow:hidden}
 
-  /* ==== fixed‑size 2×2 chart grid ==== */
-  .grid4{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,260px);gap:1rem;}
-  .chart-box{display:flex;flex-direction:column;height:100%;}
-  .chart-box h2{margin:0 0 .25rem;font-size:.95rem;font-weight:600}
-  .chart-box canvas{flex:1 1 auto;width:100%!important;height:100%!important}
+/* fixed-size 2×2 chart grid */
+.grid4{
+  display:grid;grid-template-columns:repeat(2,1fr);
+  grid-template-rows:repeat(2,260px);gap:1rem;
+}
+.chart-box{display:flex;flex-direction:column;height:100%;}
+.chart-box h2{margin:0 0 .25rem;font-size:.95rem;font-weight:600}
+.chart-box canvas{flex:1;width:100%!important;height:100%!important}
 </style>
 </head>
+
 <body>
 <header>
-  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
+  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo"
+       onerror="this.style.display='none'">
   <h1>Inalgesco Datalogger</h1>
 </header>
 
@@ -53,92 +69,99 @@
       <h2>Current Fix &amp; Sensors</h2>
       <table id="latest"></table>
     </div>
+
     <div class="card">
       <h2>Export data → CSV</h2>
       <label>Start <input type="datetime-local" id="start"></label>
-      <label style="margin-left:.5rem">End <input type="datetime-local" id="end"></label>
+      <label style="margin-left:.5rem">
+        End <input type="datetime-local" id="end">
+      </label>
       <button id="dlBtn">Download CSV</button>
       <span id="expStatus" style="margin-left:.5rem;font-size:.9rem"></span>
       <table id="preview" style="margin-top:1rem"></table>
     </div>
   </div>
 
-  <!-- right column: live charts & map -->
+  <!-- charts + map column -->
   <div>
     <div class="grid4" id="charts"></div>
-    <div class="card" style="margin-top:1rem"><h2>Map View</h2><div id="map"></div></div>
+    <div class="card" style="margin-top:1rem">
+      <h2>Map View</h2><div id="map"></div>
+    </div>
   </div>
 </div>
 
 <script>
-/**** CONFIG ****/
-const USER = "Inalgescodatalogger";
-const F     = {gps:"gps",signal:"signal",volt:"volt",speed:"speed",
-               nr1:"nr1",nr2:"nr2",nr3:"nr3",nr4:"nr4"};
-const POLL      = 10_000;          // live poll interval (ms)
-const HIST      = 200;             // points retained on chart
-const TRAIL     = 50;              // map tail length
+/* === CONFIG === */
+const USER   = "Inalgescodatalogger";
+const FEEDS  = {gps:"gps",signal:"signal",volt:"volt",speed:"speed",
+                nr1:"nr1",nr2:"nr2",nr3:"nr3",nr4:"nr4"};
+const POLL = 10_000;     // ms
+const HIST = 200;        // points kept in chart
+const TRAIL= 50;         // map tail length
 
-/**** helpers ****/
-const api=(k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
-const td=v=>`<td>${v}</td>`;
+/* === helpers === */
+const api = (k,l=1)=>
+  `https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
+async function get(feed,l=1){
+  try{const r=await fetch(api(feed,l));return r.ok? r.json(): [];}catch{return [];}
+}
+const td = v=>`<td>${v}</td>`;
 const fmt=(v,p=1)=>v==null?"–":(+v).toFixed?.(p)??v;
-async function get(feed,l=1){try{const r=await fetch(api(feed,l));return r.ok?r.json():[]}catch{return[]}}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const toISO=e=>new Date(e.value).toISOString();
-const idx=a=>Object.fromEntries(a.map(x=>[x.created_at,x]));
-const isoToHHMM=ts=>ts.substring(11,19);
+const isoHHMM = ts => ts.substring(11,19);
 
-/**** map state ****/
+/* === map === */
 let map,marker,poly,path=[];
 
-/**** CHARTS ****/
+/* === charts === */
 const SENSORS=[
-  {id:"nr1", label:"NR1 °C", color:getComputedStyle(document.documentElement).getPropertyValue('--g1')},
-  {id:"nr2", label:"NR2 °C", color:getComputedStyle(document.documentElement).getPropertyValue('--g2')},
-  {id:"nr3", label:"NR3 °C", color:getComputedStyle(document.documentElement).getPropertyValue('--g3')},
-  {id:"nr4", label:"NR4 °C", color:getComputedStyle(document.documentElement).getPropertyValue('--g4')}
+  {id:"nr1",label:"NR1 °C",col:getProp('--g1')},
+  {id:"nr2",label:"NR2 °C",col:getProp('--g2')},
+  {id:"nr3",label:"NR3 °C",col:getProp('--g3')},
+  {id:"nr4",label:"NR4 °C",col:getProp('--g4')}
 ];
-let chartsContainer=document.getElementById('charts');
-
-function createChart(sensor){
-  const card=document.createElement("div");card.className="card chart-box";
-  card.innerHTML=`<h2>${sensor.label}</h2><canvas></canvas>`;
-  chartsContainer.appendChild(card);
-  const ctx=card.querySelector('canvas').getContext('2d');
-  return new Chart(ctx,{type:'line',data:{labels:[],datasets:[{label:sensor.label,data:[],borderColor:sensor.color.trim(),borderWidth:2,pointRadius:0,tension:.25}]},options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:0}}}}});
+function getProp(p){return getComputedStyle(document.documentElement).getPropertyValue(p).trim();}
+function makeChart(box,s){
+  box.innerHTML=`<h2>${s.label}</h2><canvas></canvas>`;
+  const ctx=box.querySelector('canvas').getContext('2d');
+  s.chart=new Chart(ctx,{type:'line',
+    data:{labels:[],datasets:[{data:[],borderColor:s.col,borderWidth:2,pointRadius:0,tension:.25}]},
+    options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+             scales:{x:{ticks:{maxRotation:0}}}}
+  });
 }
-SENSORS.forEach(s=>{s.chart=createChart(s);});
+const chartsWrap=document.getElementById('charts');
+SENSORS.forEach(s=>makeChart(chartsWrap.appendChild(document.createElement('div')).classList.add('card','chart-box'),s));
 
-/**** load historic ****/  
-async function loadHistoric(){
+/* === historic === */
+(async()=>{
   await Promise.all(SENSORS.map(async s=>{
-    const rows=await get(F[s.id],HIST);
-    if(!rows.length) return;
+    const rows=await get(FEEDS[s.id],HIST); if(!rows.length) return;
     rows.reverse();
-    const c=s.chart;
-    c.data.labels=rows.map(r=>isoToHHMM(r.created_at));
-    c.data.datasets[0].data=rows.map(r=>+r.value);
-    c.update();
+    s.chart.data.labels=rows.map(r=>isoHHMM(r.created_at));
+    s.chart.data.datasets[0].data=rows.map(r=>+r.value);
+    s.chart.update();
   }));
-}
-loadHistoric();
+})();
 
-/**** render live row ****/
+/* === live table === */
 function drawLive(d){
   latest.innerHTML=[
     ["local",new Date(d.gps.ts).toLocaleString()],
     ["fix",d.gps.fix],["lat",fmt(d.gps.lat,6)],["lon",fmt(d.gps.lon,6)],
     ["alt m",fmt(d.gps.alt,1)],["sats",d.gps.sats??"–"],
-    ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],["volt mV",d.volt],
-    ["NR1 °C",fmt(d.nr1,1)],["NR2 °C",fmt(d.nr2,1)],["NR3 °C",fmt(d.nr3,1)],["NR4 °C",fmt(d.nr4,1)]
+    ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
+    ["volt mV",d.volt],
+    ["NR1 °C",fmt(d.nr1,1)],["NR2 °C",fmt(d.nr2,1)],
+    ["NR3 °C",fmt(d.nr3,1)],["NR4 °C",fmt(d.nr4,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
 
   if(d.gps.fix&&!isNaN(d.gps.lat)&&!isNaN(d.gps.lon)){
     const {lat,lon}=d.gps;
     if(!map){
       map=L.map("map").setView([lat,lon],13);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  {attribution:"© OpenStreetMap"}).addTo(map);
       marker=L.marker([lat,lon]).addTo(map);
       poly=L.polyline([], {weight:3}).addTo(map);
     }else marker.setLatLng([lat,lon]);
@@ -147,49 +170,38 @@ function drawLive(d){
   }
 }
 
-/**** chart update ****/
-function pushPoint(sensorId,val,ts){
-  const s=SENSORS.find(x=>x.id===sensorId); if(!s) return;
+/* === chart push === */
+function push(sensor,val,ts){
+  const s=SENSORS.find(x=>x.id===sensor); if(!s) return;
   const c=s.chart;
-  c.data.labels.push(isoToHHMM(ts));
+  c.data.labels.push(isoHHMM(ts));
   c.data.datasets[0].data.push(+val);
   if(c.data.labels.length>HIST){c.data.labels.shift();c.data.datasets[0].data.shift();}
   c.update();
 }
 
-/**** live poll ****/
+/* === poll === */
 async function poll(){
-  const feeds=[F.gps,F.signal,F.volt,F.speed,F.nr1,F.nr2,F.nr3,F.nr4];
-  const [gps,sig,vlt,spd,n1,n2,n3,n4]=await Promise.all(feeds.map(f=>get(f)));
+  const [gps,sig,vlt,spd,n1,n2,n3,n4]=await Promise.all([
+    get(FEEDS.gps),get(FEEDS.signal),get(FEEDS.volt),get(FEEDS.speed),
+    get(FEEDS.nr1),get(FEEDS.nr2),get(FEEDS.nr3),get(FEEDS.nr4)
+  ]);
   if(!gps.length){setTimeout(poll,POLL);return;}
   const g=JSON.parse(gps[0].value||"{}");
   const ts=gps[0].created_at;
   drawLive({
     gps:{ts,fix:true,lat:g.lat,lon:g.lon,alt:g.alt,sats:g.sats},
     signal:sig[0]?.value??"–",volt:vlt[0]?.value??"–",speed:spd[0]?.value??"–",
-    nr1:n1[0]?.value??"–",nr2:n2[0]?.value??"–",nr3:n3[0]?.value??"–",nr4:n4[0]?.value??"–"
+    nr1:n1[0]?.value??"–",nr2:n2[0]?.value??"–",
+    nr3:n3[0]?.value??"–",nr4:n4[0]?.value??"–"
   });
-  if(n1[0]) pushPoint('nr1',n1[0].value,n1[0].created_at);
-  if(n2[0]) pushPoint('nr2',n2[0].value,n2[0].created_at);
-  if(n3[0]) pushPoint('nr3',n3[0].value,n3[0].created_at);
-  if(n4[0]) pushPoint('nr4',n4[0].value,n4[0].created_at);
+  if(n1[0]) push("nr1",n1[0].value,n1[0].created_at);
+  if(n2[0]) push("nr2",n2[0].value,n2[0].created_at);
+  if(n3[0]) push("nr3",n3[0].value,n3[0].created_at);
+  if(n4[0]) push("nr4",n4[0].value,n4[0].created_at);
   setTimeout(poll,POLL);
 }
 poll();
-
-/**** range fetch & CSV ****/
-async function fetchRange(feed,s,e){
-  let out=[],page=0;
-  while(true){
-    const url=api(feed,1000)+`&start_time=${encodeURIComponent(s)}`+
-              `&end_time=${encodeURIComponent(e)}`+`&page=${page}`;
-    const r=await fetch(url); if(!r.ok) break;
-    const blk=await r.json(); out.push(...blk);
-    if(blk.length<1000) break; page++; await sleep(120);
-  }
-  return out;
-}
-const merge=(g,s,v,p,n1,n2,n3,n4)=>g.map(row=>{const o=JSON.parse(row.value);
-  return{ts:row.created_at,lat:o.lat,lon:o.lon,alt:o.alt,sats:o.sats,
-    speed:p[row.created_at]?.value||"",signal:s[row.created_at]?.value||"",
-    volt:v[row.created_at]?.value||"",nr1:n1
+</script>
+</body>
+</html>
