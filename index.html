@@ -140,7 +140,62 @@ SENSORS.forEach(s => {
   makeChart(div, s);
 });
 
-// (rest of script remains unchanged)
+function push(sensor,val,ts){
+  const s=SENSORS.find(x=>x.id===sensor); if(!s) return;
+  const c=s.chart;
+  c.data.labels.push(isoHHMM(ts));
+  c.data.datasets[0].data.push(+val);
+  if(c.data.labels.length>HIST){c.data.labels.shift();c.data.datasets[0].data.shift();}
+  c.update();
+}
+
+function drawLive(d){
+  latest.innerHTML=[
+    ["local",new Date(d.gps.ts).toLocaleString()],
+    ["fix",d.gps.fix],["lat",fmt(d.gps.lat,6)],["lon",fmt(d.gps.lon,6)],
+    ["alt m",fmt(d.gps.alt,1)],["sats",d.gps.sats??"–"],
+    ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
+    ["volt mV",d.volt],
+    ["NR1 °F",fmt(d.nr1,1)],["NR2 °F",fmt(d.nr2,1)],
+    ["NR3 °F",fmt(d.nr3,1)],["NR4 °F",fmt(d.nr4,1)]
+  ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
+
+  if(d.gps.fix&&!isNaN(d.gps.lat)&&!isNaN(d.gps.lon)){
+    const {lat,lon}=d.gps;
+    if(!map){
+      map=L.map("map").setView([lat,lon],13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  {attribution:"© OpenStreetMap"}).addTo(map);
+      marker=L.marker([lat,lon]).addTo(map);
+      poly=L.polyline([], {weight:3}).addTo(map);
+    }else marker.setLatLng([lat,lon]);
+    path.push([lat,lon]); if(path.length>TRAIL) path.shift();
+    poly.setLatLngs(path);
+  }
+}
+
+async function poll(){
+  const [gps,sig,vlt,spd,n1,n2,n3,n4]=await Promise.all([
+    get(FEEDS.gps),get(FEEDS.signal),get(FEEDS.volt),get(FEEDS.speed),
+    get(FEEDS.nr1),get(FEEDS.nr2),get(FEEDS.nr3),get(FEEDS.nr4)
+  ]);
+  if(!gps.length){setTimeout(poll,POLL);return;}
+  const g=JSON.parse(gps[0].value||"{}");
+  const ts=gps[0].created_at;
+  drawLive({
+    gps:{ts,fix:true,lat:g.lat,lon:g.lon,alt:g.alt,sats:g.sats},
+    signal:sig[0]?.value??"–",volt:vlt[0]?.value??"–",speed:spd[0]?.value??"–",
+    nr1:n1[0]?.value??"–",nr2:n2[0]?.value??"–",
+    nr3:n3[0]?.value??"–",nr4:n4[0]?.value??"–"
+  });
+  if(n1[0]) push("nr1",n1[0].value,n1[0].created_at);
+  if(n2[0]) push("nr2",n2[0].value,n2[0].created_at);
+  if(n3[0]) push("nr3",n3[0].value,n3[0].created_at);
+  if(n4[0]) push("nr4",n4[0].value,n4[0].created_at);
+  setTimeout(poll,POLL);
+}
+
+poll();
 </script>
 </body>
 </html>
