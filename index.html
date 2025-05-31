@@ -44,7 +44,6 @@ th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
 th{background:#f7fbff;font-weight:600}
 #map{height:420px;border-radius:.75rem;overflow:hidden}
 
-/* fixed-size 2×2 chart grid */
 .grid4{
   display:grid;grid-template-columns:repeat(2,1fr);
   grid-template-rows:repeat(2,260px);gap:1rem;
@@ -57,13 +56,11 @@ th{background:#f7fbff;font-weight:600}
 
 <body>
 <header>
-  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo"
-       onerror="this.style.display='none'">
+  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
   <h1>Inalgesco Datalogger</h1>
 </header>
 
 <div class="dashboard">
-  <!-- summary column -->
   <div>
     <div class="card">
       <h2>Current Fix &amp; Sensors</h2>
@@ -82,7 +79,6 @@ th{background:#f7fbff;font-weight:600}
     </div>
   </div>
 
-  <!-- charts + map column -->
   <div>
     <div class="grid4" id="charts"></div>
     <div class="card" style="margin-top:1rem">
@@ -92,28 +88,28 @@ th{background:#f7fbff;font-weight:600}
 </div>
 
 <script>
-/* === CONFIG === */
 const USER   = "Inalgescodatalogger";
-const FEEDS  = {gps:"gps",signal:"signal",volt:"volt",speed:"speed",
-                nr1:"nr1",nr2:"nr2",nr3:"nr3",nr4:"nr4"};
-const POLL = 10_000;     // ms
-const HIST = 200;        // points kept in chart
-const TRAIL= 50;         // map tail length
+const FEEDS  = {
+  gps:"gps", signal:"signal", volt:"volt", speed:"speed",
+  nr1:"nr1", nr2:"nr2", nr3:"nr3", nr4:"nr4"
+};
+const POLL = 10000;
+const HIST = 200;
+const TRAIL= 50;
 
-/* === helpers === */
 const api = (k,l=1)=>
   `https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
+
 async function get(feed,l=1){
   try{const r=await fetch(api(feed,l));return r.ok? r.json(): [];}catch{return [];}
 }
+
 const td = v=>`<td>${v}</td>`;
 const fmt=(v,p=1)=>v==null?"–":(+v).toFixed?.(p)??v;
 const isoHHMM = ts => ts.substring(11,19);
 
-/* === map === */
 let map,marker,poly,path=[];
 
-/* === charts === */
 const SENSORS=[
   {id:"nr1",label:"NR1 °F",col:getProp('--g1')},
   {id:"nr2",label:"NR2 °F",col:getProp('--g2')},
@@ -131,7 +127,6 @@ function makeChart(box,s){
   });
 }
 const chartsWrap = document.getElementById('charts');
-
 SENSORS.forEach(s => {
   const div = document.createElement('div');
   div.classList.add('card', 'chart-box');
@@ -139,7 +134,6 @@ SENSORS.forEach(s => {
   makeChart(div, s);
 });
 
-/* === historic === */
 (async()=>{
   await Promise.all(SENSORS.map(async s=>{
     const rows=await get(FEEDS[s.id],HIST); if(!rows.length) return;
@@ -150,7 +144,6 @@ SENSORS.forEach(s => {
   }));
 })();
 
-/* === live table === */
 function drawLive(d){
   latest.innerHTML=[
     ["local",new Date(d.gps.ts).toLocaleString()],
@@ -176,7 +169,6 @@ function drawLive(d){
   }
 }
 
-/* === chart push === */
 function push(sensor,val,ts){
   const s=SENSORS.find(x=>x.id===sensor); if(!s) return;
   const c=s.chart;
@@ -186,7 +178,6 @@ function push(sensor,val,ts){
   c.update();
 }
 
-/* === poll === */
 async function poll(){
   const [gps,sig,vlt,spd,n1,n2,n3,n4]=await Promise.all([
     get(FEEDS.gps),get(FEEDS.signal),get(FEEDS.volt),get(FEEDS.speed),
@@ -208,6 +199,63 @@ async function poll(){
   setTimeout(poll,POLL);
 }
 poll();
+
+function getISO(id) {
+  const val = document.getElementById(id).value;
+  return val ? new Date(val).toISOString() : null;
+}
+
+async function downloadCSV() {
+  const start = getISO("start");
+  const end = getISO("end");
+  const status = document.getElementById("expStatus");
+  const preview = document.getElementById("preview");
+  status.textContent = "Fetching...";
+
+  let allData = {};
+  let allTimestamps = new Set();
+
+  for (let key in FEEDS) {
+    const feed = FEEDS[key];
+    const params = new URLSearchParams({limit: 1000});
+    if (start) params.append("start_time", start);
+    if (end)   params.append("end_time", end);
+
+    const url = `https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data?${params}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (Array.isArray(data)) {
+      allData[feed] = data;
+      data.forEach(d => allTimestamps.add(d.created_at));
+    }
+  }
+
+  const sortedTimestamps = Array.from(allTimestamps).sort();
+  const headers = ["Timestamp", ...Object.keys(FEEDS)];
+  let rows = [headers.join(",")];
+
+  sortedTimestamps.forEach(ts => {
+    let row = [ts];
+    for (let key in FEEDS) {
+      let d = allData[FEEDS[key]]?.find(r => r.created_at === ts);
+      row.push(d?.value ?? "");
+    }
+    rows.push(row.join(","));
+  });
+
+  preview.innerHTML = `<tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr>` +
+    rows.slice(1, 11).map(r => `<tr>${r.split(",").map(c => `<td>${c}</td>`).join("")}</tr>`).join("");
+
+  const blob = new Blob([rows.join("\n")], {type: "text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `inalgesco-${Date.now()}.csv`;
+  a.click();
+
+  status.textContent = `Downloaded ${rows.length - 1} rows.`;
+}
+
+document.getElementById("dlBtn").addEventListener("click", downloadCSV);
 </script>
 </body>
 </html>
