@@ -281,6 +281,8 @@ document.getElementById("deviceSelect").addEventListener("change", e => {
   DEVICE = e.target.value;
   updateCharts();
 });
+  // Load default device immediately on page load
+updateCharts();
 </script>
 </body>
 </html>
