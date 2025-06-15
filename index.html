@@ -117,7 +117,15 @@ let FEEDS = getFeeds(DEVICE);
 
 const api = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
 async function get(feed,l=1){
-  try{const r=await fetch(api(feed,l));return r.ok? r.json(): [];}catch{return [];}
+  try {
+    const r = await fetch(api(feed, l));
+    if (!r.ok) console.warn("Feed error:", feed, r.status);
+    const data = await r.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error("Fetch failed for", feed, err);
+    return [];
+  }
 }
 
 const td = v=>`<td>${v}</td>`;
@@ -185,7 +193,7 @@ function drawLive(d){
     ["NR3 °F",fmt(d.nr3,1)], ["NR4 °F",fmt(d.nr4,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
 
-  if(d.gps.fix&&!isNaN(d.gps.lat)&&!isNaN(d.gps.lon)){
+  if(d.gps.fix && typeof d.gps.lat === "number" && typeof d.gps.lon === "number"){
     const {lat,lon}=d.gps;
     if(!map){
       map=L.map("map").setView([lat,lon],13);
@@ -204,8 +212,13 @@ async function poll(){
     get(FEEDS.gps),get(FEEDS.signal),get(FEEDS.volt),get(FEEDS.speed),
     get(FEEDS.nr1),get(FEEDS.nr2),get(FEEDS.nr3),get(FEEDS.nr4)
   ]);
+  let g = {};
+  try {
+    g = JSON.parse(gps[0]?.value || "{}");
+  } catch (e) {
+    console.warn("Invalid GPS JSON:", gps[0]?.value);
+  }
   if(!gps.length){setTimeout(poll,POLL);return;}
-  const g=JSON.parse(gps[0].value||"{}");
   const ts=gps[0].created_at;
   drawLive({
     gps:{ts,fix:true,lat:g.lat,lon:g.lon,alt:g.alt,sats:g.sats},
@@ -277,12 +290,4 @@ async function downloadCSV() {
 }
 
 document.getElementById("dlBtn").addEventListener("click", downloadCSV);
-document.getElementById("deviceSelect").addEventListener("change", e => {
-  DEVICE = e.target.value;
-  updateCharts();
-});
-  // Load default device immediately on page load
-updateCharts();
-</script>
-</body>
-</html>
+document
