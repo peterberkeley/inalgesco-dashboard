@@ -109,8 +109,7 @@ const getFeeds = device => ({
   speed: `${device}.speed`,
   nr1: `${device}.nr1`,
   nr2: `${device}.nr2`,
-  nr3: `${device}.nr3`,
-  nr4: `${device}.nr4`
+  nr3: `${device}.nr3`
 });
 
 let FEEDS = getFeeds(DEVICE);
@@ -137,8 +136,7 @@ let map,marker,poly,path=[];
 const SENSORS=[
   {id:"nr1",label:"NR1 °F",col:getProp('--g1')},
   {id:"nr2",label:"NR2 °F",col:getProp('--g2')},
-  {id:"nr3",label:"NR3 °F",col:getProp('--g3')},
-  {id:"nr4",label:"NR4 °F",col:getProp('--g4')}
+  {id:"nr3",label:"NR3 °F",col:getProp('--g3')}
 ];
 function getProp(p){return getComputedStyle(document.documentElement).getPropertyValue(p).trim();}
 function makeChart(box,s){
@@ -190,7 +188,7 @@ function drawLive(d){
     ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
     ["volt mV",d.volt],
     ["NR1 °F",fmt(d.nr1,1)],["NR2 °F",fmt(d.nr2,1)],
-    ["NR3 °F",fmt(d.nr3,1)], ["NR4 °F",fmt(d.nr4,1)]
+    ["NR3 °F",fmt(d.nr3,1)]
   ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
 
   if(d.gps.fix && typeof d.gps.lat === "number" && typeof d.gps.lon === "number"){
@@ -208,9 +206,9 @@ function drawLive(d){
 }
 
 async function poll(){
-  const [gps,sig,vlt,spd,n1,n2,n3,n4]=await Promise.all([
+  const [gps,sig,vlt,spd,n1,n2,n3]=await Promise.all([
     get(FEEDS.gps),get(FEEDS.signal),get(FEEDS.volt),get(FEEDS.speed),
-    get(FEEDS.nr1),get(FEEDS.nr2),get(FEEDS.nr3),get(FEEDS.nr4)
+    get(FEEDS.nr1),get(FEEDS.nr2),get(FEEDS.nr3)
   ]);
   let g = {};
   try {
@@ -223,13 +221,11 @@ async function poll(){
   drawLive({
     gps:{ts,fix:true,lat:g.lat,lon:g.lon,alt:g.alt,sats:g.sats},
     signal:sig[0]?.value??"–",volt:vlt[0]?.value??"–",speed:spd[0]?.value??"–",
-    nr1:n1[0]?.value??"–",nr2:n2[0]?.value??"–",
-    nr3:n3[0]?.value??"–",nr4:n4[0]?.value??"–"
+    nr1:n1[0]?.value??"–",nr2:n2[0]?.value??"–",nr3:n3[0]?.value??"–"
   });
   if(n1[0]) push("nr1",n1[0].value,n1[0].created_at);
   if(n2[0]) push("nr2",n2[0].value,n2[0].created_at);
   if(n3[0]) push("nr3",n3[0].value,n3[0].created_at);
-  if(n4[0]) push("nr4",n4[0].value,n4[0].created_at);
   setTimeout(poll,POLL);
 }
 
@@ -290,4 +286,12 @@ async function downloadCSV() {
 }
 
 document.getElementById("dlBtn").addEventListener("click", downloadCSV);
-document
+document.getElementById("deviceSelect").addEventListener("change", e => {
+  DEVICE = e.target.value;
+  updateCharts();
+});
+
+updateCharts();
+</script>
+</body>
+</html>
