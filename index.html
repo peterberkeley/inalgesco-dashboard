@@ -120,7 +120,7 @@ th { background: #f7fbff; font-weight: 600 }
 
 <script>
 const USER = "Inalgescodatalogger";
-const AIO_KEY = "aio_wCfr96v4jPr3TBdYgixK7OIWp79F";
+const AIO_KEY = localStorage.getItem("aio_key") || "";
 const POLL = 10000;
 const HIST = 200;
 const TRAIL = 50;
