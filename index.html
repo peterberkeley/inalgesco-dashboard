@@ -14,43 +14,65 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
 <style>
-:root{
-  --brand-light:#d9eaf8;--brand-mid:#00a2e8;--brand-dark:#002d5a;
-  --card-bg:#fff;--bg:#f0f8ff;
-  --g1:#e91e63;--g2:#3f51b5;--g3:#009688;--g4:#ff9800;
+:root {
+  --brand-light: #d9eaf8;
+  --brand-mid: #00a2e8;
+  --brand-dark: #002d5a;
+  --card-bg: #fff;
+  --bg: #f0f8ff;
+  --g1: #e91e63;
+  --g2: #3f51b5;
+  --g3: #009688;
 }
-*{box-sizing:border-box}
-body{
-  margin:0;background:var(--bg);color:var(--brand-dark);
-  font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+* { box-sizing: border-box }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--brand-dark);
+  font-family: 'Inter', system-ui, sans-serif;
 }
-header{
-  background:linear-gradient(90deg,var(--brand-light),var(--brand-mid));
-  padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;
-  box-shadow:0 2px 6px #0002;
+header {
+  background: linear-gradient(90deg, var(--brand-light), var(--brand-mid));
+  padding: .75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  box-shadow: 0 2px 6px #0002;
 }
-header img{height:46px}
-header h1{margin:0;font-size:1.4rem;font-weight:600}
+header img { height: 46px }
+header h1 { margin: 0; font-size: 1.4rem; font-weight: 600 }
 
-.dashboard{display:grid;grid-template-columns:320px 1fr;gap:1rem;margin:1rem;}
-.card{
-  background:var(--card-bg);border-radius:.75rem;padding:1rem;
-  box-shadow:0 4px 10px #0001;animation:fade .4s ease-out;
+.dashboard {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1rem;
+  margin: 1rem;
 }
-@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
-h2{margin:0 0 .5rem;font-size:1.1rem;font-weight:600}
-table{width:100%;border-collapse:collapse;font-size:.9rem}
-th,td{padding:.45rem .35rem;text-align:left;border-bottom:1px solid #e3eef7}
-th{background:#f7fbff;font-weight:600}
-#map{height:420px;border-radius:.75rem;overflow:hidden}
+.card {
+  background: var(--card-bg);
+  border-radius: .75rem;
+  padding: 1rem;
+  box-shadow: 0 4px 10px #0001;
+}
+h2 { margin: 0 0 .5rem; font-size: 1.1rem; font-weight: 600 }
+table { width: 100%; border-collapse: collapse; font-size: .9rem }
+th, td { padding: .45rem .35rem; text-align: left; border-bottom: 1px solid #e3eef7 }
+th { background: #f7fbff; font-weight: 600 }
+#map { height: 420px; border-radius: .75rem; overflow: hidden }
 
-.grid4{
-  display:grid;grid-template-columns:repeat(2,1fr);
-  grid-template-rows:repeat(2,260px);gap:1rem;
+.grid4 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 260px);
+  gap: 1rem;
 }
-.chart-box{display:flex;flex-direction:column;height:100%;}
-.chart-box h2{margin:0 0 .25rem;font-size:.95rem;font-weight:600}
-.chart-box canvas{flex:1;width:100%!important;height:100%!important}
+.chart-box {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.chart-box h2 { margin: 0 0 .25rem; font-size: .95rem; font-weight: 600 }
+.chart-box canvas { flex: 1; width: 100%!important; height: 100%!important }
 </style>
 </head>
 
@@ -90,13 +112,15 @@ th{background:#f7fbff;font-weight:600}
   <div>
     <div class="grid4" id="charts"></div>
     <div class="card" style="margin-top:1rem">
-      <h2>Map View</h2><div id="map"></div>
+      <h2>Map View</h2>
+      <div id="map"></div>
     </div>
   </div>
 </div>
 
 <script>
 const USER = "Inalgescodatalogger";
+const AIO_KEY = "aio_wCfr96v4jPr3TBdYgixK7OIWp79F";
 const POLL = 10000;
 const HIST = 200;
 const TRAIL = 50;
@@ -111,13 +135,16 @@ const getFeeds = device => ({
   nr2: `${device}.nr2`,
   nr3: `${device}.nr3`
 });
-
 let FEEDS = getFeeds(DEVICE);
 
-const api = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
+const api = (k,l=1)=>
+  `https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
+
 async function get(feed,l=1){
   try {
-    const r = await fetch(api(feed, l));
+    const r = await fetch(api(feed, l), {
+      headers: { "X-AIO-Key": AIO_KEY }
+    });
     if (!r.ok) console.warn("Feed error:", feed, r.status);
     const data = await r.json();
     return Array.isArray(data) ? data : [];
@@ -252,7 +279,9 @@ async function downloadCSV() {
     if (end)   params.append("end_time", end);
 
     const url = `https://io.adafruit.com/api/v2/${USER}/feeds/${FEEDS[key]}/data?${params}`;
-    const r = await fetch(url);
+    const r = await fetch(url, {
+      headers: { "X-AIO-Key": AIO_KEY }
+    });
     const data = await r.json();
     if (Array.isArray(data)) {
       allData[key] = data;
@@ -290,7 +319,6 @@ document.getElementById("deviceSelect").addEventListener("change", e => {
   DEVICE = e.target.value;
   updateCharts();
 });
-
 updateCharts();
 </script>
 </body>
