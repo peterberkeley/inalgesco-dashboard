@@ -58,6 +58,14 @@ th{background:#f7fbff;font-weight:600}
 <header>
   <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
   <h1>Inalgesco Datalogger</h1>
+  <label style="margin-left:auto;font-weight:500">
+    Device:
+    <select id="deviceSelect">
+      <option value="skycafe-1">SkyCafé 1</option>
+      <option value="skycafe-2">SkyCafé 2</option>
+      <option value="skycafe-3">SkyCafé 3</option>
+    </select>
+  </label>
 </header>
 
 <div class="dashboard">
@@ -88,18 +96,26 @@ th{background:#f7fbff;font-weight:600}
 </div>
 
 <script>
-const USER   = "Inalgescodatalogger";
-const FEEDS  = {
-  gps:"gps", signal:"signal", volt:"volt", speed:"speed",
-  nr1:"nr1", nr2:"nr2", nr3:"nr3", nr4:"nr4"
-};
+const USER = "Inalgescodatalogger";
 const POLL = 10000;
 const HIST = 200;
-const TRAIL= 50;
+const TRAIL = 50;
+let DEVICE = "skycafe-1";
 
-const api = (k,l=1)=>
-  `https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
+const getFeeds = device => ({
+  gps: `${device}.gps`,
+  signal: `${device}.signal`,
+  volt: `${device}.volt`,
+  speed: `${device}.speed`,
+  nr1: `${device}.nr1`,
+  nr2: `${device}.nr2`,
+  nr3: `${device}.nr3`,
+  nr4: `${device}.nr4`
+});
 
+let FEEDS = getFeeds(DEVICE);
+
+const api = (k,l=1)=>`https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
 async function get(feed,l=1){
   try{const r=await fetch(api(feed,l));return r.ok? r.json(): [];}catch{return [];}
 }
@@ -125,10 +141,7 @@ function makeChart(box,s){
     options:{
       animation:false,responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false}},
-      scales:{
-        x:{ticks:{maxRotation:0}},
-        y:{min:20, max:130}
-      }
+      scales:{x:{ticks:{maxRotation:0}},y:{min:20,max:130}}
     }
   });
 }
@@ -140,7 +153,8 @@ SENSORS.forEach(s => {
   makeChart(div, s);
 });
 
-(async () => {
+async function updateCharts() {
+  FEEDS = getFeeds(DEVICE);
   await Promise.all(SENSORS.map(async s => {
     const rows = await get(FEEDS[s.id], HIST);
     if (!rows.length) return;
@@ -149,7 +163,7 @@ SENSORS.forEach(s => {
     s.chart.data.datasets[0].data = rows.map(r => +r.value);
     s.chart.update();
   }));
-})();
+}
 
 function push(sensor,val,ts){
   const s=SENSORS.find(x=>x.id===sensor); if(!s) return;
@@ -263,6 +277,10 @@ async function downloadCSV() {
 }
 
 document.getElementById("dlBtn").addEventListener("click", downloadCSV);
+document.getElementById("deviceSelect").addEventListener("change", e => {
+  DEVICE = e.target.value;
+  updateCharts();
+});
 </script>
 </body>
 </html>
