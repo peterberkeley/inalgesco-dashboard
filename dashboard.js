@@ -33,3 +33,41 @@ async function fetchFeed(feed, limit=1, params={}) {
   console.log('Latest GPS:', gpsData);
   setTimeout(poll, POLL_MS);
 })();
+// --- chart setup ---
+
+// Define the sensors we’ll plot
+const SENSORS = [
+  { id: 'nr1', label: 'NR1 °F', chart: null },
+  { id: 'nr2', label: 'NR2 °F', chart: null },
+  { id: 'nr3', label: 'NR3 °F', chart: null }
+];
+
+// Create a Chart for each sensor in the #charts container
+function initCharts() {
+  const chartsDiv = document.getElementById('charts');
+  SENSORS.forEach(s => {
+    // Create card div
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-2xl shadow p-4 chart-box';
+    card.innerHTML = `<h2 class="text-sm font-semibold mb-2">${s.label}</h2><canvas></canvas>`;
+    chartsDiv.appendChild(card);
+
+    // Initialize Chart.js
+    const ctx = card.querySelector('canvas').getContext('2d');
+    s.chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [{ data: [], tension: 0.25, pointRadius: 0 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: true },
+          y: { display: true, min: 20, max: 130 }
+        }
+      }
+    });
+  });
+}
+
+// Call initCharts() once at load
+initCharts();
