@@ -138,6 +138,7 @@ function drawLive(data) {
 // ─── Main Loop ─────────────────────────────────────────────────────────────────
 async function poll() {
   const feeds = getFeeds(DEVICE);
+  console.log('🔍 poll(): feeds =', feeds);
   const [gpsArr, sigArr, voltArr, spdArr, n1Arr, n2Arr, n3Arr] = await Promise.all([
     fetchFeed(feeds.gps),
     fetchFeed(feeds.signal),
