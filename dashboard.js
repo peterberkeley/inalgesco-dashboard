@@ -1,7 +1,7 @@
 // dashboard.js
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
-const USER    = 'Inalgescodatalogger';
+const USER    = 'inalgescodatalogger';
 const AIO_KEY = 'aio_WsRe40ZXrrgYzdL0pldHUYjvxytH';    // ← your real key
 let DEVICE    = 'skycafe-1';
 const POLL_MS = 10000;   // 10 s between polls
