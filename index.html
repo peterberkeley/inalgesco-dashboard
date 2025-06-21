@@ -1,325 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>Inalgesco Datalogger Dashboard</title>
-
-<!-- Fonts, Leaflet & Chart.js -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-<style>
-:root {
-  --brand-light: #d9eaf8;
-  --brand-mid: #00a2e8;
-  --brand-dark: #002d5a;
-  --card-bg: #fff;
-  --bg: #f0f8ff;
-  --g1: #e91e63;
-  --g2: #3f51b5;
-  --g3: #009688;
-}
-* { box-sizing: border-box }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--brand-dark);
-  font-family: 'Inter', system-ui, sans-serif;
-}
-header {
-  background: linear-gradient(90deg, var(--brand-light), var(--brand-mid));
-  padding: .75rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: .75rem;
-  box-shadow: 0 2px 6px #0002;
-}
-header img { height: 46px }
-header h1 { margin: 0; font-size: 1.4rem; font-weight: 600 }
-
-.dashboard {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 1rem;
-  margin: 1rem;
-}
-.card {
-  background: var(--card-bg);
-  border-radius: .75rem;
-  padding: 1rem;
-  box-shadow: 0 4px 10px #0001;
-}
-h2 { margin: 0 0 .5rem; font-size: 1.1rem; font-weight: 600 }
-table { width: 100%; border-collapse: collapse; font-size: .9rem }
-th, td { padding: .45rem .35rem; text-align: left; border-bottom: 1px solid #e3eef7 }
-th { background: #f7fbff; font-weight: 600 }
-#map { height: 420px; border-radius: .75rem; overflow: hidden }
-
-.grid4 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 260px);
-  gap: 1rem;
-}
-.chart-box {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-.chart-box h2 { margin: 0 0 .25rem; font-size: .95rem; font-weight: 600 }
-.chart-box canvas { flex: 1; width: 100%!important; height: 100%!important }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sky Café Trucks Dashboard</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    .chart-box { display: flex; flex-direction: column; height: 100%; }
+    .chart-box canvas { flex: 1; width: 100% !important; height: 100% !important; }
+  </style>
 </head>
-
-<body>
-<header>
-  <img src="logo_v2_hex_d9eaf8.png" alt="Inalgesco logo" onerror="this.style.display='none'">
-  <h1>Inalgesco Datalogger</h1>
-  <label style="margin-left:auto;font-weight:500">
-    Device:
-    <select id="deviceSelect">
-      <option value="skycafe-1">SkyCafé 1</option>
-      <option value="skycafe-2">SkyCafé 2</option>
-      <option value="skycafe-3">SkyCafé 3</option>
-    </select>
-  </label>
-</header>
-
-<div class="dashboard">
-  <div>
-    <div class="card">
-      <h2>Current Fix &amp; Sensors</h2>
-      <table id="latest"></table>
-    </div>
-
-    <div class="card">
-      <h2>Export data → CSV</h2>
-      <label>Start <input type="datetime-local" id="start"></label>
-      <label style="margin-left:.5rem">
-        End <input type="datetime-local" id="end">
+<body class="bg-gray-50 text-gray-800 font-sans">
+  <header class="bg-gradient-to-r from-blue-200 to-blue-500 p-4 shadow-md flex items-center">
+    <img src="logo.png" alt="Sky Café Trucks" class="h-10" />
+    <h1 class="ml-4 text-2xl font-semibold">Sky Café Trucks Dashboard</h1>
+    <div class="ml-auto">
+      <label class="text-white font-medium">Device:
+        <select id="deviceSelect" class="ml-2 p-1 rounded">
+          <option value="skycafe-1">SkyCafé 1</option>
+        </select>
       </label>
-      <button id="dlBtn">Download CSV</button>
-      <span id="expStatus" style="margin-left:.5rem;font-size:.9rem"></span>
-      <table id="preview" style="margin-top:1rem"></table>
     </div>
-  </div>
-
-  <div>
-    <div class="grid4" id="charts"></div>
-    <div class="card" style="margin-top:1rem">
-      <h2>Map View</h2>
-      <div id="map"></div>
-    </div>
-  </div>
-</div>
-
-<script>
-const USER = "Inalgescodatalogger";
-const AIO_KEY = localStorage.getItem("aio_key") || "";
-const POLL = 10000;
-const HIST = 200;
-const TRAIL = 50;
-let DEVICE = "skycafe-1";
-
-const getFeeds = device => ({
-  gps: `${device}.gps`,
-  signal: `${device}.signal`,
-  volt: `${device}.volt`,
-  speed: `${device}.speed`,
-  nr1: `${device}.nr1`,
-  nr2: `${device}.nr2`,
-  nr3: `${device}.nr3`
-});
-let FEEDS = getFeeds(DEVICE);
-
-const api = (k,l=1)=>
-  `https://io.adafruit.com/api/v2/${USER}/feeds/${k}/data?limit=${l}`;
-
-async function get(feed,l=1){
-  try {
-    const r = await fetch(api(feed, l), {
-      headers: { "X-AIO-Key": AIO_KEY }
-    });
-    if (!r.ok) console.warn("Feed error:", feed, r.status);
-    const data = await r.json();
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    console.error("Fetch failed for", feed, err);
-    return [];
-  }
-}
-
-const td = v=>`<td>${v}</td>`;
-const fmt=(v,p=1)=>v==null?"–":(+v).toFixed?.(p)??v;
-const isoHHMM = ts => ts.substring(11,19);
-
-let map,marker,poly,path=[];
-
-const SENSORS=[
-  {id:"nr1",label:"NR1 °F",col:getProp('--g1')},
-  {id:"nr2",label:"NR2 °F",col:getProp('--g2')},
-  {id:"nr3",label:"NR3 °F",col:getProp('--g3')}
-];
-function getProp(p){return getComputedStyle(document.documentElement).getPropertyValue(p).trim();}
-function makeChart(box,s){
-  box.innerHTML=`<h2>${s.label}</h2><canvas></canvas>`;
-  const ctx=box.querySelector('canvas').getContext('2d');
-  s.chart=new Chart(ctx,{type:'line',
-    data:{labels:[],datasets:[{data:[],borderColor:s.col,borderWidth:2,pointRadius:0,tension:.25}]},
-    options:{
-      animation:false,responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{ticks:{maxRotation:0}},y:{min:20,max:130}}
-    }
-  });
-}
-const chartsWrap = document.getElementById('charts');
-SENSORS.forEach(s => {
-  const div = document.createElement('div');
-  div.classList.add('card', 'chart-box');
-  chartsWrap.appendChild(div);
-  makeChart(div, s);
-});
-
-async function updateCharts() {
-  FEEDS = getFeeds(DEVICE);
-  await Promise.all(SENSORS.map(async s => {
-    const rows = await get(FEEDS[s.id], HIST);
-    if (!rows.length) return;
-    rows.reverse();
-    s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
-    s.chart.data.datasets[0].data = rows.map(r => +r.value);
-    s.chart.update();
-  }));
-}
-
-function push(sensor,val,ts){
-  const s=SENSORS.find(x=>x.id===sensor); if(!s) return;
-  const c=s.chart;
-  c.data.labels.push(isoHHMM(ts));
-  c.data.datasets[0].data.push(+val);
-  if(c.data.labels.length>HIST){c.data.labels.shift();c.data.datasets[0].data.shift();}
-  c.update();
-}
-
-function drawLive(d){
-  latest.innerHTML=[
-    ["local",new Date(d.gps.ts).toLocaleString()],
-    ["fix",d.gps.fix],["lat",fmt(d.gps.lat,6)],["lon",fmt(d.gps.lon,6)],
-    ["alt m",fmt(d.gps.alt,1)],["sats",d.gps.sats??"–"],
-    ["speed km/h",fmt(d.speed,1)],["RSSI dBm",d.signal],
-    ["volt mV",d.volt],
-    ["NR1 °F",fmt(d.nr1,1)],["NR2 °F",fmt(d.nr2,1)],
-    ["NR3 °F",fmt(d.nr3,1)]
-  ].map(r=>`<tr><th>${r[0]}</th>${td(r[1])}</tr>`).join("");
-
-  if(d.gps.fix && typeof d.gps.lat === "number" && typeof d.gps.lon === "number"){
-    const {lat,lon}=d.gps;
-    if(!map){
-      map=L.map("map").setView([lat,lon],13);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                  {attribution:"© OpenStreetMap"}).addTo(map);
-      marker=L.marker([lat,lon]).addTo(map);
-      poly=L.polyline([], {weight:3}).addTo(map);
-    }else marker.setLatLng([lat,lon]);
-    path.push([lat,lon]); if(path.length>TRAIL) path.shift();
-    poly.setLatLngs(path);
-  }
-}
-
-async function poll(){
-  const [gps,sig,vlt,spd,n1,n2,n3]=await Promise.all([
-    get(FEEDS.gps),get(FEEDS.signal),get(FEEDS.volt),get(FEEDS.speed),
-    get(FEEDS.nr1),get(FEEDS.nr2),get(FEEDS.nr3)
-  ]);
-  let g = {};
-  try {
-    g = JSON.parse(gps[0]?.value || "{}");
-  } catch (e) {
-    console.warn("Invalid GPS JSON:", gps[0]?.value);
-  }
-  if(!gps.length){setTimeout(poll,POLL);return;}
-  const ts=gps[0].created_at;
-  drawLive({
-    gps:{ts,fix:true,lat:g.lat,lon:g.lon,alt:g.alt,sats:g.sats},
-    signal:sig[0]?.value??"–",volt:vlt[0]?.value??"–",speed:spd[0]?.value??"–",
-    nr1:n1[0]?.value??"–",nr2:n2[0]?.value??"–",nr3:n3[0]?.value??"–"
-  });
-  if(n1[0]) push("nr1",n1[0].value,n1[0].created_at);
-  if(n2[0]) push("nr2",n2[0].value,n2[0].created_at);
-  if(n3[0]) push("nr3",n3[0].value,n3[0].created_at);
-  setTimeout(poll,POLL);
-}
-
-poll();
-
-function getISO(id) {
-  const val = document.getElementById(id).value;
-  return val ? new Date(val).toISOString() : null;
-}
-
-async function downloadCSV() {
-  const start = getISO("start");
-  const end = getISO("end");
-  const status = document.getElementById("expStatus");
-  const preview = document.getElementById("preview");
-  status.textContent = "Fetching...";
-
-  let allData = {};
-  let allTimestamps = new Set();
-
-  for (let key in FEEDS) {
-    const params = new URLSearchParams({ limit: 1000 });
-    if (start) params.append("start_time", start);
-    if (end)   params.append("end_time", end);
-
-    const url = `https://io.adafruit.com/api/v2/${USER}/feeds/${FEEDS[key]}/data?${params}`;
-    const r = await fetch(url, {
-      headers: { "X-AIO-Key": AIO_KEY }
-    });
-    const data = await r.json();
-    if (Array.isArray(data)) {
-      allData[key] = data;
-      data.forEach(d => allTimestamps.add(d.created_at));
-    }
-  }
-
-  const sortedTimestamps = Array.from(allTimestamps).sort();
-  const headers = ["Timestamp", ...Object.keys(FEEDS)];
-  let rows = [headers.join(",")];
-
-  sortedTimestamps.forEach(ts => {
-    let row = [ts];
-    for (let key of Object.keys(FEEDS)) {
-      let entry = allData[key]?.find(d => d.created_at === ts);
-      row.push(entry?.value ?? "");
-    }
-    rows.push(row.join(","));
-  });
-
-  preview.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>` +
-    rows.slice(1, 11).map(r => `<tr>${r.split(",").map(c => `<td>${c}</td>`).join("")}</tr>`).join("");
-
-  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `inalgesco-${Date.now()}.csv`;
-  a.click();
-
-  status.textContent = `Downloaded ${rows.length - 1} rows.`;
-}
-
-document.getElementById("dlBtn").addEventListener("click", downloadCSV);
-document.getElementById("deviceSelect").addEventListener("change", e => {
-  DEVICE = e.target.value;
-  updateCharts();
-});
-updateCharts();
-</script>
+  </header>
+  <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <section class="lg:col-span-1 space-y-6">
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
+        <table id="latest" class="w-full text-sm"></table>
+      </div>
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
+        <div class="flex items-center space-x-2 mb-4">
+          <input type="datetime-local" id="start" class="border p-1 rounded" />
+          <input type="datetime-local" id="end" class="border p-1 rounded" />
+          <button id="dlBtn" class="bg-blue-500 text-white px-3 py-1 rounded">Download</button>
+        </div>
+        <div id="expStatus" class="text-sm text-gray-600"></div>
+        <table id="preview" class="mt-4 text-sm w-full"></table>
+      </div>
+    </section>
+    <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div id="charts" class="col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6"></div>
+      <div class="bg-white rounded-2xl shadow p-4 col-span-2 md:col-span-2">
+        <h2 class="text-lg font-semibold mb-2">Map View</h2>
+        <div id="map" class="h-64 rounded-lg"></div>
+      </div>
+    </section>
+  </main>
+  <script src="dashboard.js" defer></script>
 </body>
 </html>
