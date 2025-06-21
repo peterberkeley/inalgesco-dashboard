@@ -11,15 +11,16 @@ const TRAIL   = 50;      // how many points to keep in the map trail
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 function getFeeds(d) {
   return {
-    gps:   `${d}.gps`,
-    signal:`${d}.signal`,
-    volt:  `${d}.volt`,
-    speed: `${d}.speed`,
-    nr1:   `${d}.nr1`,
-    nr2:   `${d}.nr2`,
-    nr3:   `${d}.nr3`
+    gps:    `${d}.gps`,       // ← correct (dot)
+    signal: `${d}.signal`,
+    volt:   `${d}.volt`,
+    speed:  `${d}.speed`,
+    nr1:    `${d}.nr1`,
+    nr2:    `${d}.nr2`,
+    nr3:    `${d}.nr3`
   };
 }
+
 
 async function fetchFeed(feed, limit = 1, params = {}) {
   const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data`);
