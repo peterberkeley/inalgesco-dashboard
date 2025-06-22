@@ -23,12 +23,20 @@ function getFeeds(d) {
 
 
 async function fetchFeed(feed, limit = 1, params = {}) {
+  // Build the Adafruit URL with your key as a query param (CORS-safe)
   const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data`);
   url.searchParams.set('limit', limit);
   Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
-  const res = await fetch(url, { headers: { 'X-AIO-Key': AIO_KEY } });
-  return res.ok ? await res.json() : [];
+  url.searchParams.set('x-aio-key', AIO_KEY);
+
+  const res = await fetch(url, { mode: 'cors' });
+  if (!res.ok) {
+    console.error('Adafruit IO error', res.status, await res.text());
+    return [];
+  }
+  return res.json();
 }
+
 
 const fmt = (v, p = 1) => v == null ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts.substring(11, 19);
