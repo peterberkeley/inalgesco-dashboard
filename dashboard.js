@@ -61,7 +61,6 @@ function initCharts() {
     card.style.height = '320px'; // fixed height for stability
     card.innerHTML = `<h2 class="text-sm font-semibold mb-2">${s.label}</h2><canvas style="height:260px!important"></canvas>`;
     chartsDiv.appendChild(card);
-
     const ctx = card.querySelector('canvas').getContext('2d');
     s.chart = new Chart(ctx, {
       type: 'line',
