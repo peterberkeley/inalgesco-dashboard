@@ -23,12 +23,12 @@ function getFeeds(d) {
 
 
 async function fetchFeed(feed, limit = 1, params = {}) {
-  // Build a URL against our proxy route on this same origin
-  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, window.location.origin);
+  // point at the public workers.dev URL
+  const proxyOrigin = 'https://rapid-mode-5c5a.peter-400.workers.dev';
+  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, proxyOrigin);
   url.searchParams.set('limit', limit);
   Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
 
-  // No custom headers needed—Worker injects the API key and CORS for us
   const res = await fetch(url.toString());
   if (!res.ok) {
     console.error('Feed fetch failed:', res.status, await res.text());
