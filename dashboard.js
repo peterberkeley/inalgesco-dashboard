@@ -111,9 +111,9 @@ async function updateCharts() {
 let map, marker, poly, path = [];
 function initMap() {
   map = L.map('map').setView([0, 0], 2);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
+ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
+}).addTo(map);
   marker = L.marker([0, 0]).addTo(map);
   poly   = L.polyline([], { weight: 3 }).addTo(map);
 }
