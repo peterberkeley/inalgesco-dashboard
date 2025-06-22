@@ -23,24 +23,24 @@ function getFeeds(d) {
 
 
 async function fetchFeed(feed, limit = 1, params = {}) {
-  // Build the URL against our new api subdomain
+  // Build URL against our proxied subdomain
   const url = new URL(
     `https://api.skycafetrucks.com/api/v2/${USER}/feeds/${feed}/data`
   );
   url.searchParams.set('limit', limit);
-  Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
 
-  // Send your AIO key in the header as before
-  const res = await fetch(url.toString(), {
-    headers: { 'X-AIO-Key': AIO_KEY },
-    mode: 'cors'
-  });
+  // Move the key into the query string—no custom headers needed, so no preflight
+  url.searchParams.set('x-aio-key', AIO_KEY);
+
+  // A plain GET now, with CORS allowed by our Transform Rule
+  const res = await fetch(url.toString());
   if (!res.ok) {
     console.error('Adafruit IO error', res.status, await res.text());
     return [];
   }
   return res.json();
 }
+
 
 
 
