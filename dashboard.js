@@ -66,7 +66,7 @@ async function fetchFeed(feedKey, limit = 1, params = {}) {
 
 // [6] FORMATTING UTILITIES ────────────────────────────────────────
 const fmt     = (v, p = 1) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(p);
-const isoHHMM = ts => ts ? ts.substring(11, 19) : '';
+const isoHHMM = ts => ts ? ts.substring(11, 16) : '';
 
 // [7] CHART.JS INITIALIZATION ────────────────────────────────────
 function initCharts() {
