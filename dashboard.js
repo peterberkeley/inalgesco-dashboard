@@ -1,4 +1,4 @@
-// dashboard.js – Section 1 of 2
+// Sky Café Trucks Dashboard – dashboard.js
 
 // ─── Configuration ────────────────────────────────────────────────
 const USER    = 'Inalgescodatalogger';
@@ -71,22 +71,24 @@ const isoHHMM = ts => ts ? ts.substring(11, 19) : '';
 
 // ─── Charts Initialization ──────────────────────────────────────
 function initCharts() {
-  const c = document.getElementById('charts');
-  c.innerHTML = '';
-  SENSORS.forEach(s => {
+  const container = document.getElementById('charts');
+  container.innerHTML = '';
+  SENSORS.forEach(sensor => {
     const card = document.createElement('div');
     card.className = 'bg-white rounded-2xl shadow p-4 chart-box';
     card.innerHTML = `
-      <h2 class="text-sm font-semibold mb-2">${s.label}</h2>
+      <h2 class="text-sm font-semibold mb-2">${sensor.label}</h2>
       <canvas></canvas>
     `;
-    c.appendChild(card);
+    container.appendChild(card);
     const ctx = card.querySelector('canvas').getContext('2d');
-    s.chart = new Chart(ctx, {
+    sensor.chart = new Chart(ctx, {
       type: 'line',
-      data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
+      data: { labels: [], datasets: [{ data: [], borderColor: sensor.col, borderWidth: 2, tension: 0.25 }] },
       options: {
-        animation: false, responsive: true, maintainAspectRatio: false,
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { ticks: { maxRotation: 0 } },
@@ -108,7 +110,6 @@ function initMap() {
   marker = L.marker([0, 0]).addTo(map);
   poly    = L.polyline([], { weight: 3 }).addTo(map);
 }
-// dashboard.js – Section 2 of 2
 
 // ─── Update Historical Charts ────────────────────────────────────
 async function updateCharts() {
@@ -128,7 +129,6 @@ async function updateCharts() {
 
 // ─── Draw Live Table & Map Trail ─────────────────────────────────
 function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2, nr3 }) {
-  // Table
   document.getElementById('latest').innerHTML = [
     ['Local Time',    new Date(ts).toLocaleString()],
     ['Fix',           fix],
@@ -142,11 +142,9 @@ function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2,
     ['NR1 °F',        fmt(nr1, 1)],
     ['NR2 °F',        fmt(nr2, 1)],
     ['NR3 °F',        fmt(nr3, 1)]
-  ].map(([k,v]) =>
-    `<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`
-  ).join('');
+  ].map(([k, v]) => `<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
 
-  // Map (always plot last known, even if fix=false)
+  // Always plot last known coordinates
   const latNum = Number(lat), lonNum = Number(lon);
   if (isFinite(latNum) && isFinite(lonNum)) {
     map.invalidateSize();
@@ -182,28 +180,37 @@ async function poll() {
   };
 
   const live = {
-    ts:    gpsA[0]?.created_at,
-    fix:   !!g.fix,
-    lat:   g.lat,  lon: g.lon, alt: g.alt, sats: g.sats,
-    signal: pick(sigA), volt: pick(voltA), speed: pick(spdA),
-    nr1:    pick(n1A),   nr2: pick(n2A),    nr3: pick(n3A)
+    ts:     gpsA[0]?.created_at,
+    fix:    !!g.fix,
+    lat:    g.lat,
+    lon:    g.lon,
+    alt:    g.alt,
+    sats:   g.sats,
+    signal: pick(sigA),
+    volt:   pick(voltA),
+    speed:  pick(spdA),
+    nr1:    pick(n1A),
+    nr2:    pick(n2A),
+    nr3:    pick(n3A)
   };
+
+  // Debug log live object:
+  console.log('🔍 live object:', live);
 
   drawLive(live);
 
   // Append to charts
-  [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3]]
-    .forEach(([id, val]) => {
-      if (val == null) return;
-      const s = SENSORS.find(x => x.id === id);
-      s.chart.data.labels.push(isoHHMM(live.ts));
-      s.chart.data.datasets[0].data.push(val);
-      if (s.chart.data.labels.length > HIST) {
-        s.chart.data.labels.shift();
-        s.chart.data.datasets[0].data.shift();
-      }
-      s.chart.update();
-    });
+  [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3]].forEach(([id, val]) => {
+    if (val == null) return;
+    const s = SENSORS.find(x => x.id === id);
+    s.chart.data.labels.push(isoHHMM(live.ts));
+    s.chart.data.datasets[0].data.push(val);
+    if (s.chart.data.labels.length > HIST) {
+      s.chart.data.labels.shift();
+      s.chart.data.datasets[0].data.shift();
+    }
+    s.chart.update();
+  });
 
   setTimeout(poll, POLL_MS);
 }
@@ -232,7 +239,7 @@ document.getElementById('dlBtn').addEventListener('click', async () => {
   );
 
   // Flatten & sort
-  const flat = data.flat().sort((a,b) => a.ts.localeCompare(b.ts));
+  const flat = data.flat().sort((a, b) => a.ts.localeCompare(b.ts));
 
   // Preview
   document.getElementById('preview').innerHTML = `
