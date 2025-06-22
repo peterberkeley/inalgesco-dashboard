@@ -22,12 +22,12 @@ function getFeeds(d) {
 
 
 async function fetchFeed(feed, limit = 1, params = {}) {
-  // Build the proxy URL on your site
-  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, window.location.origin);
+  // Use the Worker’s public domain—this URL is not behind Access
+  const proxyOrigin = 'https://rapid-mode-5c5a.peter-400.workers.dev';
+  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, proxyOrigin);
   url.searchParams.set('limit', limit);
   Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
 
-  // No headers here—Worker will add the key for us
   const res = await fetch(url.toString());
   if (!res.ok) {
     console.error('Feed fetch failed:', res.status, await res.text());
@@ -35,6 +35,7 @@ async function fetchFeed(feed, limit = 1, params = {}) {
   }
   return res.json();
 }
+
 
 const fmt = (v, p = 1) => v == null ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts.substring(11, 19);
