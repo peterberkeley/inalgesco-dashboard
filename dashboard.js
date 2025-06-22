@@ -182,9 +182,9 @@ async function poll() {
     signal: sigArr[0]?.value != null ? +sigArr[0].value : null,
     volt:   voltArr[0]?.value != null ? +voltArr[0].value : null,
     speed:  spdArr[0]?.value != null ? +spdArr[0].value : null,
-    nr1:    n1Arr[0]?.value != null ? +n1Arr[0].value : null,
-    nr2:    n2Arr[0]?.value != null ? +n2Arr[0].value : null,
-    nr3:    n3Arr[0]?.value != null ? +n3Arr[0].value : null
+    nr1:   n1Arr[0]?.value != null ? parseFloat(n1Arr[0].value) : null,
+    nr2:   n1Arr[0]?.value != null ? parseFloat(n1Arr[0].value) : null,
+    nr3:   n1Arr[0]?.value != null ? parseFloat(n1Arr[0].value) : null,
   };
 
   drawLive(live);
