@@ -2,7 +2,6 @@
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
 const USER    = 'Inalgescodatalogger';
-const AIO_KEY = 'aio_QtVt32XP4AaI8pa5Own18QH3HmgC';    // ← your real key
 let DEVICE    = 'skycafe-1';
 const POLL_MS = 10000;   // 10 s between polls
 const HIST    = 200;     // how many historical points charts fetch
@@ -23,12 +22,12 @@ function getFeeds(d) {
 
 
 async function fetchFeed(feed, limit = 1, params = {}) {
-  // Use the public workers.dev domain so Access & redirects can't interfere
-  const proxyOrigin = 'https://rapid-mode-5c5a.peter-400.workers.dev';
-  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, proxyOrigin);
+  // Build the proxy URL on your site
+  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, window.location.origin);
   url.searchParams.set('limit', limit);
-  Object.entries(params).forEach(([k,v]) => v && url.searchParams.set(k,v));
+  Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
 
+  // No headers here—Worker will add the key for us
   const res = await fetch(url.toString());
   if (!res.ok) {
     console.error('Feed fetch failed:', res.status, await res.text());
@@ -36,7 +35,6 @@ async function fetchFeed(feed, limit = 1, params = {}) {
   }
   return res.json();
 }
-
 
 const fmt = (v, p = 1) => v == null ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts.substring(11, 19);
