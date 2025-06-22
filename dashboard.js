@@ -1,34 +1,34 @@
 // dashboard.js — Section 1 of 2
 
-// ─── Configuration ────────────────────────────────────────────────
+// [1] CONFIGURATION ───────────────────────────────────────────────
 const USER    = 'Inalgescodatalogger';
 let DEVICE    = 'skycafe-1';
+// [1.1] Poll interval (ms)
 const POLL_MS = 10000;
+// [1.2] History length for charts (points)
 const HIST    = 200;
+// [1.3] Map trail length (points)
 const TRAIL   = 50;
 
-// ─── Chart Colors ────────────────────────────────────────────────
+// [2] CHART COLORS & SENSORS ─────────────────────────────────────
 const fallbackCols = ['#44b6f7', '#7cd992', '#e7c46c'];
-
-// ─── Sensor Definitions ──────────────────────────────────────────
 const SENSORS = [
   { id: 'nr1',    label: 'NR1 °F',       col: getCSS('--g1', fallbackCols[0]), chart: null },
   { id: 'nr2',    label: 'NR2 °F',       col: getCSS('--g2', fallbackCols[1]), chart: null },
   { id: 'nr3',    label: 'NR3 °F',       col: getCSS('--g3', fallbackCols[2]), chart: null },
-  { id: 'signal', label: 'RSSI (dBm)',   col: getCSS('--g4','#999'),           chart: null },
-  { id: 'volt',   label: 'Volt (mV)',    col: getCSS('--g5','#666'),           chart: null },
-  { id: 'speed',  label: 'Speed (km/h)', col: getCSS('--g6','#333'),           chart: null }
+  { id: 'signal', label: 'RSSI (dBm)',   col: getCSS('--g4', '#999'),           chart: null },
+  { id: 'volt',   label: 'Volt (mV)',    col: getCSS('--g5', '#666'),           chart: null },
+  { id: 'speed',  label: 'Speed (km/h)', col: getCSS('--g6', '#333'),           chart: null }
 ];
 
-// ─── CSS Helper ──────────────────────────────────────────────────
+// [3] CSS HELPER ──────────────────────────────────────────────────
 function getCSS(varName, fallback = '') {
   return (getComputedStyle(document.documentElement)
     .getPropertyValue(varName) || '').trim() || fallback;
 }
 
-// ─── Full Feed Keys ──────────────────────────────────────────────
+// [4] FULL FEED KEYS ──────────────────────────────────────────────
 function getFeeds(device) {
-  // Must match your Adafruit feed Key exactly:
   return {
     gps:    `${device}.gps`,
     signal: `${device}.signal`,
@@ -40,8 +40,7 @@ function getFeeds(device) {
   };
 }
 
-// ─── Fetch Utility ───────────────────────────────────────────────
-// Direct call to Adafruit IO API using full feed key
+// [5] FETCH UTILITY ───────────────────────────────────────────────
 async function fetchFeed(feedKey, limit = 1, params = {}) {
   const url = new URL(
     `https://io.adafruit.com/api/v2/${USER}/feeds/${feedKey}/data`
@@ -50,7 +49,6 @@ async function fetchFeed(feedKey, limit = 1, params = {}) {
   Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
 
   console.log(`Fetching feed ${feedKey} from ${url}`); // debug
-
   const res = await fetch(url.toString(), {
     // headers: { 'X-AIO-Key': '<YOUR_ADAFRUIT_IO_KEY>' } // if private
   });
@@ -66,11 +64,11 @@ async function fetchFeed(feedKey, limit = 1, params = {}) {
       : [];
 }
 
-// ─── Formatting Utilities ────────────────────────────────────────
+// [6] FORMATTING UTILITIES ────────────────────────────────────────
 const fmt     = (v, p = 1) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts ? ts.substring(11, 19) : '';
 
-// ─── Chart.js Initialization ─────────────────────────────────────
+// [7] CHART.JS INITIALIZATION ────────────────────────────────────
 function initCharts() {
   const ctr = document.getElementById('charts');
   ctr.innerHTML = '';
@@ -85,7 +83,15 @@ function initCharts() {
     const ctx = card.querySelector('canvas').getContext('2d');
     s.chart = new Chart(ctx, {
       type: 'line',
-      data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          borderColor: s.col,
+          borderWidth: 2,
+          tension: 0.25
+        }]
+      },
       options: {
         animation: false,
         responsive: true,
@@ -100,7 +106,7 @@ function initCharts() {
   });
 }
 
-// ─── Leaflet Map Setup ───────────────────────────────────────────
+// [8] LEAFLET MAP SETUP ───────────────────────────────────────────
 let map, marker, polyline, trail = [];
 function initMap() {
   map = L.map('map').setView([0, 0], 2);
@@ -113,14 +119,16 @@ function initMap() {
 }
 // dashboard.js — Section 2 of 2
 
-// ─── Update Historical Charts ────────────────────────────────────
+// [9] UPDATE HISTORICAL CHARTS ────────────────────────────────────
 async function updateCharts() {
   const feeds = getFeeds(DEVICE);
   await Promise.all(SENSORS.map(async s => {
     const rows = await fetchFeed(feeds[s.id], HIST);
     if (!rows.length) return;
     rows.reverse();
-    s.chart.data.labels   = rows.map(r => isoHHMM(r.created_at));
+    // [9.1] X-axis labels
+    s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
+    // [9.2] Y-axis data
     s.chart.data.datasets[0].data = rows.map(r => {
       const n = parseFloat(r.value);
       return isNaN(n) ? null : n;
@@ -129,8 +137,9 @@ async function updateCharts() {
   }));
 }
 
-// ─── Draw Live Table & Map Trail ─────────────────────────────────
+// [10] DRAW LIVE TABLE & MAP TRAIL ───────────────────────────────
 function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2, nr3 }) {
+  // [10.1] Table rendering
   document.getElementById('latest').innerHTML = [
     ['Local Time',   new Date(ts).toLocaleString()],
     ['Fix',          fix],
@@ -146,6 +155,7 @@ function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2,
     ['NR3 °F',       fmt(nr3, 1)]
   ].map(([k, v]) => `<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
 
+  // [10.2] Map update
   const latN = Number(lat), lonN = Number(lon);
   if (isFinite(latN) && isFinite(lonN)) {
     map.invalidateSize();
@@ -157,7 +167,7 @@ function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2,
   }
 }
 
-// ─── Poll Loop for Live Data ────────────────────────────────────
+// [11] POLL LOOP FOR LIVE DATA ────────────────────────────────────
 async function poll() {
   const feeds = getFeeds(DEVICE);
   const [gpsA, sigA, voltA, spdA, n1A, n2A, n3A] = await Promise.all([
@@ -170,34 +180,23 @@ async function poll() {
     fetchFeed(feeds.nr3)
   ]);
 
-  // Log raw first entries to confirm feed_key
-  console.log('raw gpsA[0]:', gpsA[0]);
-  console.log('raw sigA[0]:', sigA[0]);
-  console.log('raw voltA[0]:', voltA[0]);
-  console.log('raw spdA[0]:', spdA[0]);
-  console.log('raw n1A[0]:', n1A[0]);
-  console.log('raw n2A[0]:', n2A[0]);
-  console.log('raw n3A[0]:', n3A[0]);
-
-  // Parse GPS JSON
+  // [11.1] Parse GPS JSON
   let g = { fix: false, lat: null, lon: null, alt: null, sats: null };
   try { if (gpsA[0]?.value) g = JSON.parse(gpsA[0].value); }
-  catch(e) { console.warn('Bad GPS JSON', gpsA[0]?.value); }
+  catch (e) { console.warn('Bad GPS JSON', gpsA[0]?.value); }
 
-  // Simple numeric picker
+  // [11.2] Numeric picker
   const pick = arr => {
-    const v = arr[0]?.value;
-    const n = parseFloat(v);
+    const v = arr[0]?.value, n = parseFloat(v);
     return (v != null && !isNaN(n)) ? n : null;
   };
 
+  // [11.3] Compose live object
   const live = {
     ts:     gpsA[0]?.created_at,
     fix:    !!g.fix,
-    lat:    g.lat,
-    lon:    g.lon,
-    alt:    g.alt,
-    sats:   g.sats,
+    lat:    g.lat,    lon: g.lon,
+    alt:    g.alt,    sats: g.sats,
     signal: pick(sigA),
     volt:   pick(voltA),
     speed:  pick(spdA),
@@ -207,17 +206,16 @@ async function poll() {
   };
 
   console.log('🔍 live object:', live);
-
   drawLive(live);
 
-  // Append to charts
+  // [11.4] Append to charts
   [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3],
    ['signal', live.signal], ['volt', live.volt], ['speed', live.speed]
   ].forEach(([id, val]) => {
     if (val == null) return;
     const s = SENSORS.find(x => x.id === id);
-    s.chart.data.labels.push(isoHHMM(live.ts));
-    s.chart.data.datasets[0].data.push(val);
+    s.chart.data.labels.push(isoHHMM(live.ts));       // [11.5] new timestamp
+    s.chart.data.datasets[0].data.push(val);          // [11.6] new value
     if (s.chart.data.labels.length > HIST) {
       s.chart.data.labels.shift();
       s.chart.data.datasets[0].data.shift();
@@ -225,66 +223,58 @@ async function poll() {
     s.chart.update();
   });
 
-  setTimeout(poll, POLL_MS);
+  setTimeout(poll, POLL_MS); // [11.7] schedule next poll
 }
 
-// ─── CSV Export Handler ─────────────────────────────────────────
+// [12] CSV EXPORT HANDLER ─────────────────────────────────────────
 document.getElementById('dlBtn').addEventListener('click', async () => {
-  const start = document.getElementById('start').value;
-  const end   = document.getElementById('end').value;
+  // [12.1] Get date inputs
+  const start = document.getElementById('start').value,
+        end   = document.getElementById('end').value;
   if (!start || !end) {
     return document.getElementById('expStatus').textContent =
       'Please select both start and end dates.';
   }
   document.getElementById('expStatus').textContent = 'Fetching…';
 
+  // [12.2] Fetch data range
   const params = {
     start: new Date(start).toISOString(),
     end:   new Date(end).toISOString()
   };
-
   const data = await Promise.all(
     Object.entries(getFeeds(DEVICE)).map(async ([key, feedKey]) => {
       const rows = await fetchFeed(feedKey, 1000, params);
-      console.log(`raw ${key}[0]:`, rows[0]);
       return rows.map(r => ({ feed: key, ts: r.created_at, value: r.value }));
     })
   );
 
+  // [12.3] Preview first 5 rows & build CSV
   const flat = data.flat().sort((a, b) => a.ts.localeCompare(b.ts));
-
   document.getElementById('preview').innerHTML = `
     <tr><th>Feed</th><th>Time</th><th>Value</th></tr>
     ${flat.slice(0, 5).map(r => `
       <tr><td>${r.feed}</td><td>${r.ts}</td><td>${r.value}</td></tr>
     `).join('')}
   `;
-
   const rows = [['feed','timestamp','value'], ...flat.map(r => [r.feed, r.ts, r.value])];
-  const csv  = rows.map(r => r.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
+  const csv  = rows.map(r => r.join(',')).join('\n'),
+        blob = new Blob([csv], { type: 'text/csv' }),
+        url  = URL.createObjectURL(blob),
+        a    = document.createElement('a');
   a.href     = url;
   a.download = `${DEVICE}_${start}_${end}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   document.getElementById('expStatus').textContent = 'Download ready.';
 });
 
-// ─── Device Selector & Bootstrap ─────────────────────────────────
+// [13] DEVICE SELECTOR & BOOTSTRAP ───────────────────────────────
 document.getElementById('deviceSelect').addEventListener('change', e => {
-  DEVICE = e.target.value;
-  initCharts();
-  updateCharts();
-  trail = [];
+  DEVICE = e.target.value; initCharts(); updateCharts(); trail = [];
 });
 document.addEventListener('DOMContentLoaded', () => {
-  initCharts();
-  updateCharts();
-  initMap();
-  poll();
+  initCharts();       // [13.1]
+  updateCharts();     // [13.2]
+  initMap();          // [13.3]
+  poll();             // [13.4]
 });
