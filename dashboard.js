@@ -126,13 +126,19 @@ async function updateCharts() {
     const rows = await fetchFeed(feeds[s.id], HIST);
     if (!rows.length) return;
     rows.reverse();
+
     // [9.1] X-axis labels
     s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
-    // [9.2] Y-axis data
+
+    // [9.2] Y-axis data, with °C→°F conversion for nr3
     s.chart.data.datasets[0].data = rows.map(r => {
-      const n = parseFloat(r.value);
-      return isNaN(n) ? null : n;
+      let n = parseFloat(r.value);
+      if (s.id === 'nr3' && !isNaN(n)) {
+        n = (n * 9/5) + 32;
+      }
+      return isNaN(n) ? null : +n.toFixed(1);
     });
+
     s.chart.update();
   }));
 }
@@ -180,18 +186,18 @@ async function poll() {
     fetchFeed(feeds.nr3)
   ]);
 
-  // [11.1] Parse GPS JSON
+  // Parse GPS JSON
   let g = { fix: false, lat: null, lon: null, alt: null, sats: null };
   try { if (gpsA[0]?.value) g = JSON.parse(gpsA[0].value); }
   catch (e) { console.warn('Bad GPS JSON', gpsA[0]?.value); }
 
-  // [11.2] Numeric picker
+  // Simple numeric picker
   const pick = arr => {
     const v = arr[0]?.value, n = parseFloat(v);
     return (v != null && !isNaN(n)) ? n : null;
   };
 
-  // [11.3] Compose live object
+  // [11.4] Live object with °C→°F conversion for nr3
   const live = {
     ts:     gpsA[0]?.created_at,
     fix:    !!g.fix,
@@ -202,20 +208,23 @@ async function poll() {
     speed:  pick(spdA),
     nr1:    pick(n1A),
     nr2:    pick(n2A),
-    nr3:    pick(n3A)
+    nr3:    (() => {
+      const c = pick(n3A);
+      return c != null ? +((c * 9/5) + 32).toFixed(1) : null;
+    })()
   };
 
   console.log('🔍 live object:', live);
   drawLive(live);
 
-  // [11.4] Append to charts
+  // Append to charts (rolling window)
   [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3],
    ['signal', live.signal], ['volt', live.volt], ['speed', live.speed]
   ].forEach(([id, val]) => {
     if (val == null) return;
     const s = SENSORS.find(x => x.id === id);
-    s.chart.data.labels.push(isoHHMM(live.ts));       // [11.5] new timestamp
-    s.chart.data.datasets[0].data.push(val);          // [11.6] new value
+    s.chart.data.labels.push(isoHHMM(live.ts));
+    s.chart.data.datasets[0].data.push(val);
     if (s.chart.data.labels.length > HIST) {
       s.chart.data.labels.shift();
       s.chart.data.datasets[0].data.shift();
@@ -223,7 +232,7 @@ async function poll() {
     s.chart.update();
   });
 
-  setTimeout(poll, POLL_MS); // [11.7] schedule next poll
+  setTimeout(poll, POLL_MS);
 }
 
 // [12] CSV EXPORT HANDLER ─────────────────────────────────────────
