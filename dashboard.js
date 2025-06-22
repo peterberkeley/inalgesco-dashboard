@@ -2,7 +2,7 @@
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
 const USER    = 'Inalgescodatalogger';
-const AIO_KEY = 'aio_WsRe40ZXrrgYzdL0pldHUYjvxytH';    // ← your real key
+const AIO_KEY = 'aio_GWtI66oJKTRZ0UXbdbmsUDWOb6CK';    // ← your real key
 let DEVICE    = 'skycafe-1';
 const POLL_MS = 10000;   // 10 s between polls
 const HIST    = 200;     // how many historical points charts fetch
