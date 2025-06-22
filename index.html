@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- [1] META & TITLE -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sky Café Trucks Dashboard</title>
+
+  <!-- [2] STYLES & LIBRARIES -->
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Leaflet -->
@@ -27,18 +30,28 @@
   </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
+
+  <!-- [3] HEADER -->
   <header class="bg-gradient-to-r from-blue-200 to-blue-500 p-4 shadow-md flex items-center">
-    <img src="logo.png" alt="Sky Café Trucks" class="h-10" />
+    <img
+      src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png"
+      alt="Sky Café Trucks"
+      class="h-10"
+    />
     <h1 class="ml-4 text-2xl font-semibold">Sky Café Trucks Dashboard</h1>
     <div class="ml-auto">
-      <label class="text-white font-medium">Device:
+      <label class="text-white font-medium">
+        Device:
         <select id="deviceSelect" class="ml-2 p-1 rounded">
           <option value="skycafe-1">SkyCafé 1</option>
         </select>
       </label>
     </div>
   </header>
+
+  <!-- [4] MAIN CONTENT -->
   <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- [4.1] Live Table & CSV Export -->
     <section class="lg:col-span-1 space-y-6">
       <div class="bg-white rounded-2xl shadow p-4">
         <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
@@ -49,12 +62,16 @@
         <div class="flex items-center space-x-2 mb-4">
           <input type="datetime-local" id="start" class="border p-1 rounded" />
           <input type="datetime-local" id="end" class="border p-1 rounded" />
-          <button id="dlBtn" class="bg-blue-500 text-white px-3 py-1 rounded">Download</button>
+          <button id="dlBtn" class="bg-blue-500 text-white px-3 py-1 rounded">
+            Download
+          </button>
         </div>
         <div id="expStatus" class="text-sm text-gray-600"></div>
         <table id="preview" class="mt-4 text-sm w-full"></table>
       </div>
     </section>
+
+    <!-- [4.2] Charts & Map -->
     <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
       <div id="charts" class="col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6"></div>
       <div class="bg-white rounded-2xl shadow p-4 col-span-2 md:col-span-2">
@@ -63,6 +80,8 @@
       </div>
     </section>
   </main>
+
+  <!-- [5] SCRIPTS -->
   <!-- Load your dashboard.js file for all main logic! -->
   <script src="dashboard.js"></script>
 </body>
