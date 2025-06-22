@@ -32,6 +32,7 @@ function getFeeds(d) {
     nr3:    `${d}.nr3`
   };
 }
+
 // ─── Fetch Utility ───────────────────────────────────────────────
 async function fetchFeed(feed, limit = 1, params = {}) {
   const proxyOrigin = 'https://rapid-mode-5c5a.peter-400.workers.dev';
@@ -61,6 +62,7 @@ function initCharts() {
     card.style.height = '320px'; // fixed height for stability
     card.innerHTML = `<h2 class="text-sm font-semibold mb-2">${s.label}</h2><canvas style="height:260px!important"></canvas>`;
     chartsDiv.appendChild(card);
+
     const ctx = card.querySelector('canvas').getContext('2d');
     s.chart = new Chart(ctx, {
       type: 'line',
@@ -97,7 +99,6 @@ async function updateCharts() {
     rows.reverse();
     s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
     s.chart.data.datasets[0].data = rows.map(r => {
-      // Force to number if possible (handles string/number/null)
       const v = r.value;
       return v == null ? null : +v;
     });
@@ -109,9 +110,9 @@ async function updateCharts() {
 let map, marker, poly, path = [];
 function initMap() {
   map = L.map('map').setView([0, 0], 2);
- L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
-}).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
+  }).addTo(map);
   marker = L.marker([0, 0]).addTo(map);
   poly   = L.polyline([], { weight: 3 }).addTo(map);
 }
@@ -136,18 +137,19 @@ function drawLive(data) {
   ].map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
 
   // Force lat/lon to numbers and update map if valid (use isFinite for robustness)
-const latNum = Number(lat);
-const lonNum = Number(lon);
+  const latNum = Number(lat);
+  const lonNum = Number(lon);
 
-// Only show if satellites > 1 AND both values are truly numeric
-if ((sats > 1) && isFinite(latNum) && isFinite(lonNum)) {
-  // Ensure map renders if container wasn't visible/layouted
-  map.invalidateSize();
-  marker.setLatLng([latNum, lonNum]); // ALWAYS [lat, lon] for Leaflet!
-  path.push([latNum, lonNum]);
-  if (path.length > TRAIL) path.shift();
-  poly.setLatLngs(path);
-  map.setView([latNum, lonNum], Math.max(map.getZoom(), 13));
+  // Only show if satellites > 1 AND both values are truly numeric
+  if ((sats > 1) && isFinite(latNum) && isFinite(lonNum)) {
+    // Ensure map renders if container wasn't visible/layouted
+    map.invalidateSize();
+    marker.setLatLng([latNum, lonNum]); // ALWAYS [lat, lon] for Leaflet!
+    path.push([latNum, lonNum]);
+    if (path.length > TRAIL) path.shift();
+    poly.setLatLngs(path);
+    map.setView([latNum, lonNum], Math.max(map.getZoom(), 13));
+  }
 }
 
 // ─── Poll Loop ──────────────────────────────────────────────────
@@ -177,12 +179,12 @@ async function poll() {
     lon:   lonNum,
     alt:   g.alt !== undefined ? Number(g.alt) : undefined,
     sats:  g.sats !== undefined ? Number(g.sats) : undefined,
-    signal: +sigArr[0]?.value || 0,
-    volt:  +voltArr[0]?.value || 0,
-    speed: +spdArr[0]?.value || 0,
-    nr1:   n1Arr[0]?.value != null ? +n1Arr[0].value : null,
-    nr2:   n2Arr[0]?.value != null ? +n2Arr[0].value : null,
-    nr3:   n3Arr[0]?.value != null ? +n3Arr[0].value : null
+    signal: sigArr[0]?.value != null ? +sigArr[0].value : null,
+    volt:   voltArr[0]?.value != null ? +voltArr[0].value : null,
+    speed:  spdArr[0]?.value != null ? +spdArr[0].value : null,
+    nr1:    n1Arr[0]?.value != null ? +n1Arr[0].value : null,
+    nr2:    n2Arr[0]?.value != null ? +n2Arr[0].value : null,
+    nr3:    n3Arr[0]?.value != null ? +n3Arr[0].value : null
   };
 
   drawLive(live);
