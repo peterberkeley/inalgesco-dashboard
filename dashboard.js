@@ -23,26 +23,19 @@ function getFeeds(d) {
 
 
 async function fetchFeed(feed, limit = 1, params = {}) {
-  // Build URL against our proxied subdomain
-  const url = new URL(
-    `https://api.skycafetrucks.com/api/v2/${USER}/feeds/${feed}/data`
-  );
+  // Build a URL against our proxy route on this same origin
+  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, window.location.origin);
   url.searchParams.set('limit', limit);
+  Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
 
-  // Move the key into the query string—no custom headers needed, so no preflight
-  url.searchParams.set('x-aio-key', AIO_KEY);
-
-  // A plain GET now, with CORS allowed by our Transform Rule
+  // No custom headers needed—Worker injects the API key and CORS for us
   const res = await fetch(url.toString());
   if (!res.ok) {
-    console.error('Adafruit IO error', res.status, await res.text());
+    console.error('Feed fetch failed:', res.status, await res.text());
     return [];
   }
   return res.json();
 }
-
-
-
 
 const fmt = (v, p = 1) => v == null ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts.substring(11, 19);
