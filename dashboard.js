@@ -6,7 +6,7 @@ let DEVICE    = 'skycafe-1';
 // [1.1] Poll interval (ms)
 const POLL_MS = 10000;
 // [1.2] History length for charts (points)
-const HIST    = 100;
+const HIST    = 50;
 // [1.3] Map trail length (points)
 const TRAIL   = 50;
 
