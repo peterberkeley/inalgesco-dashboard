@@ -49,7 +49,6 @@ async function fetchFeed(feed, limit = 1, params = {}) {
     console.error('Feed fetch failed:', feed, res.status, await res.text());
     return [];
   }
-
   let payload;
   try {
     payload = await res.json();
@@ -57,82 +56,75 @@ async function fetchFeed(feed, limit = 1, params = {}) {
     console.error('Invalid JSON for', feed, e);
     return [];
   }
-
   const arr = Array.isArray(payload)
     ? payload
     : Array.isArray(payload.data)
       ? payload.data
       : [];
-  console.log(`→ ${feed}:`, arr.length, 'pts', arr.slice(0,1));
+  console.log(`→ ${feed}:`, arr.length, 'pts');
   return arr;
 }
 
 // ─── Formatting Utilities ────────────────────────────────────────
-const fmt     = (v, p = 1) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(p);
+const fmt     = (v,p=1) => (v==null||isNaN(v)) ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts ? ts.substring(11,19) : '';
 
-// ─── Charts Initialization ──────────────────────────────────────
+// ─── Chart.js Initialization ─────────────────────────────────────
 function initCharts() {
-  const container = document.getElementById('charts');
-  container.innerHTML = '';
-  SENSORS.forEach(sensor => {
+  const ctr = document.getElementById('charts');
+  ctr.innerHTML = '';
+  SENSORS.forEach(s => {
     const card = document.createElement('div');
     card.className = 'bg-white rounded-2xl shadow p-4 chart-box';
     card.innerHTML = `
-      <h2 class="text-sm font-semibold mb-2">${sensor.label}</h2>
+      <h2 class="text-sm font-semibold mb-2">${s.label}</h2>
       <canvas></canvas>
     `;
-    container.appendChild(card);
-
+    ctr.appendChild(card);
     const ctx = card.querySelector('canvas').getContext('2d');
-    sensor.chart = new Chart(ctx, {
+    s.chart = new Chart(ctx, {
       type: 'line',
-      data: { labels: [], datasets: [{ data: [], borderColor: sensor.col, borderWidth: 2, tension: 0.25 }] },
+      data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension:0.25 }] },
       options: {
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { maxRotation: 0 } },
-          y: { min: 28, max: 122, grace: '5%' }
-        }
+        animation: false, responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ display:false } },
+        scales: { x:{ ticks:{ maxRotation:0 } }, y:{ min:28, max:122, grace:'5%' } }
       }
     });
   });
 }
 
-// ─── Map Initialization ──────────────────────────────────────────
+// ─── Leaflet Map Setup ───────────────────────────────────────────
 let map, marker, polyline, trail = [];
 function initMap() {
   map = L.map('map').setView([0,0],2);
   L.tileLayer(
     'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    { attribution: '&copy; <a href="https://carto.com/">CARTO</a>' }
+    { attribution:'&copy; <a href="https://carto.com/">CARTO</a>' }
   ).addTo(map);
   marker   = L.marker([0,0]).addTo(map);
-  polyline = L.polyline([], { weight: 3 }).addTo(map);
+  polyline = L.polyline([], { weight:3 }).addTo(map);
 }
 // dashboard.js — Section 2 of 2
 
-// ─── Retrieve Historical Charts ──────────────────────────────────
+// ─── Update Historical Charts ────────────────────────────────────
 async function updateCharts() {
   const feeds = getFeeds(DEVICE);
   await Promise.all(SENSORS.map(async s => {
     const rows = await fetchFeed(feeds[s.id], HIST);
     if (!rows.length) return;
     rows.reverse();
-    s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
-    s.chart.data.datasets[0].data = rows.map(r => {
+    s.chart.data.labels   = rows.map(r=>isoHHMM(r.created_at));
+    s.chart.data.datasets[0].data = rows.map(r=>{
       const n = parseFloat(r.value);
-      return !isNaN(n) ? n : null;
+      return isNaN(n)? null : n;
     });
     s.chart.update();
   }));
 }
 
 // ─── Draw Live Table & Map Trail ─────────────────────────────────
-function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2, nr3 }) {
+function drawLive({ts,fix,lat,lon,alt,sats,signal,volt,speed,nr1,nr2,nr3}) {
   document.getElementById('latest').innerHTML = [
     ['Local Time',   new Date(ts).toLocaleString()],
     ['Fix',          fix],
@@ -146,14 +138,14 @@ function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2,
     ['NR1 °F',       fmt(nr1,1)],
     ['NR2 °F',       fmt(nr2,1)],
     ['NR3 °F',       fmt(nr3,1)]
-  ].map(([k,v]) => `<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
+  ].map(([k,v])=>`<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
 
-  const latN = Number(lat), lonN = Number(lon);
-  if (isFinite(latN) && isFinite(lonN)) {
+  const latN=Number(lat), lonN=Number(lon);
+  if (isFinite(latN)&&isFinite(lonN)) {
     map.invalidateSize();
     marker.setLatLng([latN,lonN]);
     trail.push([latN,lonN]);
-    if (trail.length > TRAIL) trail.shift();
+    if (trail.length>TRAIL) trail.shift();
     polyline.setLatLngs(trail);
     map.setView([latN,lonN], Math.max(map.getZoom(),13));
   }
@@ -169,15 +161,24 @@ async function poll() {
     fetchFeed(feeds.nr3)
   ]);
 
+  // raw payload logging:
+  console.log('raw gpsA[0]:', gpsA[0]);
+  console.log('raw sigA[0]:', sigA[0]);
+  console.log('raw voltA[0]:', voltA[0]);
+  console.log('raw spdA[0]:', spdA[0]);
+  console.log('raw n1A[0]:', n1A[0]);
+  console.log('raw n2A[0]:', n2A[0]);
+  console.log('raw n3A[0]:', n3A[0]);
+
   // Parse GPS JSON
-  let g = { fix:false, lat:null, lon:null, alt:null, sats:null };
+  let g = {fix:false, lat:null, lon:null, alt:null, sats:null};
   try {
     if (gpsA[0]?.value) g = JSON.parse(gpsA[0].value);
   } catch(e) {
     console.warn('Bad GPS JSON', gpsA[0]?.value);
   }
 
-  // Flexible helper: grab value from whichever nesting you have
+  // Flexible value picker
   const pick = arr => {
     const rec = arr[0] || {};
     const v = rec.value
@@ -185,7 +186,7 @@ async function poll() {
            ?? rec.row?.value
            ?? null;
     const n = parseFloat(v);
-    return (v!=null && !isNaN(n)) ? n : null;
+    return (v!=null && !isNaN(n))? n : null;
   };
 
   const live = {
@@ -203,19 +204,12 @@ async function poll() {
     nr3:    pick(n3A)
   };
 
-  // 🔍 Inspect every field
+  // Debug: inspect everything
   console.log('🔍 live object:', live);
-  console.log('→ sats:',   live.sats);
-  console.log('→ signal:', live.signal);
-  console.log('→ volt:',   live.volt);
-  console.log('→ speed:',  live.speed);
-  console.log('→ NR1:',     live.nr1);
-  console.log('→ NR2:',     live.nr2);
-  console.log('→ NR3:',     live.nr3);
 
   drawLive(live);
 
-  // Append points to charts
+  // Append to charts
   [['nr1',live.nr1],['nr2',live.nr2],['nr3',live.nr3]].forEach(([id,val])=>{
     if (val==null) return;
     const s = SENSORS.find(x=>x.id===id);
@@ -241,22 +235,22 @@ document.getElementById('dlBtn').addEventListener('click', async ()=>{
   }
   document.getElementById('expStatus').textContent='Fetching…';
 
-  const feeds=params=>getFeeds(DEVICE);
-  const params ={
-    start:new Date(start).toISOString(),
-    end:  new Date(end).toISOString()
+  const params = {
+    start: new Date(start).toISOString(),
+    end:   new Date(end).toISOString()
   };
 
-  const data=await Promise.all(
+  const data = await Promise.all(
     Object.entries(getFeeds(DEVICE)).map(async ([key,feed])=>{
-      const rows=await fetchFeed(feed,1000,params);
+      const rows = await fetchFeed(feed,1000,params);
       console.log(`raw ${key}[0]:`, rows[0]);
-      return rows.map(r=>({ feed:key, ts:r.created_at, value:r.value }));
+      return rows.map(r=>({feed:key, ts:r.created_at, value:r.value}));
     })
   );
 
-  const flat=data.flat().sort((a,b)=>a.ts.localeCompare(b.ts));
+  const flat = data.flat().sort((a,b)=>a.ts.localeCompare(b.ts));
 
+  // Preview
   document.getElementById('preview').innerHTML=`
     <tr><th>Feed</th><th>Time</th><th>Value</th></tr>
     ${flat.slice(0,5).map(r=>`
@@ -264,17 +258,18 @@ document.getElementById('dlBtn').addEventListener('click', async ()=>{
     `).join('')}
   `;
 
-  const rows=[['feed','timestamp','value'],...flat.map(r=>[r.feed,r.ts,r.value])];
-  const csv=rows.map(r=>r.join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=`${DEVICE}_${start}_${end}.csv`;
+  // Build CSV
+  const rows = [['feed','timestamp','value'], ...flat.map(r=>[r.feed,r.ts,r.value])];
+  const csv  = rows.map(r=>r.join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url; a.download=`${DEVICE}_${start}_${end}.csv`;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   document.getElementById('expStatus').textContent='Download ready.';
 });
 
-// ─── Device Selector & Bootstrap ─────────────────────────────────
+// ─── Device Selector & Init ─────────────────────────────────────
 document.getElementById('deviceSelect').addEventListener('change',e=>{
   DEVICE=e.target.value; initCharts(); updateCharts(); trail=[];
 });
