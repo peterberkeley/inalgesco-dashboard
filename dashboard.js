@@ -49,7 +49,7 @@ async function fetchFeed(feed, limit = 1, params = {}) {
 }
 
 // ─── Formatting Utilities ────────────────────────────────────────
-const fmt = (v, p = 1) => v == null ? '–' : (+v).toFixed(p);
+const fmt = (v, p = 1) => v == null || isNaN(v) ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts ? ts.substring(11, 19) : '';
 
 // ─── Chart.js Initialization ─────────────────────────────────────
@@ -100,7 +100,8 @@ async function updateCharts() {
     s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
     s.chart.data.datasets[0].data = rows.map(r => {
       const v = r.value;
-      return v == null ? null : +v;
+      const parsed = parseFloat(v);
+      return !isNaN(parsed) ? parsed : null;
     });
     s.chart.update();
   }));
@@ -130,21 +131,18 @@ function drawLive(data) {
     ['Sats', sats],
     ['Speed (km/h)', fmt(speed, 1)],
     ['RSSI (dBm)', fmt(signal, 0)],
-    ['Volt (mV)', fmt(volt, 0)],
+    ['Volt (mV)', fmt(volt, 2)],
     ['NR1 °F', fmt(nr1, 1)],
     ['NR2 °F', fmt(nr2, 1)],
     ['NR3 °F', fmt(nr3, 1)]
   ].map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
 
-  // Force lat/lon to numbers and update map if valid (use isFinite for robustness)
+  // Map update
   const latNum = Number(lat);
   const lonNum = Number(lon);
-
-  // Only show if satellites > 1 AND both values are truly numeric
   if ((sats > 1) && isFinite(latNum) && isFinite(lonNum)) {
-    // Ensure map renders if container wasn't visible/layouted
     map.invalidateSize();
-    marker.setLatLng([latNum, lonNum]); // ALWAYS [lat, lon] for Leaflet!
+    marker.setLatLng([latNum, lonNum]);
     path.push([latNum, lonNum]);
     if (path.length > TRAIL) path.shift();
     poly.setLatLngs(path);
@@ -168,23 +166,26 @@ async function poll() {
   try { g = JSON.parse(gpsArr[0]?.value || '{}'); }
   catch (e) { console.warn('Invalid GPS JSON', gpsArr[0]?.value); }
 
-  // Fix: if lat/lon are present as strings, force to numbers
-  const latNum = g.lat !== undefined ? Number(g.lat) : undefined;
-  const lonNum = g.lon !== undefined ? Number(g.lon) : undefined;
+  // Defensive numeric parsing
+  function safeParse(arr) {
+    if (!arr || !arr[0] || arr[0].value == null) return null;
+    const parsed = parseFloat(arr[0].value);
+    return isNaN(parsed) ? null : parsed;
+  }
 
   const live = {
     ts:    gpsArr[0]?.created_at,
-    fix:   g.fix !== undefined ? !!g.fix : (!isNaN(latNum) && !isNaN(lonNum)),
-    lat:   latNum,
-    lon:   lonNum,
+    fix:   g.fix !== undefined ? !!g.fix : false,
+    lat:   g.lat !== undefined ? Number(g.lat) : undefined,
+    lon:   g.lon !== undefined ? Number(g.lon) : undefined,
     alt:   g.alt !== undefined ? Number(g.alt) : undefined,
     sats:  g.sats !== undefined ? Number(g.sats) : undefined,
-    signal: sigArr[0]?.value != null ? +sigArr[0].value : null,
-    volt:   voltArr[0]?.value != null ? +voltArr[0].value : null,
-    speed:  spdArr[0]?.value != null ? +spdArr[0].value : null,
-    nr1:   n1Arr[0]?.value != null ? parseFloat(n1Arr[0].value) : null,
-    nr2:   n1Arr[0]?.value != null ? parseFloat(n1Arr[0].value) : null,
-    nr3:   n1Arr[0]?.value != null ? parseFloat(n1Arr[0].value) : null,
+    signal: safeParse(sigArr),
+    volt:   safeParse(voltArr),
+    speed:  safeParse(spdArr),
+    nr1:    safeParse(n1Arr),
+    nr2:    safeParse(n2Arr),
+    nr3:    safeParse(n3Arr)
   };
 
   drawLive(live);
@@ -192,7 +193,7 @@ async function poll() {
   // Stable, fixed-size chart update
   [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3]].forEach(([id, val]) => {
     const s = SENSORS.find(x => x.id === id);
-    if (!s || val == null) return;
+    if (!s || val == null || isNaN(val)) return;
     s.chart.data.labels.push(isoHHMM(live.ts));
     s.chart.data.datasets[0].data.push(val);
     if (s.chart.data.labels.length > HIST) {
