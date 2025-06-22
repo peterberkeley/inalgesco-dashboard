@@ -29,6 +29,7 @@ async function fetchFeed(feed, limit = 1, params = {}) {
   Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
   url.searchParams.set('x-aio-key', AIO_KEY);
 
+  // Simple GET now qualifies as “simple” CORS, so no preflight
   const res = await fetch(url, { mode: 'cors' });
   if (!res.ok) {
     console.error('Adafruit IO error', res.status, await res.text());
@@ -36,6 +37,7 @@ async function fetchFeed(feed, limit = 1, params = {}) {
   }
   return res.json();
 }
+
 
 
 const fmt = (v, p = 1) => v == null ? '–' : (+v).toFixed(p);
