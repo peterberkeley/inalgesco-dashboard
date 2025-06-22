@@ -1,3 +1,4 @@
+// Sky Café Trucks Dashboard – dashboard.js
 // ─── Configuration ────────────────────────────────────────────────
 const USER    = 'Inalgescodatalogger';
 let DEVICE    = 'skycafe-1';
@@ -17,7 +18,8 @@ const SENSORS = [
 
 // ─── CSS Helper ──────────────────────────────────────────────────
 function getCSS(varName, fallback = '') {
-  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || fallback;
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(varName).trim() || fallback;
 }
 
 // ─── Feed Paths ──────────────────────────────────────────────────
@@ -33,7 +35,7 @@ function getFeeds(d) {
   };
 }
 
-// ─── Fetch Utility ───────────────────────────────────────────────
+// ─── Fetch Utility (unwraps json.data) ───────────────────────────
 async function fetchFeed(feed, limit = 1, params = {}) {
   const proxyOrigin = 'https://rapid-mode-5c5a.peter-400.workers.dev';
   const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, proxyOrigin);
@@ -45,22 +47,27 @@ async function fetchFeed(feed, limit = 1, params = {}) {
     console.error('Feed fetch failed:', res.status, await res.text());
     return [];
   }
-  return res.json();
+
+  const json = await res.json();
+  console.log(`→ ${feed} raw JSON:`, json);
+  return Array.isArray(json.data) ? json.data : [];
 }
 
 // ─── Formatting Utilities ────────────────────────────────────────
-const fmt = (v, p = 1) => v == null || isNaN(v) ? '–' : (+v).toFixed(p);
+const fmt     = (v, p = 1) => v == null || isNaN(v) ? '–' : (+v).toFixed(p);
 const isoHHMM = ts => ts ? ts.substring(11, 19) : '';
 
 // ─── Chart.js Initialization ─────────────────────────────────────
 function initCharts() {
   const chartsDiv = document.getElementById('charts');
   chartsDiv.innerHTML = '';
-  SENSORS.forEach((s, idx) => {
+  SENSORS.forEach(s => {
     const card = document.createElement('div');
     card.className = 'bg-white rounded-2xl shadow p-4 chart-box';
-    card.style.height = '320px'; // fixed height for stability
-    card.innerHTML = `<h2 class="text-sm font-semibold mb-2">${s.label}</h2><canvas style="height:260px!important"></canvas>`;
+    card.innerHTML = `
+      <h2 class="text-sm font-semibold mb-2">${s.label}</h2>
+      <canvas></canvas>
+    `;
     chartsDiv.appendChild(card);
 
     const ctx = card.querySelector('canvas').getContext('2d');
@@ -97,11 +104,10 @@ async function updateCharts() {
     const rows = await fetchFeed(feeds[s.id], HIST);
     if (!rows.length) return;
     rows.reverse();
-    s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
+    s.chart.data.labels   = rows.map(r => isoHHMM(r.created_at));
     s.chart.data.datasets[0].data = rows.map(r => {
-      const v = r.value;
-      const parsed = parseFloat(v);
-      return !isNaN(parsed) ? parsed : null;
+      const v = parseFloat(r.value);
+      return !isNaN(v) ? v : null;
     });
     s.chart.update();
   }));
@@ -111,9 +117,10 @@ async function updateCharts() {
 let map, marker, poly, path = [];
 function initMap() {
   map = L.map('map').setView([0, 0], 2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
-  }).addTo(map);
+  L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    { attribution: '&copy; <a href="https://carto.com/">CARTO</a>' }
+  ).addTo(map);
   marker = L.marker([0, 0]).addTo(map);
   poly   = L.polyline([], { weight: 3 }).addTo(map);
 }
@@ -123,24 +130,22 @@ function drawLive(data) {
   const { ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2, nr3 } = data;
 
   document.getElementById('latest').innerHTML = [
-    ['Local Time', new Date(ts).toLocaleString()],
-    ['Fix', fix],
-    ['Lat', fmt(lat, 6)],
-    ['Lon', fmt(lon, 6)],
-    ['Alt (m)', fmt(alt, 1)],
-    ['Sats', sats],
-    ['Speed (km/h)', fmt(speed, 1)],
-    ['RSSI (dBm)', fmt(signal, 0)],
-    ['Volt (mV)', fmt(volt, 2)],
-    ['NR1 °F', fmt(nr1, 1)],
-    ['NR2 °F', fmt(nr2, 1)],
-    ['NR3 °F', fmt(nr3, 1)]
-  ].map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    ['Local Time',    new Date(ts).toLocaleString()],
+    ['Fix',           fix],
+    ['Lat',           fmt(lat, 6)],
+    ['Lon',           fmt(lon, 6)],
+    ['Alt (m)',       fmt(alt, 1)],
+    ['Sats',          sats],
+    ['Speed (km/h)',  fmt(speed, 1)],
+    ['RSSI (dBm)',    fmt(signal, 0)],
+    ['Volt (mV)',     fmt(volt, 2)],
+    ['NR1 °F',        fmt(nr1, 1)],
+    ['NR2 °F',        fmt(nr2, 1)],
+    ['NR3 °F',        fmt(nr3, 1)]
+  ].map(([k, v]) => `<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
 
-  // Map update
-  const latNum = Number(lat);
-  const lonNum = Number(lon);
-  if ((sats > 1) && isFinite(latNum) && isFinite(lonNum)) {
+  const latNum = Number(lat), lonNum = Number(lon);
+  if (sats > 1 && isFinite(latNum) && isFinite(lonNum)) {
     map.invalidateSize();
     marker.setLatLng([latNum, lonNum]);
     path.push([latNum, lonNum]);
@@ -162,24 +167,22 @@ async function poll() {
     fetchFeed(feeds.nr2),
     fetchFeed(feeds.nr3)
   ]);
+
   let g = { fix: false };
   try { g = JSON.parse(gpsArr[0]?.value || '{}'); }
   catch (e) { console.warn('Invalid GPS JSON', gpsArr[0]?.value); }
 
-  // Defensive numeric parsing
   function safeParse(arr) {
-    if (!arr || !arr[0] || arr[0].value == null) return null;
-    const parsed = parseFloat(arr[0].value);
-    return isNaN(parsed) ? null : parsed;
+    if (!arr || !arr[0]?.value) return null;
+    const v = parseFloat(arr[0].value);
+    return isNaN(v) ? null : v;
   }
 
   const live = {
-    ts:    gpsArr[0]?.created_at,
-    fix:   g.fix !== undefined ? !!g.fix : false,
-    lat:   g.lat !== undefined ? Number(g.lat) : undefined,
-    lon:   g.lon !== undefined ? Number(g.lon) : undefined,
-    alt:   g.alt !== undefined ? Number(g.alt) : undefined,
-    sats:  g.sats !== undefined ? Number(g.sats) : undefined,
+    ts:     gpsArr[0]?.created_at,
+    fix:    !!g.fix,
+    lat:    Number(g.lat), lon: Number(g.lon),
+    alt:    Number(g.alt), sats: Number(g.sats),
     signal: safeParse(sigArr),
     volt:   safeParse(voltArr),
     speed:  safeParse(spdArr),
@@ -190,10 +193,10 @@ async function poll() {
 
   drawLive(live);
 
-  // Stable, fixed-size chart update
+  // Push new points onto charts
   [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3]].forEach(([id, val]) => {
     const s = SENSORS.find(x => x.id === id);
-    if (!s || val == null || isNaN(val)) return;
+    if (!s || val == null) return;
     s.chart.data.labels.push(isoHHMM(live.ts));
     s.chart.data.datasets[0].data.push(val);
     if (s.chart.data.labels.length > HIST) {
@@ -205,6 +208,63 @@ async function poll() {
 
   setTimeout(poll, POLL_MS);
 }
+// ─── CSV Export Handler ─────────────────────────────────────────
+document.getElementById('dlBtn').addEventListener('click', async () => {
+  const startVal = document.getElementById('start').value;
+  const endVal   = document.getElementById('end').value;
+  const status   = document.getElementById('expStatus');
+  const preview  = document.getElementById('preview');
+
+  if (!startVal || !endVal) {
+    status.textContent = 'Please pick both start and end dates.';
+    return;
+  }
+  status.textContent = 'Fetching…';
+
+  const feeds   = getFeeds(DEVICE);
+  const params  = {
+    start: new Date(startVal).toISOString(),
+    end:   new Date(endVal).toISOString()
+  };
+
+  // Fetch up to 1000 points per feed in range
+  const allData = await Promise.all(
+    Object.entries(feeds).map(async ([key, feed]) => {
+      const rows = await fetchFeed(feed, 1000, params);
+      return rows.map(r => ({ feed: key, ts: r.created_at, value: r.value }));
+    })
+  );
+
+  // Flatten & sort
+  const flat = allData.flat().sort((a, b) => a.ts.localeCompare(b.ts));
+
+  // Preview first 5 rows
+  preview.innerHTML = `
+    <tr><th>Feed</th><th>Timestamp</th><th>Value</th></tr>
+    ${flat.slice(0,5).map(r =>
+      `<tr><td>${r.feed}</td><td>${r.ts}</td><td>${r.value}</td></tr>`
+    ).join('')}
+  `;
+
+  // Build CSV
+  const csv = [
+    ['feed','timestamp','value'],
+    ...flat.map(r => [r.feed, r.ts, r.value])
+  ].map(row => row.join(',')).join('\n');
+
+  // Trigger download
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${DEVICE}_${startVal}_${endVal}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  status.textContent = 'Download ready.';
+});
 
 // ─── Device Selector & Init ─────────────────────────────────────
 document.getElementById('deviceSelect').addEventListener('change', e => {
