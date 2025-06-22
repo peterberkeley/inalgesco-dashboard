@@ -137,16 +137,19 @@ function drawLive(data) {
     ['NR3 °F', fmt(nr3, 1)]
   ].map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
 
-  // Show on map if sats > 1, regardless of fix
-  const latNum = Number(lat);
-  const lonNum = Number(lon);
-  if ((sats > 1) && !isNaN(latNum) && !isNaN(lonNum)) {
-    marker.setLatLng([latNum, lonNum]);         // <- ALWAYS [lat, lon]!
-    path.push([latNum, lonNum]);
-    if (path.length > TRAIL) path.shift();
-    poly.setLatLngs(path);
-    map.setView([latNum, lonNum], Math.max(map.getZoom(), 13));
-  }
+  // Force lat/lon to numbers and update map if valid (use isFinite for robustness)
+const latNum = Number(lat);
+const lonNum = Number(lon);
+
+// Only show if satellites > 1 AND both values are truly numeric
+if ((sats > 1) && isFinite(latNum) && isFinite(lonNum)) {
+  // Ensure map renders if container wasn't visible/layouted
+  map.invalidateSize();
+  marker.setLatLng([latNum, lonNum]); // ALWAYS [lat, lon] for Leaflet!
+  path.push([latNum, lonNum]);
+  if (path.length > TRAIL) path.shift();
+  poly.setLatLngs(path);
+  map.setView([latNum, lonNum], Math.max(map.getZoom(), 13));
 }
 
 // ─── Poll Loop ──────────────────────────────────────────────────
