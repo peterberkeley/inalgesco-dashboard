@@ -141,7 +141,7 @@ function drawLive(data) {
   const latNum = Number(lat);
   const lonNum = Number(lon);
   if (fix && !isNaN(latNum) && !isNaN(lonNum)) {
-   marker.setLatLng([latNum, lonNum]); // If UK, should be correc
+  marker.setLatLng([lonNum, latNum]);
     path.push([latNum, lonNum]);
     if (path.length > TRAIL) path.shift();
     poly.setLatLngs(path);
