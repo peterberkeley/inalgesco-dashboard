@@ -116,4 +116,92 @@ function initMap() {
 
 // ─── Draw Live Table & Map Trail ─────────────────────────────────
 function drawLive(data) {
-  const { ts, fix, lat, lon, alt, sats, signal, volt, spee
+  const { ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2, nr3 } = data;
+
+  document.getElementById('latest').innerHTML = [
+    ['Local Time', new Date(ts).toLocaleString()],
+    ['Fix', fix],
+    ['Lat', fmt(lat, 6)],
+    ['Lon', fmt(lon, 6)],
+    ['Alt (m)', fmt(alt, 1)],
+    ['Sats', sats],
+    ['Speed (km/h)', fmt(speed, 1)],
+    ['RSSI (dBm)', fmt(signal, 0)],
+    ['Volt (mV)', fmt(volt, 0)],
+    ['NR1 °F', fmt(nr1, 1)],
+    ['NR2 °F', fmt(nr2, 1)],
+    ['NR3 °F', fmt(nr3, 1)]
+  ].map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+
+  if (fix && typeof lat === 'number' && typeof lon === 'number') {
+    marker.setLatLng([lat, lon]);
+    path.push([lat, lon]);
+    if (path.length > TRAIL) path.shift();
+    poly.setLatLngs(path);
+    map.setView([lat, lon], Math.max(map.getZoom(), 13));
+  }
+}
+
+// ─── Poll Loop ──────────────────────────────────────────────────
+async function poll() {
+  const feeds = getFeeds(DEVICE);
+  const [gpsArr, sigArr, voltArr, spdArr, n1Arr, n2Arr, n3Arr] = await Promise.all([
+    fetchFeed(feeds.gps),
+    fetchFeed(feeds.signal),
+    fetchFeed(feeds.volt),
+    fetchFeed(feeds.speed),
+    fetchFeed(feeds.nr1),
+    fetchFeed(feeds.nr2),
+    fetchFeed(feeds.nr3)
+  ]);
+  let g = { fix: false };
+  try { g = JSON.parse(gpsArr[0]?.value || '{}'); }
+  catch (e) { console.warn('Invalid GPS JSON', gpsArr[0]?.value); }
+
+  const live = {
+    ts:    gpsArr[0]?.created_at,
+    fix:   !!g.fix,
+    lat:   g.lat,
+    lon:   g.lon,
+    alt:   g.alt,
+    sats:  g.sats,
+    signal: +sigArr[0]?.value || 0,
+    volt:  +voltArr[0]?.value || 0,
+    speed: +spdArr[0]?.value || 0,
+    nr1:   +n1Arr[0]?.value || null,
+    nr2:   +n2Arr[0]?.value || null,
+    nr3:   +n3Arr[0]?.value || null
+  };
+
+  drawLive(live);
+
+  // Stable, fixed-size chart update
+  [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3]].forEach(([id, val]) => {
+    const s = SENSORS.find(x => x.id === id);
+    if (!s || val == null) return;
+    s.chart.data.labels.push(isoHHMM(live.ts));
+    s.chart.data.datasets[0].data.push(val);
+    if (s.chart.data.labels.length > HIST) {
+      s.chart.data.labels.shift();
+      s.chart.data.datasets[0].data.shift();
+    }
+    s.chart.update();
+  });
+
+  setTimeout(poll, POLL_MS);
+}
+
+// ─── Device Selector & Init ─────────────────────────────────────
+document.getElementById('deviceSelect').addEventListener('change', e => {
+  DEVICE = e.target.value;
+  initCharts();
+  updateCharts();
+  path = [];
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  initCharts();
+  updateCharts();
+  initMap();
+  poll();
+});
