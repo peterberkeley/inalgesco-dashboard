@@ -98,7 +98,11 @@ async function updateCharts() {
     if (!rows.length) return;
     rows.reverse();
     s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
-    s.chart.data.datasets[0].data = rows.map(r => +r.value);
+    s.chart.data.datasets[0].data = rows.map(r => {
+      // Force to number if possible (handles string/number/null)
+      const v = r.value;
+      return v == null ? null : +v;
+    });
     s.chart.update();
   }));
 }
@@ -133,12 +137,15 @@ function drawLive(data) {
     ['NR3 °F', fmt(nr3, 1)]
   ].map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
 
-  if (fix && typeof lat === 'number' && typeof lon === 'number') {
-    marker.setLatLng([lat, lon]);
-    path.push([lat, lon]);
+  // Force lat/lon to numbers and update map if valid
+  const latNum = Number(lat);
+  const lonNum = Number(lon);
+  if (fix && !isNaN(latNum) && !isNaN(lonNum)) {
+    marker.setLatLng([latNum, lonNum]);
+    path.push([latNum, lonNum]);
     if (path.length > TRAIL) path.shift();
     poly.setLatLngs(path);
-    map.setView([lat, lon], Math.max(map.getZoom(), 13));
+    map.setView([latNum, lonNum], Math.max(map.getZoom(), 13));
   }
 }
 
@@ -158,20 +165,23 @@ async function poll() {
   try { g = JSON.parse(gpsArr[0]?.value || '{}'); }
   catch (e) { console.warn('Invalid GPS JSON', gpsArr[0]?.value); }
 
+  // Fix: if lat/lon are present as strings, force to numbers
+  const latNum = g.lat !== undefined ? Number(g.lat) : undefined;
+  const lonNum = g.lon !== undefined ? Number(g.lon) : undefined;
+
   const live = {
     ts:    gpsArr[0]?.created_at,
-    fix:   g.fix !== undefined ? !!g.fix : (typeof g.lat === "number" && typeof g.lon === "number"),
-fix:   !!g.fix,
-    lat:   g.lat,
-    lon:   g.lon,
-    alt:   g.alt,
-    sats:  g.sats,
+    fix:   g.fix !== undefined ? !!g.fix : (!isNaN(latNum) && !isNaN(lonNum)),
+    lat:   latNum,
+    lon:   lonNum,
+    alt:   g.alt !== undefined ? Number(g.alt) : undefined,
+    sats:  g.sats !== undefined ? Number(g.sats) : undefined,
     signal: +sigArr[0]?.value || 0,
     volt:  +voltArr[0]?.value || 0,
     speed: +spdArr[0]?.value || 0,
-    nr1:   +n1Arr[0]?.value || null,
-    nr2:   +n2Arr[0]?.value || null,
-    nr3:   +n3Arr[0]?.value || null
+    nr1:   n1Arr[0]?.value != null ? +n1Arr[0].value : null,
+    nr2:   n2Arr[0]?.value != null ? +n2Arr[0].value : null,
+    nr3:   n3Arr[0]?.value != null ? +n3Arr[0].value : null
   };
 
   drawLive(live);
