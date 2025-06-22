@@ -37,18 +37,26 @@ function getFeeds(device) {
 }
 
 // ─── Fetch Utility ───────────────────────────────────────────────
-// Unwraps either [ … ] or { data: [ … ] }
+// Direct call to Adafruit IO API to ensure correct feed routing
 async function fetchFeed(feed, limit = 1, params = {}) {
-  const proxy = 'https://rapid-mode-5c5a.peter-400.workers.dev';
-  const url = new URL(`/proxy/api/v2/${USER}/feeds/${feed}/data`, proxy);
+  const url = new URL(
+    `https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data`
+  );
   url.searchParams.set('limit', limit);
-  Object.entries(params).forEach(([k,v]) => v && url.searchParams.set(k, v));
+  Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
 
-  const res = await fetch(url.toString());
+  console.log(`Fetching feed ${feed} from ${url}`); // debug
+
+  const res = await fetch(url.toString(), {
+    // If your feeds are private, uncomment and fill in:
+    // headers: { 'X-AIO-Key': '<YOUR_ADAFRUIT_IO_KEY>' }
+  });
+
   if (!res.ok) {
-    console.error('Feed fetch failed:', feed, res.status, await res.text());
+    console.error(`Feed fetch failed [${feed}]:`, res.status, await res.text());
     return [];
   }
+
   let payload;
   try {
     payload = await res.json();
@@ -56,18 +64,17 @@ async function fetchFeed(feed, limit = 1, params = {}) {
     console.error('Invalid JSON for', feed, e);
     return [];
   }
-  const arr = Array.isArray(payload)
+
+  return Array.isArray(payload)
     ? payload
     : Array.isArray(payload.data)
       ? payload.data
       : [];
-  console.log(`→ ${feed}:`, arr.length, 'pts');
-  return arr;
 }
 
 // ─── Formatting Utilities ────────────────────────────────────────
-const fmt     = (v,p=1) => (v==null||isNaN(v)) ? '–' : (+v).toFixed(p);
-const isoHHMM = ts => ts ? ts.substring(11,19) : '';
+const fmt     = (v, p = 1) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(p);
+const isoHHMM = ts => ts ? ts.substring(11, 19) : '';
 
 // ─── Chart.js Initialization ─────────────────────────────────────
 function initCharts() {
@@ -84,11 +91,16 @@ function initCharts() {
     const ctx = card.querySelector('canvas').getContext('2d');
     s.chart = new Chart(ctx, {
       type: 'line',
-      data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension:0.25 }] },
+      data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
       options: {
-        animation: false, responsive: true, maintainAspectRatio: false,
-        plugins: { legend:{ display:false } },
-        scales: { x:{ ticks:{ maxRotation:0 } }, y:{ min:28, max:122, grace:'5%' } }
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxRotation: 0 } },
+          y: { min: 28, max: 122, grace: '5%' }
+        }
       }
     });
   });
@@ -97,13 +109,13 @@ function initCharts() {
 // ─── Leaflet Map Setup ───────────────────────────────────────────
 let map, marker, polyline, trail = [];
 function initMap() {
-  map = L.map('map').setView([0,0],2);
+  map = L.map('map').setView([0, 0], 2);
   L.tileLayer(
     'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    { attribution:'&copy; <a href="https://carto.com/">CARTO</a>' }
+    { attribution: '&copy; <a href="https://carto.com/">CARTO</a>' }
   ).addTo(map);
-  marker   = L.marker([0,0]).addTo(map);
-  polyline = L.polyline([], { weight:3 }).addTo(map);
+  marker   = L.marker([0, 0]).addTo(map);
+  polyline = L.polyline([], { weight: 3 }).addTo(map);
 }
 // dashboard.js — Section 2 of 2
 
@@ -114,40 +126,40 @@ async function updateCharts() {
     const rows = await fetchFeed(feeds[s.id], HIST);
     if (!rows.length) return;
     rows.reverse();
-    s.chart.data.labels   = rows.map(r=>isoHHMM(r.created_at));
-    s.chart.data.datasets[0].data = rows.map(r=>{
+    s.chart.data.labels = rows.map(r => isoHHMM(r.created_at));
+    s.chart.data.datasets[0].data = rows.map(r => {
       const n = parseFloat(r.value);
-      return isNaN(n)? null : n;
+      return isNaN(n) ? null : n;
     });
     s.chart.update();
   }));
 }
 
 // ─── Draw Live Table & Map Trail ─────────────────────────────────
-function drawLive({ts,fix,lat,lon,alt,sats,signal,volt,speed,nr1,nr2,nr3}) {
+function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2, nr3 }) {
   document.getElementById('latest').innerHTML = [
     ['Local Time',   new Date(ts).toLocaleString()],
     ['Fix',          fix],
-    ['Lat',          fmt(lat,6)],
-    ['Lon',          fmt(lon,6)],
-    ['Alt (m)',      fmt(alt,1)],
-    ['Sats',         fmt(sats,0)],
-    ['Speed (km/h)', fmt(speed,1)],
-    ['RSSI (dBm)',   fmt(signal,0)],
-    ['Volt (mV)',    fmt(volt,2)],
-    ['NR1 °F',       fmt(nr1,1)],
-    ['NR2 °F',       fmt(nr2,1)],
-    ['NR3 °F',       fmt(nr3,1)]
-  ].map(([k,v])=>`<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
+    ['Lat',          fmt(lat, 6)],
+    ['Lon',          fmt(lon, 6)],
+    ['Alt (m)',      fmt(alt, 1)],
+    ['Sats',         fmt(sats, 0)],
+    ['Speed (km/h)', fmt(speed, 1)],
+    ['RSSI (dBm)',   fmt(signal, 0)],
+    ['Volt (mV)',    fmt(volt, 2)],
+    ['NR1 °F',       fmt(nr1, 1)],
+    ['NR2 °F',       fmt(nr2, 1)],
+    ['NR3 °F',       fmt(nr3, 1)]
+  ].map(([k, v]) => `<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
 
-  const latN=Number(lat), lonN=Number(lon);
-  if (isFinite(latN)&&isFinite(lonN)) {
+  const latN = Number(lat), lonN = Number(lon);
+  if (isFinite(latN) && isFinite(lonN)) {
     map.invalidateSize();
-    marker.setLatLng([latN,lonN]);
-    trail.push([latN,lonN]);
-    if (trail.length>TRAIL) trail.shift();
+    marker.setLatLng([latN, lonN]);
+    trail.push([latN, lonN]);
+    if (trail.length > TRAIL) trail.shift();
     polyline.setLatLngs(trail);
-    map.setView([latN,lonN], Math.max(map.getZoom(),13));
+    map.setView([latN, lonN], Math.max(map.getZoom(), 13));
   }
 }
 
@@ -155,13 +167,16 @@ function drawLive({ts,fix,lat,lon,alt,sats,signal,volt,speed,nr1,nr2,nr3}) {
 async function poll() {
   const feeds = getFeeds(DEVICE);
   const [gpsA, sigA, voltA, spdA, n1A, n2A, n3A] = await Promise.all([
-    fetchFeed(feeds.gps),    fetchFeed(feeds.signal),
-    fetchFeed(feeds.volt),   fetchFeed(feeds.speed),
-    fetchFeed(feeds.nr1),    fetchFeed(feeds.nr2),
+    fetchFeed(feeds.gps),
+    fetchFeed(feeds.signal),
+    fetchFeed(feeds.volt),
+    fetchFeed(feeds.speed),
+    fetchFeed(feeds.nr1),
+    fetchFeed(feeds.nr2),
     fetchFeed(feeds.nr3)
   ]);
 
-  // raw payload logging:
+  // Log raw first entries to confirm feed routing
   console.log('raw gpsA[0]:', gpsA[0]);
   console.log('raw sigA[0]:', sigA[0]);
   console.log('raw voltA[0]:', voltA[0]);
@@ -171,10 +186,10 @@ async function poll() {
   console.log('raw n3A[0]:', n3A[0]);
 
   // Parse GPS JSON
-  let g = {fix:false, lat:null, lon:null, alt:null, sats:null};
+  let g = { fix: false, lat: null, lon: null, alt: null, sats: null };
   try {
     if (gpsA[0]?.value) g = JSON.parse(gpsA[0].value);
-  } catch(e) {
+  } catch (e) {
     console.warn('Bad GPS JSON', gpsA[0]?.value);
   }
 
@@ -186,7 +201,7 @@ async function poll() {
            ?? rec.row?.value
            ?? null;
     const n = parseFloat(v);
-    return (v!=null && !isNaN(n))? n : null;
+    return (v != null && !isNaN(n)) ? n : null;
   };
 
   const live = {
@@ -204,18 +219,17 @@ async function poll() {
     nr3:    pick(n3A)
   };
 
-  // Debug: inspect everything
   console.log('🔍 live object:', live);
 
   drawLive(live);
 
   // Append to charts
-  [['nr1',live.nr1],['nr2',live.nr2],['nr3',live.nr3]].forEach(([id,val])=>{
-    if (val==null) return;
-    const s = SENSORS.find(x=>x.id===id);
+  [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3]].forEach(([id, val]) => {
+    if (val == null) return;
+    const s = SENSORS.find(x => x.id === id);
     s.chart.data.labels.push(isoHHMM(live.ts));
     s.chart.data.datasets[0].data.push(val);
-    if (s.chart.data.labels.length>HIST) {
+    if (s.chart.data.labels.length > HIST) {
       s.chart.data.labels.shift();
       s.chart.data.datasets[0].data.shift();
     }
@@ -226,14 +240,14 @@ async function poll() {
 }
 
 // ─── CSV Export Handler ─────────────────────────────────────────
-document.getElementById('dlBtn').addEventListener('click', async ()=>{
+document.getElementById('dlBtn').addEventListener('click', async () => {
   const start = document.getElementById('start').value;
   const end   = document.getElementById('end').value;
-  if (!start||!end) {
-    return document.getElementById('expStatus').textContent=
+  if (!start || !end) {
+    return document.getElementById('expStatus').textContent =
       'Please select both start and end dates.';
   }
-  document.getElementById('expStatus').textContent='Fetching…';
+  document.getElementById('expStatus').textContent = 'Fetching…';
 
   const params = {
     start: new Date(start).toISOString(),
@@ -241,38 +255,47 @@ document.getElementById('dlBtn').addEventListener('click', async ()=>{
   };
 
   const data = await Promise.all(
-    Object.entries(getFeeds(DEVICE)).map(async ([key,feed])=>{
-      const rows = await fetchFeed(feed,1000,params);
+    Object.entries(getFeeds(DEVICE)).map(async ([key, feed]) => {
+      const rows = await fetchFeed(feed, 1000, params);
       console.log(`raw ${key}[0]:`, rows[0]);
-      return rows.map(r=>({feed:key, ts:r.created_at, value:r.value}));
+      return rows.map(r => ({ feed: key, ts: r.created_at, value: r.value }));
     })
   );
 
-  const flat = data.flat().sort((a,b)=>a.ts.localeCompare(b.ts));
+  const flat = data.flat().sort((a, b) => a.ts.localeCompare(b.ts));
 
-  // Preview
-  document.getElementById('preview').innerHTML=`
+  document.getElementById('preview').innerHTML = `
     <tr><th>Feed</th><th>Time</th><th>Value</th></tr>
-    ${flat.slice(0,5).map(r=>`
+    ${flat.slice(0, 5).map(r => `
       <tr><td>${r.feed}</td><td>${r.ts}</td><td>${r.value}</td></tr>
     `).join('')}
   `;
 
-  // Build CSV
-  const rows = [['feed','timestamp','value'], ...flat.map(r=>[r.feed,r.ts,r.value])];
-  const csv  = rows.map(r=>r.join(',')).join('\n');
-  const blob = new Blob([csv],{type:'text/csv'});
+  const rows = [['feed','timestamp','value'], ...flat.map(r => [r.feed, r.ts, r.value])];
+  const csv  = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href     = url; a.download=`${DEVICE}_${start}_${end}.csv`;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  document.getElementById('expStatus').textContent='Download ready.';
+  a.href     = url;
+  a.download = `${DEVICE}_${start}_${end}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  document.getElementById('expStatus').textContent = 'Download ready.';
 });
 
-// ─── Device Selector & Init ─────────────────────────────────────
-document.getElementById('deviceSelect').addEventListener('change',e=>{
-  DEVICE=e.target.value; initCharts(); updateCharts(); trail=[];
+// ─── Device Selector & Bootstrap ─────────────────────────────────
+document.getElementById('deviceSelect').addEventListener('change', e => {
+  DEVICE = e.target.value;
+  initCharts();
+  updateCharts();
+  trail = [];
 });
-document.addEventListener('DOMContentLoaded',()=>{
-  initCharts(); updateCharts(); initMap(); poll();
+document.addEventListener('DOMContentLoaded', () => {
+  initCharts();
+  updateCharts();
+  initMap();
+  poll();
 });
