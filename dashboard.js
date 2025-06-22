@@ -32,7 +32,6 @@ function getFeeds(d) {
     nr3:    `${d}.nr3`
   };
 }
-
 // ─── Fetch Utility ───────────────────────────────────────────────
 async function fetchFeed(feed, limit = 1, params = {}) {
   const proxyOrigin = 'https://rapid-mode-5c5a.peter-400.workers.dev';
