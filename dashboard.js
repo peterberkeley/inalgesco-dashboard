@@ -137,11 +137,11 @@ function drawLive(data) {
     ['NR3 °F', fmt(nr3, 1)]
   ].map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
 
-  // Force lat/lon to numbers and update map if valid
+  // Show on map if sats > 1, regardless of fix
   const latNum = Number(lat);
   const lonNum = Number(lon);
-  if (fix && !isNaN(latNum) && !isNaN(lonNum)) {
-  marker.setLatLng([lonNum, latNum]);
+  if ((sats > 1) && !isNaN(latNum) && !isNaN(lonNum)) {
+    marker.setLatLng([latNum, lonNum]);         // <- ALWAYS [lat, lon]!
     path.push([latNum, lonNum]);
     if (path.length > TRAIL) path.shift();
     poly.setLatLngs(path);
