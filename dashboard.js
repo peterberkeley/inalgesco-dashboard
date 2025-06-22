@@ -23,14 +23,18 @@ function getFeeds(d) {
 
 
 async function fetchFeed(feed, limit = 1, params = {}) {
-  // Build the Adafruit URL with your key as a query param (CORS-safe)
-  const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feed}/data`);
+  // Build the URL against our new api subdomain
+  const url = new URL(
+    `https://api.skycafetrucks.com/api/v2/${USER}/feeds/${feed}/data`
+  );
   url.searchParams.set('limit', limit);
   Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
-  url.searchParams.set('x-aio-key', AIO_KEY);
 
-  // Simple GET now qualifies as “simple” CORS, so no preflight
-  const res = await fetch(url, { mode: 'cors' });
+  // Send your AIO key in the header as before
+  const res = await fetch(url.toString(), {
+    headers: { 'X-AIO-Key': AIO_KEY },
+    mode: 'cors'
+  });
   if (!res.ok) {
     console.error('Adafruit IO error', res.status, await res.text());
     return [];
