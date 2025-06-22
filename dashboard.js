@@ -160,7 +160,8 @@ async function poll() {
 
   const live = {
     ts:    gpsArr[0]?.created_at,
-    fix:   !!g.fix,
+    fix:   g.fix !== undefined ? !!g.fix : (typeof g.lat === "number" && typeof g.lon === "number"),
+fix:   !!g.fix,
     lat:   g.lat,
     lon:   g.lon,
     alt:   g.alt,
