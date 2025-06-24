@@ -9,6 +9,15 @@ const POLL_MS = 10000;
 const HIST    = 50;
 // [1.3] Map trail length (points)
 const TRAIL   = 50;
+// [1.4] Keep track of last timestamp per sensor to prevent duplicates
+const lastTs = {
+  nr1: null,
+  nr2: null,
+  nr3: null,
+  signal: null,
+  volt: null,
+  speed: null
+};
 
 // [2] CHART COLORS & SENSORS ─────────────────────────────────────
 const fallbackCols = ['#44b6f7', '#7cd992', '#e7c46c'];
@@ -197,43 +206,51 @@ async function poll() {
     return (v != null && !isNaN(n)) ? n : null;
   };
 
-  // [11.4] Live object with °C→°F conversion for nr3
-  const live = {
-    ts:     gpsA[0]?.created_at,
-    fix:    !!g.fix,
-    lat:    g.lat,    lon: g.lon,
-    alt:    g.alt,    sats: g.sats,
-    signal: pick(sigA),
-    volt:   pick(voltA),
-    speed:  pick(spdA),
-    nr1:    pick(n1A),
-    nr2:    pick(n2A),
-    nr3:    (() => {
-      const c = pick(n3A);
-      return c != null ? +((c * 9/5) + 32).toFixed(1) : null;
-    })()
-  };
+ // [11.4] Live object with °C→°F conversion for nr3
+const live = {
+  ts:     gpsA[0]?.created_at,
+  fix:    !!g.fix,
+  lat:    g.lat,    lon: g.lon,
+  alt:    g.alt,    sats: g.sats,
+  signal: pick(sigA),
+  volt:   pick(voltA),
+  speed:  pick(spdA),
+  nr1:    pick(n1A),
+  nr2:    pick(n2A),
+  nr3:    (() => {
+    const c = pick(n3A);
+    return c != null ? +((c * 9/5) + 32).toFixed(1) : null;
+  })()
+};
 
-  console.log('🔍 live object:', live);
-  drawLive(live);
+console.log('🔍 live object:', live);
+drawLive(live);
 
-  // Append to charts (rolling window)
-  [['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3],
-   ['signal', live.signal], ['volt', live.volt], ['speed', live.speed]
-  ].forEach(([id, val]) => {
-    if (val == null) return;
+// [11.5] Append to charts *only* if we have a new timestamp
+[['nr1', live.nr1], ['nr2', live.nr2], ['nr3', live.nr3],
+ ['signal', live.signal], ['volt', live.volt], ['speed', live.speed]
+].forEach(([id, val]) => {
+  if (val == null) return;
+
+  // only push if this timestamp hasn’t been plotted yet
+  if (live.ts !== lastTs[id]) {
     const s = SENSORS.find(x => x.id === id);
     s.chart.data.labels.push(isoHHMM(live.ts));
     s.chart.data.datasets[0].data.push(val);
+    lastTs[id] = live.ts;
+
+    // maintain HIST-length window
     if (s.chart.data.labels.length > HIST) {
       s.chart.data.labels.shift();
       s.chart.data.datasets[0].data.shift();
     }
-    s.chart.update();
-  });
 
-  setTimeout(poll, POLL_MS);
-}
+    s.chart.update();
+  }
+});
+
+setTimeout(poll, POLL_MS);
+
 
 // [12] CSV EXPORT HANDLER ─────────────────────────────────────────
 document.getElementById('dlBtn').addEventListener('click', async () => {
