@@ -250,7 +250,7 @@ drawLive(live);
 });
 
 setTimeout(poll, POLL_MS);
-
+}
 
 // [12] CSV EXPORT HANDLER ─────────────────────────────────────────
 document.getElementById('dlBtn').addEventListener('click', async () => {
