@@ -157,7 +157,6 @@ function drawLive({ ts, fix, lat, lon, alt, sats, signal, volt, speed, nr1, nr2,
   // [10.1] Table rendering
   document.getElementById('latest').innerHTML = [
     ['Local Time',   new Date(ts).toLocaleString()],
-    ['Fix',          fix],
     ['Lat',          fmt(lat, 6)],
     ['Lon',          fmt(lon, 6)],
     ['Alt (m)',      fmt(alt, 1)],
