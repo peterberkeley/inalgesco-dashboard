@@ -1,4 +1,4 @@
-// dashboard.js — Unified with Visual Enhancements
+// dashboard.js — Unified with Visual Enhancements & 12h Time Format
 (() => {
   // [0] THEME COLORS & SPINNER UTILS
   const COLORS = {
@@ -56,7 +56,10 @@
 
   // [6] FORMATTING
   const fmt = (v,p=1)=>(v==null||isNaN(v))?'–':(+v).toFixed(p);
-  const isoHHMM = ts=> ts? ts.substring(11,16): '';
+  // format ISO timestamp to 12h time (e.g. "3:45 PM")
+  const formatTime12h = ts => ts
+    ? new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : '';
 
   // [7] INIT CHARTS
   function initCharts() {
@@ -104,7 +107,7 @@
       const rows=await fetchFeed(feeds[s.id], HIST);
       if(!rows.length) return;
       rows.reverse();
-      s.chart.data.labels=rows.map(r=>isoHHMM(r.created_at));
+      s.chart.data.labels=rows.map(r=>formatTime12h(r.created_at));
       s.chart.data.datasets[0].data=rows.map(r=>{
         let n=parseFloat(r.value);
         if(s.id==='nr3'&&!isNaN(n)) n=(n*9/5)+32;
@@ -118,9 +121,10 @@
   function drawLive(data){
     const {ts,fix,lat,lon,alt,sats,signal,volt,speed,nr1,nr2,nr3}=data;
     document.getElementById('latest').innerHTML=
-      [['Local Time',new Date(ts).toLocaleString()],['Lat',fmt(lat,6)],['Lon',fmt(lon,6)],['Alt (m)',fmt(alt,1)],['Sats',fmt(sats,0)],
-       ['Speed (km/h)',fmt(speed,1)],['RSSI (dBm)',fmt(signal,0)],['Volt (mV)',fmt(volt,2)],
-       ['NR1 °F',fmt(nr1,1)],['NR2 °F',fmt(nr2,1)],['NR3 °F',fmt(nr3,1)]
+      [[ 'Local Time', new Date(ts).toLocaleString() ],
+       [ 'Lat', fmt(lat,6) ], [ 'Lon', fmt(lon,6) ], [ 'Alt (m)', fmt(alt,1) ], [ 'Sats', fmt(sats,0) ],
+       [ 'Speed (km/h)', fmt(speed,1) ], [ 'RSSI (dBm)', fmt(signal,0) ], [ 'Volt (mV)', fmt(volt,2) ],
+       [ 'NR1 °F', fmt(nr1,1) ], [ 'NR2 °F', fmt(nr2,1) ], [ 'NR3 °F', fmt(nr3,1) ]
       ].map(([k,v])=>`<tr><th class="pr-2 text-left">${k}</th><td>${v}</td></tr>`).join('');
     const latN=Number(lat), lonN=Number(lon);
     if(isFinite(latN)&&isFinite(lonN)){
@@ -134,8 +138,8 @@
   async function poll(){
     const feeds=getFeeds(DEVICE);
     const [gpsA,sA,vA,spA,n1A,n2A,n3A]=await Promise.all([
-      fetchFeed(feeds.gps),fetchFeed(feeds.signal),fetchFeed(feeds.volt),fetchFeed(feeds.speed),
-      fetchFeed(feeds.nr1),fetchFeed(feeds.nr2),fetchFeed(feeds.nr3)
+      fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
+      fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3)
     ]);
     let g={fix:false,lat:null,lon:null,alt:null,sats:null};
     try{ if(gpsA[0]?.value) g=JSON.parse(gpsA[0].value); }catch{}
@@ -148,7 +152,7 @@
       .forEach(([id,val])=>{
         if(val==null||live.ts===lastTs[id]) return;
         const s=SENSORS.find(x=>x.id===id);
-        s.chart.data.labels.push(isoHHMM(live.ts));
+        s.chart.data.labels.push(formatTime12h(live.ts));
         s.chart.data.datasets[0].data.push(val);
         lastTs[id]=live.ts;
         if(s.chart.data.labels.length>HIST){ s.chart.data.labels.shift(); s.chart.data.datasets[0].data.shift(); }
@@ -170,7 +174,7 @@
     const flat=dataArr.flat().sort((a,b)=>a.ts.localeCompare(b.ts));
     document.getElementById('preview').innerHTML=
       `<tr><th>Feed</th><th>Time</th><th>Value</th></tr>`+
-      flat.slice(0,5).map(r=>`<tr><td>${r.feed}</td><td>${r.ts}</td><td>${r.value}</td></tr>`).join('');
+      flat.slice(0,5).map(r=>`<tr><td>${r.feed}</td><td>${formatTime12h(r.ts)}</td><td>${r.value}</td></tr>`).join('');
     const csv=[['feed','timestamp','value'],...flat.map(r=>[r.feed,r.ts,r.value])]
       .map(r=>r.join(',')).join('\n');
     const blob=new Blob([csv],{type:'text/csv'}), url=URL.createObjectURL(blob), a=document.createElement('a');
@@ -183,11 +187,6 @@
     DEVICE=e.target.value; initCharts(); updateCharts(); trail=[];
   });
   document.addEventListener('DOMContentLoaded', async()=>{
-    showSpinner();
-    initCharts();
-    await updateCharts();
-    initMap();
-    hideSpinner();
-    poll();
+    showSpinner(); initCharts(); await updateCharts(); initMap(); hideSpinner(); poll();
   });
 })();
