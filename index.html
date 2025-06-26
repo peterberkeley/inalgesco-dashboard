@@ -42,8 +42,9 @@
       display: flex;
       flex-direction: column;
       padding: 1.5rem;
+      padding-bottom: 2rem; /* extra bottom space for axis labels */
       transition: box-shadow 0.2s ease;
-      height: 320px;
+      height: 360px; /* slightly taller to accommodate labels */
     }
     .chart-box:hover {
       box-shadow: 0 6px 12px rgba(0,0,0,0.15);
@@ -74,6 +75,10 @@
     #dlBtn:disabled {
       background: gray;
       cursor: not-allowed;
+    }
+    /* Date/time input font size reduction */
+    #start, #end {
+      font-size: 60%;
     }
     /* Spinner */
     #spinner {
