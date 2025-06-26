@@ -204,8 +204,7 @@
         );
         const flat = data.flat().sort((a, b) => a.ts.localeCompare(b.ts));
         const rows = [['feed','timestamp','value'], ...flat.map(r => [r.feed, r.ts, r.value])];
-        const csv = rows.map(r => r.join(',')).join('
-');
+        const csv = rows.map(r => r.join(',')).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = `${DEVICE}_${start}_${end}.csv`;
