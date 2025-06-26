@@ -126,6 +126,10 @@
     let lastTs = { nr1:null, nr2:null, nr3:null, signal:null, volt:null, speed:null };
     let trail = [];
 
+    // pre-fetch controls for export
+    const dlBtn      = document.getElementById('dlBtn');
+    const expStatus  = document.getElementById('expStatus');
+
     function getCSS(varName, fallback = '') {
       return (getComputedStyle(document.documentElement)
         .getPropertyValue(varName) || '').trim() || fallback;
@@ -186,8 +190,6 @@
 
       document.getElementById('deviceSelect')
         .addEventListener('change', onDeviceChange);
-      document.getElementById('dlBtn')
-        .addEventListener('click', onExport);
     });
 
     function initCharts() {
@@ -273,16 +275,15 @@
         lat: g.lat, lon: g.lon,
         alt: g.alt, sats: g.sats,
         signal: pick(sigA),
-        volt: pick(voltA),
-        speed: pick(spdA),
-        nr1: pick(n1A),
-        nr2: pick(n2A),
-        nr3: cToF(pick(n3A))
+        volt:   pick(voltA),
+        speed:  pick(spdA),
+        nr1:    pick(n1A),
+        nr2:    pick(n2A),
+        nr3:    cToF(pick(n3A))
       };
 
       drawLive(live);
 
-      // ←— FULL live-data append loop restored here
       [
         ['nr1',    live.nr1],
         ['nr2',    live.nr2],
@@ -343,37 +344,34 @@
     let exporting = false;
     async function onExport() {
       if (exporting) return;
-      const start = document.getElementById('start').value,
-            end   = document.getElementById('end').value;
+      const start = document.getElementById('start').value;
+      const end   = document.getElementById('end').value;
       if (!start || !end) {
-        return document.getElementById('expStatus').textContent =
-               'Please select both dates.';
+        return expStatus.textContent = 'Please select both dates.';
       }
       exporting = true;
       dlBtn.disabled = true;
       expStatus.textContent = 'Fetching…';
 
-      const params = {
-        start: new Date(start).toISOString(),
-        end:   new Date(end).toISOString()
-      };
+      const params = { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
       const data = await Promise.all(
-        Object.entries(getFeeds(CONFIG.device)).map(async ([key, feedKey]) => {
+        Object.entries(getFeeds(CONFIG.device)).map(async([key, feedKey]) => {
           const rows = await fetchFeed(feedKey, 1000, params);
           return rows.map(r => ({ feed: key, ts: r.created_at, value: r.value }));
         })
       );
 
       const flat = data.flat().sort((a, b) => a.ts.localeCompare(b.ts));
-      const csv = [
-        ['feed','timestamp','value'],
-        ...flat.map(r => [r.feed, r.ts, r.value])
+      const csv = [[
+        'feed','timestamp','value'
+      ],
+      ...flat.map(r => [r.feed, r.ts, r.value])
       ].map(r => r.join(',')).join('\n');
 
       const blob = new Blob([csv], { type: 'text/csv' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
       a.download = `${CONFIG.device}_${start}_${end}.csv`;
       document.body.appendChild(a);
       a.click();
