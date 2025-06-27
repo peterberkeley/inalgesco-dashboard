@@ -168,7 +168,80 @@
     setTimeout(poll,POLL_MS);
   }
 
-  // [12] CSV EXPORT (unchanged)
+// [12] CSV EXPORT
+document.getElementById('dlBtn').addEventListener('click', async (ev) => {
+  ev.preventDefault();
+
+  const startInput = document.getElementById('start');
+  const endInput   = document.getElementById('end');
+  const statusEl   = document.getElementById('expStatus');
+  const previewEl  = document.getElementById('preview');
+
+  const start = startInput.value;
+  const end   = endInput.value;
+  if (!start || !end) {
+    statusEl.textContent = 'Please select both dates.';
+    return;
+  }
+
+  statusEl.textContent = 'Fetching…';
+
+  const params = {
+    start: new Date(start).toISOString(),
+    end:   new Date(end).toISOString()
+  };
+
+  try {
+    // Fetch all feeds in parallel
+    const dataArr = await Promise.all(
+      Object.entries(getFeeds(DEVICE)).map(async ([feedKey, apiKey]) => {
+        const rows = await fetchFeed(apiKey, 1000, params);
+        return rows.map(r => ({
+          feed: feedKey,
+          ts:   r.created_at,
+          value:r.value
+        }));
+      })
+    );
+
+    // Flatten & sort
+    const flat = dataArr.flat().sort((a, b) => a.ts.localeCompare(b.ts));
+
+    // Preview first 5 rows
+    previewEl.innerHTML = `
+      <tr><th>Feed</th><th>Time</th><th>Value</th></tr>
+      ${flat.slice(0,5).map(r =>
+        `<tr>
+          <td>${r.feed}</td>
+          <td>${new Date(r.ts).toLocaleString()}</td>
+          <td>${r.value}</td>
+        </tr>`
+      ).join('')}
+    `;
+
+    // Build CSV text
+    const header = ['feed','timestamp','value'];
+    const csvRows = flat.map(r => [r.feed, r.ts, r.value].join(','));
+    const csvText = [header.join(','), ...csvRows].join('\n');
+
+    // Trigger download
+    const blob = new Blob([csvText], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${DEVICE}_${start}_${end}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    statusEl.textContent = 'Download ready.';
+  } catch (err) {
+    console.error('Error exporting CSV:', err);
+    statusEl.textContent = 'Error fetching data.';
+  }
+});
+
   // [13] BOOTSTRAP
   document.getElementById('deviceSelect').addEventListener('change',e=>{ DEVICE=e.target.value; initCharts(); updateCharts(); });
   document.addEventListener('DOMContentLoaded', async()=>{ showSpinner(); initCharts(); await updateCharts(); initMap(); hideSpinner(); poll(); });
