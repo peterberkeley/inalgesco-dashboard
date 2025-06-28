@@ -176,12 +176,12 @@
     setTimeout(poll, POLL_MS);
   }
 
- // [12] CSV EXPORT
+// [12] CSV EXPORT
 document.getElementById('dlBtn').addEventListener('click', async ev => {
   ev.preventDefault();
 
-  const startInput = document.getElementById('start').value;
-  const endInput   = document.getElementById('end').value;
+  let startInput = document.getElementById('start').value;
+  let endInput   = document.getElementById('end').value;
   if (!startInput || !endInput) {
     return alert('Please set both a start and end date/time.');
   }
@@ -196,7 +196,6 @@ document.getElementById('dlBtn').addEventListener('click', async ev => {
 
   // Fetch each feed and assemble into a timestamp-indexed map
   const dataMap = {};  // { timestamp: { feedId: value, … }, … }
-
   for (const id of allIds) {
     const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feeds[id]}/data`);
     url.searchParams.set('start_time', startISO);
@@ -207,7 +206,6 @@ document.getElementById('dlBtn').addEventListener('click', async ev => {
       const res  = await fetch(url);
       const body = await res.json();
       const list = Array.isArray(body) ? body : (Array.isArray(body.data) ? body.data : []);
-
       list.forEach(d => {
         const ts = d.created_at;
         if (!dataMap[ts]) dataMap[ts] = {};
@@ -219,9 +217,9 @@ document.getElementById('dlBtn').addEventListener('click', async ev => {
   }
 
   // Build rows: header + one row per timestamp
-  const rows      = [];
+  const rows       = [];
   const timestamps = Object.keys(dataMap).sort();
-  const header    = ['Date','Time', ...allIds];
+  const header     = ['Date','Time', ...allIds];
   rows.push(header);
 
   timestamps.forEach(ts => {
@@ -236,25 +234,25 @@ document.getElementById('dlBtn').addEventListener('click', async ev => {
     rows.push(row);
   });
 
-  // Convert to CSV string
- // Convert to CSV string (escape inner quotes so commas stay inside a cell)
-const csv = rows.map(row =>
-  row.map(cell => {
-    const s = String(cell).replace(/"/g, '""');
-    return `"${s}"`;
-  }).join(',')
-).join('\n');
+  // Convert to semicolon-delimited CSV string, escaping inner quotes
+  const sepLine = 'sep=;\n';
+  const body = rows.map(row =>
+    row.map(cell => {
+      const s = String(cell).replace(/"/g, '""');
+      return `"${s}"`;
+    }).join(';')
+  ).join('\n');
+  const csv = sepLine + body;
 
   // Trigger download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  link.href        = URL.createObjectURL(blob);
-  link.download    = `${DEVICE}-${startInput}-${endInput}.csv`;
+  link.href     = URL.createObjectURL(blob);
+  link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 });
-
 
   // [13] BOOTSTRAP & DEVICE CHANGE
   document.addEventListener('DOMContentLoaded', () => {
