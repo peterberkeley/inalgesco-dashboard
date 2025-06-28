@@ -59,7 +59,7 @@
     url.searchParams.set('limit', limit);
     Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
     const res = await fetch(url);
-    if (!res.ok) { console.error(`Fetch failed [${feedKey}]:`, res.status); return []; }
+    if (!res.ok) { console.error(`Fetch failed [${feedKey}]:`, res.status); return [];}    
     const json = await res.json();
     return Array.isArray(json) ? json : (Array.isArray(json.data) ? json.data : []);
   }
@@ -129,10 +129,10 @@
       const rows = await fetchFeed(feeds[s.id], HIST);
       if (!rows.length) return;
       rows.reverse();
-      // use full objects for chart.js (x, y, fullTime)
-      const dataObjs = rows.map(r => ({ x: formatTime12h(r.created_at), y: parseFloat(r.value) || null, fullTime: r.created_at }));
-      s.chart.data.labels = dataObjs.map(d => d.x);
-      s.chart.data.datasets[0].data = dataObjs;
+      const labels = rows.map(r => formatTime12h(r.created_at));
+      const values = rows.map(r => { const n = parseFloat(r.value); return isNaN(n) ? null : n; });
+      s.chart.data.labels = labels;
+      s.chart.data.datasets[0].data = values;
       s.chart.update();
     }));
   }
@@ -152,10 +152,13 @@
       ['NR2 °F', fmt(nr2, 1)],
       ['NR3 °F', fmt(nr3, 1)]
     ];
-    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th class=\"pr-2 text-left\">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
     if (isFinite(lat) && isFinite(lon)) {
-      map.invalidateSize(); marker.setLatLng([lat, lon]); trail.push([lat, lon]);
-      if (trail.length > TRAIL) trail.shift(); polyline.setLatLngs(trail);
+      map.invalidateSize();
+      marker.setLatLng([lat, lon]);
+      trail.push([lat, lon]);
+      if (trail.length > TRAIL) trail.shift();
+      polyline.setLatLngs(trail);
       map.setView([lat, lon], Math.max(map.getZoom(), 13));
     }
   }
@@ -167,35 +170,40 @@
       fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
       fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
     ]);
-    let lat=0, lon=0;
-    try { const g = JSON.parse(gpsA[0]?.value); lat=g.lat; lon=g.lon; } catch{}
-    const pick = arr => { const v=arr[0]?.value, n=parseFloat(v); return (!isNaN(n)?n:null); };
-    const live={ts:gpsA[0]?.created_at,lat,lon,signal:pick(sigA),volt:pick(voltA),speed:pick(spA),nr1:pick(n1A),nr2:pick(n2A),nr3:pick(n3A),iccid:icA[0]?.value||null};
+    let lat = 0, lon = 0;
+    try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
+    const pick = arr => { const v = arr[0]?.value; const n = parseFloat(v); return isNaN(n) ? null : n; };
+    const live = { ts: gpsA[0]?.created_at, lat, lon, signal: pick(sigA), volt: pick(voltA), speed: pick(spA), nr1: pick(n1A), nr2: pick(n2A), nr3: pick(n3A), iccid: icA[0]?.value || null };
     drawLive(live);
-    SENSORS.forEach(s=>{
-      const val=live[s.id]; if(val==null)return;
-      const obj={x:formatTime12h(live.ts),y:val,fullTime:live.ts};
-      s.chart.data.labels.push(obj.x);
-      s.chart.data.datasets[0].data.push(obj);
-      if(s.chart.data.datasets[0].data.length>HIST){s.chart.data.labels.shift();s.chart.data.datasets[0].data.shift();}
+    SENSORS.forEach(s => {
+      const val = live[s.id]; if (val == null) return;
+      s.chart.data.labels.push(formatTime12h(live.ts));
+      s.chart.data.datasets[0].data.push(val);
+      if (s.chart.data.datasets[0].data.length > HIST) {
+        s.chart.data.labels.shift();
+        s.chart.data.datasets[0].data.shift();
+      }
       s.chart.update();
     });
-    setTimeout(poll,POLL_MS);
+    setTimeout(poll, POLL_MS);
   }
 
   // [12] CSV EXPORT (unchanged)
-  document.getElementById('dlBtn').addEventListener('click',async(ev)=>{ev.preventDefault();/* existing export */});
+  document.getElementById('dlBtn').addEventListener('click', async ev => { ev.preventDefault(); /* existing export */ });
 
   // [13] BOOTSTRAP
-  document.addEventListener('DOMContentLoaded',()=>{
-    const deviceSelect=document.getElementById('deviceSelect');
-    // populate dropdown
-    DEVICES.forEach(dev=>{const opt=document.createElement('option');opt.value=dev;opt.text=dev.replace('skycafe-','SkyCafé ');deviceSelect.appendChild(opt);});
-    // init DEVICE
-    DEVICE=deviceSelect.value;
-    // change handler
-    deviceSelect.addEventListener('change',e=>{DEVICE=e.target.value;initCharts();updateCharts();});
-    // start
-    showSpinner();initCharts();updateCharts().then(()=>{initMap();hideSpinner();poll();});
+  document.addEventListener('DOMContentLoaded', () => {
+    const deviceSelect = document.getElementById('deviceSelect');
+    DEVICES.forEach(dev => {
+      const opt = document.createElement('option');
+      opt.value = dev;
+      opt.text = dev.replace('skycafe-', 'SkyCafé ');
+      deviceSelect.appendChild(opt);
+    });
+    DEVICE = deviceSelect.value;
+    deviceSelect.addEventListener('change', e => { DEVICE = e.target.value; initCharts(); updateCharts(); });
+    showSpinner();
+    initCharts();
+    updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
   });
 })();
