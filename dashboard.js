@@ -177,10 +177,60 @@
   }
 
   // [12] CSV EXPORT
-  document.getElementById('dlBtn').addEventListener('click', async ev => {
-    ev.preventDefault();
-    // your CSV logic here…
-  });
+document.getElementById('dlBtn').addEventListener('click', async ev => {
+  ev.preventDefault();
+
+  const startInput = document.getElementById('start').value;
+  const endInput   = document.getElementById('end').value;
+  if (!startInput || !endInput) {
+    return alert('Please set both a start and end date/time.');
+  }
+
+  // Convert to ISO for the API
+  const startISO = new Date(startInput).toISOString();
+  const endISO   = new Date(endInput).toISOString();
+
+  // Prepare CSV rows
+  const rows = [];
+  rows.push(['timestamp','feed','value']);
+
+  // Build list of all feed keys
+  const feeds = getFeeds(DEVICE);
+  const allIds = ['gps','iccid', ...SENSORS.map(s => s.id)];
+
+  for (const id of allIds) {
+    const feedKey = feeds[id];
+    const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feedKey}/data`);
+    url.searchParams.set('start_time', startISO);
+    url.searchParams.set('end_time',   endISO);
+    url.searchParams.set('limit',      1000);
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+
+      list.forEach(d => {
+        rows.push([ d.created_at, id, d.value ]);
+      });
+    } catch (err) {
+      console.error(`Failed to fetch ${id}:`, err);
+    }
+  }
+
+  // Convert to CSV string
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+
+  // Trigger download
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+});
 
   // [13] BOOTSTRAP & DEVICE CHANGE
   document.addEventListener('DOMContentLoaded', () => {
