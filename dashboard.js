@@ -151,22 +151,35 @@
       fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
     ]);
     let lat = 0, lon = 0;
-    try { const g = JSON.parse(gpsA[0].value); lat = g.lat; lon = g.lon; } catch {}
+    try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
     const pick = arr => { const v = arr[0]?.value; const n = parseFloat(v); return isNaN(n) ? null : n; };
-    drawLive({ ts: gpsA[0].created_at, lat, lon,
-      signal: pick(sigA), volt: pick(voltA), speed: pick(spA),
-      nr1: pick(n1A), nr2: pick(n2A), nr3: pick(n3A), iccid: icA[0].value
-    });
+    const live = {
+      ts:    gpsA[0]?.created_at,
+      lat, lon,
+      signal: pick(sigA),
+      volt:   pick(voltA),
+      speed:  pick(spA),
+      nr1:    pick(n1A),
+      nr2:    pick(n2A),
+      nr3:    pick(n3A),
+      iccid:  icA[0]?.value || null
+    };
+    drawLive(live);
+    // append new data points to each chart
+    const timestamp = formatTime12h(live.ts);
     SENSORS.forEach(s => {
-      const val = pick([{ value: data[s.id] }]);
-      s.chart.data.labels.push(formatTime12h(Date.now()));
+      const val = live[s.id];
+      if (val == null) return;
+      s.chart.data.labels.push(timestamp);
       s.chart.data.datasets[0].data.push(val);
       if (s.chart.data.datasets[0].data.length > HIST) {
-        s.chart.data.labels.shift(); s.chart.data.datasets[0].data.shift();
+        s.chart.data.labels.shift();
+        s.chart.data.datasets[0].data.shift();
       }
       s.chart.update();
     });
     setTimeout(poll, POLL_MS);
+  }
   }
 
   // [12] CSV EXPORT (unchanged)
