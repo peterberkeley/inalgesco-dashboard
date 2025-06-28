@@ -1,4 +1,4 @@
-// dashboard.js — Fully hardcoded skycafe-1 through skycafe-24
+// dashboard.js — Hardcoded skycafe-1 through skycafe-24 with working dropdown and data pulls
 (() => {
   // [0] THEME COLORS & SPINNER UTILITIES
   const COLORS = {
@@ -54,12 +54,15 @@
   }
 
   // [5] FETCH UTILITY
-  async function fetchFeed(feedKey, limit = 1, params = {}) {
+  async function fetchFeed(feedKey, limit = 1) {
     const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feedKey}/data`);
     url.searchParams.set('limit', limit);
-    Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
+    console.log('Fetching', url.toString());
     const res = await fetch(url);
-    if (!res.ok) { console.error(`Fetch failed [${feedKey}]:`, res.status); return [];}    
+    if (!res.ok) {
+      console.error(`Fetch failed [${feedKey}]:`, res.status);
+      return [];
+    }
     const json = await res.json();
     return Array.isArray(json) ? json : (Array.isArray(json.data) ? json.data : []);
   }
@@ -87,25 +90,8 @@
           animation: false,
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              enabled: true,
-              backgroundColor: COLORS.card,
-              titleColor: COLORS.text,
-              bodyColor: COLORS.text,
-              borderColor: 'rgba(0,0,0,0.1)',
-              borderWidth: 1,
-              callbacks: {
-                title: items => items[0]?.raw?.fullTime || '',
-                label: ctx => `Value: ${ctx.formattedValue}`
-              }
-            }
-          },
-          scales: {
-            x: { grid: { display: false }, ticks: { color: COLORS.text } },
-            y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: COLORS.text }, grace: '5%' }
-          }
+          plugins: { legend: { display: false } },
+          scales: { x: { grid: { display: false } }, y: { grace: '5%' } }
         }
       });
     });
@@ -124,11 +110,11 @@
 
   // [9] UPDATE HISTORICAL DATA
   async function updateCharts() {
+    console.log('updateCharts for', DEVICE);
     const feeds = getFeeds(DEVICE);
     await Promise.all(SENSORS.map(async s => {
       const rows = await fetchFeed(feeds[s.id], HIST);
       if (!rows.length) return;
-      rows.reverse();
       const labels = rows.map(r => formatTime12h(r.created_at));
       const values = rows.map(r => { const n = parseFloat(r.value); return isNaN(n) ? null : n; });
       s.chart.data.labels = labels;
@@ -143,45 +129,40 @@
     const rows = [
       ['Local Time', new Date(ts).toLocaleString()],
       ['ICCID', iccid || '–'],
-      ['Lat', fmt(lat, 6)],
-      ['Lon', fmt(lon, 6)],
-      ['Speed (km/h)', fmt(speed, 1)],
-      ['RSSI (dBm)', fmt(signal, 0)],
-      ['Volt (mV)', fmt(volt, 2)],
-      ['NR1 °F', fmt(nr1, 1)],
-      ['NR2 °F', fmt(nr2, 1)],
-      ['NR3 °F', fmt(nr3, 1)]
+      ['Lat', fmt(lat, 6)], ['Lon', fmt(lon, 6)],
+      ['Speed (km/h)', fmt(speed, 1)], ['RSSI (dBm)', fmt(signal, 0)],
+      ['Volt (mV)', fmt(volt, 2)], ['NR1 °F', fmt(nr1, 1)],
+      ['NR2 °F', fmt(nr2, 1)], ['NR3 °F', fmt(nr3, 1)]
     ];
-    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
     if (isFinite(lat) && isFinite(lon)) {
-      map.invalidateSize();
-      marker.setLatLng([lat, lon]);
-      trail.push([lat, lon]);
-      if (trail.length > TRAIL) trail.shift();
-      polyline.setLatLngs(trail);
+      marker.setLatLng([lat, lon]); trail.push([lat, lon]);
+      if (trail.length > TRAIL) trail.shift(); polyline.setLatLngs(trail);
       map.setView([lat, lon], Math.max(map.getZoom(), 13));
     }
   }
 
   // [11] POLL LOOP
   async function poll() {
+    console.log('poll for', DEVICE);
     const feeds = getFeeds(DEVICE);
     const [gpsA, sigA, voltA, spA, n1A, n2A, n3A, icA] = await Promise.all([
       fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
       fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
     ]);
     let lat = 0, lon = 0;
-    try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
+    try { const g = JSON.parse(gpsA[0].value); lat = g.lat; lon = g.lon; } catch {}
     const pick = arr => { const v = arr[0]?.value; const n = parseFloat(v); return isNaN(n) ? null : n; };
-    const live = { ts: gpsA[0]?.created_at, lat, lon, signal: pick(sigA), volt: pick(voltA), speed: pick(spA), nr1: pick(n1A), nr2: pick(n2A), nr3: pick(n3A), iccid: icA[0]?.value || null };
-    drawLive(live);
+    drawLive({ ts: gpsA[0].created_at, lat, lon,
+      signal: pick(sigA), volt: pick(voltA), speed: pick(spA),
+      nr1: pick(n1A), nr2: pick(n2A), nr3: pick(n3A), iccid: icA[0].value
+    });
     SENSORS.forEach(s => {
-      const val = live[s.id]; if (val == null) return;
-      s.chart.data.labels.push(formatTime12h(live.ts));
+      const val = pick([{ value: data[s.id] }]);
+      s.chart.data.labels.push(formatTime12h(Date.now()));
       s.chart.data.datasets[0].data.push(val);
       if (s.chart.data.datasets[0].data.length > HIST) {
-        s.chart.data.labels.shift();
-        s.chart.data.datasets[0].data.shift();
+        s.chart.data.labels.shift(); s.chart.data.datasets[0].data.shift();
       }
       s.chart.update();
     });
@@ -189,21 +170,20 @@
   }
 
   // [12] CSV EXPORT (unchanged)
-  document.getElementById('dlBtn').addEventListener('click', async ev => { ev.preventDefault(); /* existing export */ });
+  document.getElementById('dlBtn').addEventListener('click', async ev => { ev.preventDefault(); });
 
   // [13] BOOTSTRAP
   document.addEventListener('DOMContentLoaded', () => {
     const deviceSelect = document.getElementById('deviceSelect');
     DEVICES.forEach(dev => {
       const opt = document.createElement('option');
-      opt.value = dev;
-      opt.text = dev.replace('skycafe-', 'SkyCafé ');
+      opt.value = dev; opt.text = dev.replace('skycafe-', 'SkyCafé ');
       deviceSelect.appendChild(opt);
     });
-    DEVICE = deviceSelect.value;
-    deviceSelect.addEventListener('change', e => { DEVICE = e.target.value; initCharts(); updateCharts(); });
-    showSpinner();
-    initCharts();
-    updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
+    deviceSelect.addEventListener('change', e => {
+      console.log('Device changed to', e.target.value);
+      DEVICE = e.target.value; initCharts(); updateCharts();
+    });
+    showSpinner(); initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
   });
 })();
