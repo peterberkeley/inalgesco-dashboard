@@ -237,7 +237,13 @@ document.getElementById('dlBtn').addEventListener('click', async ev => {
   });
 
   // Convert to CSV string
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+ // Convert to CSV string (escape inner quotes so commas stay inside a cell)
+const csv = rows.map(row =>
+  row.map(cell => {
+    const s = String(cell).replace(/"/g, '""');
+    return `"${s}"`;
+  }).join(',')
+).join('\n');
 
   // Trigger download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
