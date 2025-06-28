@@ -75,13 +75,26 @@
       card.innerHTML = `<h2>${s.label}</h2><canvas></canvas>`;
       ctr.appendChild(card);
       const ctx = card.querySelector('canvas').getContext('2d');
-      s.chart = new Chart(ctx, {
-        type: 'line',
-        data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
-    });
+   s.chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      borderColor: s.col,
+      borderWidth: 2,
+      tension: 0.25
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false }
+    }
   }
+});
+
 
   // [8] INIT MAP
   let map, marker, polyline, trail = [];
