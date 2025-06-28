@@ -1,4 +1,4 @@
-// dashboard.js — Hardcoded skycafe-1 through skycafe-24 with full functionality
+// dashboard.js — supports skycafe-1 through skycafe-24
 (() => {
   // [0] THEME COLORS & SPINNER UTILITIES
   const COLORS = {
@@ -18,7 +18,7 @@
   const HIST    = 50;
   const TRAIL   = 50;
 
-  // [1a] STATIC DEVICE LIST (skycafe-1 through skycafe-24)
+  // [1a] STATIC DEVICE LIST (skycafe-1 … skycafe-24)
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
   let DEVICE = DEVICES[0];
 
@@ -49,7 +49,6 @@
   async function fetchFeed(feedKey, limit = 1) {
     const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feedKey}/data`);
     url.searchParams.set('limit', limit);
-    console.log('Fetching', url.href);
     const res = await fetch(url);
     if (!res.ok) {
       console.error(`Fetch failed [${feedKey}]:`, res.status);
@@ -70,6 +69,7 @@
     const ctr = document.getElementById('charts');
     ctr.innerHTML = '';
     SENSORS.forEach(s => {
+      s.chart = null;
       const card = document.createElement('div');
       card.className = 'chart-box';
       card.innerHTML = `<h2>${s.label}</h2><canvas></canvas>`;
@@ -94,7 +94,6 @@
 
   // [9] UPDATE HISTORICAL DATA
   async function updateCharts() {
-    console.log('Updating historical for', DEVICE);
     const feeds = getFeeds(DEVICE);
     await Promise.all(SENSORS.map(async s => {
       const rows = await fetchFeed(feeds[s.id], HIST);
@@ -119,7 +118,8 @@
       ['Volt (mV)', fmt(volt, 2)], ['NR1 °F', fmt(nr1, 1)],
       ['NR2 °F', fmt(nr2, 1)], ['NR3 °F', fmt(nr3, 1)]
     ];
-    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    document.getElementById('latest').innerHTML =
+      rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
     // map update
     if (isFinite(lat) && isFinite(lon)) {
       marker.setLatLng([lat, lon]);
@@ -130,17 +130,17 @@
     }
   }
 
-  // [11] POLL LOOP
+  // [11] POLL LOOP (runs continuously, always uses the latest DEVICE)
   async function poll() {
-    console.log('Polling live for', DEVICE);
     const feeds = getFeeds(DEVICE);
     const [gpsA, sigA, voltA, spA, n1A, n2A, n3A, icA] = await Promise.all([
       fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
-      fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
+      fetchFeed(feeds.nr1),  fetchFeed(feeds.nr2),   fetchFeed(feeds.nr3),  fetchFeed(feeds.iccid)
     ]);
-    // build live data
-    let lat=0, lon=0;
-    try { const g=JSON.parse(gpsA[0]?.value); lat=g.lat; lon=g.lon; } catch{}
+
+    let lat = 0, lon = 0;
+    try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
+
     const live = {
       ts:    gpsA[0]?.created_at,
       lat, lon,
@@ -152,41 +152,69 @@
       nr3:    parseFloat(n3A[0]?.value) || null,
       iccid:  icA[0]?.value || null
     };
+
     drawLive(live);
-    // append live to charts
+
+    // append to charts
     const tsLabel = formatTime12h(live.ts);
     SENSORS.forEach(s => {
-      const val = live[s.id]; if (val==null) return;
+      const val = live[s.id];
+      if (val == null) return;
       s.chart.data.labels.push(tsLabel);
       s.chart.data.datasets[0].data.push(val);
       if (s.chart.data.labels.length > HIST) {
-        s.chart.data.labels.shift(); s.chart.data.datasets[0].data.shift();
+        s.chart.data.labels.shift();
+        s.chart.data.datasets[0].data.shift();
       }
       s.chart.update();
     });
+
     setTimeout(poll, POLL_MS);
   }
 
   // [12] CSV EXPORT
   document.getElementById('dlBtn').addEventListener('click', async ev => {
     ev.preventDefault();
-    // existing CSV export logic here...
+    // your CSV logic here…
   });
 
-  // [13] BOOTSTRAP
+  // [13] BOOTSTRAP & DEVICE CHANGE
   document.addEventListener('DOMContentLoaded', () => {
-    // populate device dropdown
+    // build device dropdown
     const deviceSelect = document.getElementById('deviceSelect');
     DEVICES.forEach(dev => {
-      const opt = document.createElement('option'); opt.value=dev; opt.text=dev.replace('skycafe-','SkyCafé ');
+      const opt = document.createElement('option');
+      opt.value = dev;
+      opt.text  = dev.replace('skycafe-','SkyCafé ');
       deviceSelect.appendChild(opt);
     });
-    // handle change
+
+    // when user picks a new device:
     deviceSelect.addEventListener('change', e => {
       DEVICE = e.target.value;
-      initCharts(); updateCharts();
+      showSpinner();
+
+      // clear old charts & live table & map trail
+      document.getElementById('latest').innerHTML = '';
+      trail = [];
+      if (polyline) polyline.setLatLngs([]);
+
+      // re-init charts + reload history, then hide spinner
+      initCharts();
+      updateCharts().then(() => {
+        hideSpinner();
+      });
+      // (poll loop will automatically start pulling live from the new DEVICE)
     });
-    // start
-    showSpinner(); initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
+
+    // initial load
+    showSpinner();
+    initCharts();
+    updateCharts()
+      .then(() => {
+        initMap();
+        hideSpinner();
+        poll();
+      });
   });
 })();
