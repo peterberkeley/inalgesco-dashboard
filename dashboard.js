@@ -1,4 +1,4 @@
-// dashboard.js — Fixed NR3 double-conversion; full updateCharts() and poll() replaced
+// dashboard.js — Added ICCID display
 (() => {
   // [0] THEME COLORS & SPINNER UTILS
   const COLORS = {
@@ -18,9 +18,9 @@
   const POLL_MS = 10000;
   const HIST = 50;
   const TRAIL = 50;
-  const lastTs = { nr1: null, nr2: null, nr3: null, signal: null, volt: null, speed: null };
+  const lastTs = { nr1: null, nr2: null, nr3: null, signal: null, volt: null, speed: null, iccid: null };
 
-  // [2] SENSORS
+  // [2] SENSORS & ICCID
   const SENSORS = [
     { id: 'nr1', label: 'NR1 °F',   col: getCSS('--g1', COLORS.primary),   chart: null },
     { id: 'nr2', label: 'NR2 °F',   col: getCSS('--g2', COLORS.secondary), chart: null },
@@ -39,16 +39,16 @@
   // [4] FEEDS
   function getFeeds(device) {
     return {
-      gps: `${device}.gps`, signal: `${device}.signal`, volt: `${device}.volt`,
-      speed: `${device}.speed`, nr1: `${device}.nr1`, nr2: `${device}.nr2`, nr3: `${device}.nr3`
+      gps:    `${device}.gps`,    signal: `${device}.signal`,
+      volt:   `${device}.volt`,   speed:  `${device}.speed`,
+      nr1:    `${device}.nr1`,     nr2:    `${device}.nr2`,
+      nr3:    `${device}.nr3`,     iccid:  `${device}.iccid`
     };
   }
 
   // [5] FETCH UTILITY
   async function fetchFeed(feedKey, limit = 1, params = {}) {
-    const url = new URL(
-      `https://io.adafruit.com/api/v2/${USER}/feeds/${feedKey}/data`
-    );
+    const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feedKey}/data`);
     url.searchParams.set('limit', limit);
     Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v));
     const res = await fetch(url.toString());
@@ -117,7 +117,7 @@
     L.control.scale({ metric: true, imperial: false }).addTo(map);
   }
 
-  // [9] UPDATE HISTORICAL — no NR3 conversion
+  // [9] UPDATE HISTORICAL — no conversion
   async function updateCharts() {
     const feeds = getFeeds(DEVICE);
     await Promise.all(SENSORS.map(async s => {
@@ -135,11 +135,12 @@
     }));
   }
 
-  // [10] DRAW LIVE & APPEND
+  // [10] DRAW LIVE & ICCID & APPEND
   function drawLive(data) {
-    const { ts, lat, lon, signal, volt, speed, nr1, nr2, nr3 } = data;
+    const { ts, lat, lon, signal, volt, speed, nr1, nr2, nr3, iccid } = data;
     document.getElementById('latest').innerHTML =
       [[ 'Local Time', new Date(ts).toLocaleString() ],
+       [ 'ICCID', iccid || '–' ],
        [ 'Lat', fmt(lat, 6) ], [ 'Lon', fmt(lon, 6) ],
        [ 'Speed (km/h)', fmt(speed, 1) ], [ 'RSSI (dBm)', fmt(signal, 0) ], [ 'Volt (mV)', fmt(volt, 2) ],
        [ 'NR1 °F', fmt(nr1, 1) ], [ 'NR2 °F', fmt(nr2, 1) ], [ 'NR3 °F', fmt(nr3, 1) ]
@@ -152,21 +153,22 @@
     }
   }
 
-  // [11] POLL LOOP — no NR3 conversion
+  // [11] POLL LOOP — include ICCID fetch
   async function poll() {
     const feeds = getFeeds(DEVICE);
-    const [gpsA, sA, vA, spA, n1A, n2A, n3A] = await Promise.all([
+    const [gpsA, sA, vA, spA, n1A, n2A, n3A, icA] = await Promise.all([
       fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
-      fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3)
+      fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
     ]);
     let g = { lat: null, lon: null };
     try { if (gpsA[0]?.value) g = JSON.parse(gpsA[0].value); } catch {}
     const pick = arr => { const v = arr[0]?.value, n = parseFloat(v); return (v != null && !isNaN(n)) ? n : null; };
     const live = {
-      ts: gpsA[0]?.created_at,
-      lat: g.lat, lon: g.lon,
+      ts:    gpsA[0]?.created_at,
+      lat:   g.lat, lon: g.lon,
       signal: pick(sA), volt: pick(vA), speed: pick(spA),
-      nr1: pick(n1A), nr2: pick(n2A), nr3: pick(n3A)
+      nr1:   pick(n1A), nr2: pick(n2A), nr3: pick(n3A),
+      iccid: icA[0]?.value || null
     };
     drawLive(live);
     SENSORS.forEach(s => {
