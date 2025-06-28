@@ -111,13 +111,11 @@
     });
   }
 
-  // [8] INIT MAP (continues in next section)
+  // [8] INIT MAP
   let map, marker, polyline, trail = [];
   function initMap() {
     map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© CARTO'
-    }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '© CARTO' }).addTo(map);
     marker = L.marker([0, 0]).addTo(map);
     polyline = L.polyline([], { weight: 3 }).addTo(map);
     L.control.zoom({ position: 'topright' }).addTo(map);
@@ -125,108 +123,79 @@
   }
 
   // [9] UPDATE HISTORICAL DATA
-async function updateCharts() {
-  const feeds = getFeeds(DEVICE);
-  await Promise.all(SENSORS.map(async s => {
-    const rows = await fetchFeed(feeds[s.id], HIST);
-    if (!rows.length) return;
-    rows.reverse();
-    const dataObjs = rows.map(r => ({
-      x: formatTime12h(r.created_at),
-      y: isNaN(parseFloat(r.value)) ? null : +parseFloat(r.value).toFixed(1),
-      fullTime: new Date(r.created_at).toLocaleString()
+  async function updateCharts() {
+    const feeds = getFeeds(DEVICE);
+    await Promise.all(SENSORS.map(async s => {
+      const rows = await fetchFeed(feeds[s.id], HIST);
+      if (!rows.length) return;
+      rows.reverse();
+      // use full objects for chart.js (x, y, fullTime)
+      const dataObjs = rows.map(r => ({ x: formatTime12h(r.created_at), y: parseFloat(r.value) || null, fullTime: r.created_at }));
+      s.chart.data.labels = dataObjs.map(d => d.x);
+      s.chart.data.datasets[0].data = dataObjs;
+      s.chart.update();
     }));
-    s.chart.data.labels = dataObjs.map(d => d.x);
-    s.chart.data.datasets[0].data = dataObjs.map(d => d.y);
-    s.chart.update();
-  }));
-}
-
-// [10] DRAW LIVE & ICCID
-function drawLive(data) {
-  const { ts, lat, lon, signal, volt, speed, nr1, nr2, nr3, iccid } = data;
-  const rows = [
-    ['Local Time', new Date(ts).toLocaleString()],
-    ['ICCID', iccid || '–'],
-    ['Lat', fmt(lat, 6)],
-    ['Lon', fmt(lon, 6)],
-    ['Speed (km/h)', fmt(speed, 1)],
-    ['RSSI (dBm)', fmt(signal, 0)],
-    ['Volt (mV)', fmt(volt, 2)],
-    ['NR1 °F', fmt(nr1, 1)],
-    ['NR2 °F', fmt(nr2, 1)],
-    ['NR3 °F', fmt(nr3, 1)]
-  ];
-  document.getElementById('latest').innerHTML = rows.map(r => `<tr><th class="pr-2 text-left">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
-  if (isFinite(lat) && isFinite(lon)) {
-    map.invalidateSize();
-    marker.setLatLng([lat, lon]);
-    trail.push([lat, lon]);
-    if (trail.length > TRAIL) trail.shift();
-    polyline.setLatLngs(trail);
-    map.setView([lat, lon], Math.max(map.getZoom(), 13));
   }
-}
 
-// [11] POLL LOOP
-async function poll() {
-  const feeds = getFeeds(DEVICE);
-  const [gpsA, sigA, voltA, spA, n1A, n2A, n3A, icA] = await Promise.all([
-    fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
-    fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
-  ]);
-  let lat = 0, lon = 0;
-  try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
-  const pick = arr => { const v = arr[0]?.value; const n = parseFloat(v); return (!isNaN(n) ? n : null); };
-  const live = { ts: gpsA[0]?.created_at, lat, lon, signal: pick(sigA), volt: pick(voltA), speed: pick(spA), nr1: pick(n1A), nr2: pick(n2A), nr3: pick(n3A), iccid: icA[0]?.value || null };
-  drawLive(live);
-  SENSORS.forEach(s => {
-    const val = live[s.id]; if (val == null) return;
-    const obj = { x: formatTime12h(live.ts), y: val, fullTime: new Date(live.ts).toLocaleString() };
-    s.chart.data.labels.push(obj.x);
-    s.chart.data.datasets[0].data.push(obj.y);
-    if (s.chart.data.datasets[0].data.length > HIST) {
-      s.chart.data.labels.shift(); s.chart.data.datasets[0].data.shift();
+  // [10] DRAW LIVE & ICCID
+  function drawLive(data) {
+    const { ts, lat, lon, signal, volt, speed, nr1, nr2, nr3, iccid } = data;
+    const rows = [
+      ['Local Time', new Date(ts).toLocaleString()],
+      ['ICCID', iccid || '–'],
+      ['Lat', fmt(lat, 6)],
+      ['Lon', fmt(lon, 6)],
+      ['Speed (km/h)', fmt(speed, 1)],
+      ['RSSI (dBm)', fmt(signal, 0)],
+      ['Volt (mV)', fmt(volt, 2)],
+      ['NR1 °F', fmt(nr1, 1)],
+      ['NR2 °F', fmt(nr2, 1)],
+      ['NR3 °F', fmt(nr3, 1)]
+    ];
+    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th class=\"pr-2 text-left\">${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    if (isFinite(lat) && isFinite(lon)) {
+      map.invalidateSize(); marker.setLatLng([lat, lon]); trail.push([lat, lon]);
+      if (trail.length > TRAIL) trail.shift(); polyline.setLatLngs(trail);
+      map.setView([lat, lon], Math.max(map.getZoom(), 13));
     }
-    s.chart.update();
+  }
+
+  // [11] POLL LOOP
+  async function poll() {
+    const feeds = getFeeds(DEVICE);
+    const [gpsA, sigA, voltA, spA, n1A, n2A, n3A, icA] = await Promise.all([
+      fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
+      fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
+    ]);
+    let lat=0, lon=0;
+    try { const g = JSON.parse(gpsA[0]?.value); lat=g.lat; lon=g.lon; } catch{}
+    const pick = arr => { const v=arr[0]?.value, n=parseFloat(v); return (!isNaN(n)?n:null); };
+    const live={ts:gpsA[0]?.created_at,lat,lon,signal:pick(sigA),volt:pick(voltA),speed:pick(spA),nr1:pick(n1A),nr2:pick(n2A),nr3:pick(n3A),iccid:icA[0]?.value||null};
+    drawLive(live);
+    SENSORS.forEach(s=>{
+      const val=live[s.id]; if(val==null)return;
+      const obj={x:formatTime12h(live.ts),y:val,fullTime:live.ts};
+      s.chart.data.labels.push(obj.x);
+      s.chart.data.datasets[0].data.push(obj);
+      if(s.chart.data.datasets[0].data.length>HIST){s.chart.data.labels.shift();s.chart.data.datasets[0].data.shift();}
+      s.chart.update();
+    });
+    setTimeout(poll,POLL_MS);
+  }
+
+  // [12] CSV EXPORT (unchanged)
+  document.getElementById('dlBtn').addEventListener('click',async(ev)=>{ev.preventDefault();/* existing export */});
+
+  // [13] BOOTSTRAP
+  document.addEventListener('DOMContentLoaded',()=>{
+    const deviceSelect=document.getElementById('deviceSelect');
+    // populate dropdown
+    DEVICES.forEach(dev=>{const opt=document.createElement('option');opt.value=dev;opt.text=dev.replace('skycafe-','SkyCafé ');deviceSelect.appendChild(opt);});
+    // init DEVICE
+    DEVICE=deviceSelect.value;
+    // change handler
+    deviceSelect.addEventListener('change',e=>{DEVICE=e.target.value;initCharts();updateCharts();});
+    // start
+    showSpinner();initCharts();updateCharts().then(()=>{initMap();hideSpinner();poll();});
   });
-  setTimeout(poll, POLL_MS);
-}
-
-// [12] CSV EXPORT (unchanged)
-document.getElementById('dlBtn').addEventListener('click', async (ev) => {
-  ev.preventDefault();
-  /* ... existing export code ... */
-});
-
-// [13] BOOTSTRAP
-const deviceSelect = document.getElementById('deviceSelect');
-
-// 1) Populate dropdown with full list
-DEVICES.forEach(dev => {
-  const opt = document.createElement('option');
-  opt.value = dev;
-  opt.text  = dev.replace('skycafe-', 'SkyCafé ');
-  deviceSelect.appendChild(opt);
-});
-
-// 2) Initialize DEVICE to first selected
-DEVICE = deviceSelect.value;
-
-// 3) Handle selection changes
-deviceSelect.addEventListener('change', e => {
-  DEVICE = e.target.value;
-  initCharts();
-  updateCharts();
-});
-
-// 4) Kick off on page load
-document.addEventListener('DOMContentLoaded', async () => {
-  showSpinner();
-  initCharts();
-  await updateCharts();
-  initMap();
-  hideSpinner();
-  poll();
-});
 })();
