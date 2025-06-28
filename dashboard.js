@@ -1,4 +1,4 @@
-// dashboard.js — Added ICCID display
+// dashboard.js — Updated to support skycafe-1 through skycafe-24
 (() => {
   // [0] THEME COLORS & SPINNER UTILS
   const COLORS = {
@@ -14,11 +14,14 @@
 
   // [1] CONFIG
   const USER = 'Inalgescodatalogger';
-  let DEVICE = 'skycafe-1';
   const POLL_MS = 10000;
   const HIST = 50;
   const TRAIL = 50;
   const lastTs = { nr1: null, nr2: null, nr3: null, signal: null, volt: null, speed: null, iccid: null };
+
+  // [1a] STATIC DEVICE LIST (skycafe-1 through skycafe-24)
+  const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
+  let DEVICE = DEVICES[0];
 
   // [2] SENSORS & ICCID
   const SENSORS = [
@@ -117,7 +120,7 @@
     L.control.scale({ metric: true, imperial: false }).addTo(map);
   }
 
-  // [9] UPDATE HISTORICAL — no conversion
+  // [9] UPDATE HISTORICAL\  — no conversion
   async function updateCharts() {
     const feeds = getFeeds(DEVICE);
     await Promise.all(SENSORS.map(async s => {
@@ -135,7 +138,7 @@
     }));
   }
 
-  // [10] DRAW LIVE & ICCID & APPEND
+  // [10] DRAW LIVE & ICCID\  & APPEND
   function drawLive(data) {
     const { ts, lat, lon, signal, volt, speed, nr1, nr2, nr3, iccid } = data;
     document.getElementById('latest').innerHTML =
@@ -153,7 +156,7 @@
     }
   }
 
-  // [11] POLL LOOP — include ICCID fetch
+  // [11] POLL LOOP\ — include ICCID fetch
   async function poll() {
     const feeds = getFeeds(DEVICE);
     const [gpsA, sA, vA, spA, n1A, n2A, n3A, icA] = await Promise.all([
@@ -192,6 +195,27 @@
   });
 
   // [13] BOOTSTRAP
-  document.getElementById('deviceSelect').addEventListener('change', e => { DEVICE = e.target.value; initCharts(); updateCharts(); });
-  document.addEventListener('DOMContentLoaded', async () => { showSpinner(); initCharts(); await updateCharts(); initMap(); hideSpinner(); poll(); });
+  const deviceSelect = document.getElementById('deviceSelect');
+  // populate the dropdown
+  DEVICES.forEach(dev => {
+    const opt = document.createElement('option');
+    opt.value = dev;
+    opt.text  = dev.replace('skycafe-', 'SkyCafé ');
+    deviceSelect.appendChild(opt);
+  });
+  // handle change events
+  deviceSelect.addEventListener('change', e => {
+    DEVICE = e.target.value;
+    initCharts();
+    updateCharts();
+  });
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    showSpinner();
+    initCharts();
+    await updateCharts();
+    initMap();
+    hideSpinner();
+    poll();
+  });
 })();
