@@ -75,26 +75,25 @@
       card.innerHTML = `<h2>${s.label}</h2><canvas></canvas>`;
       ctr.appendChild(card);
       const ctx = card.querySelector('canvas').getContext('2d');
-   s.chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [{
-      data: [],
-      borderColor: s.col,
-      borderWidth: 2,
-      tension: 0.25
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false }
-    }
+      s.chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            data: [],
+            borderColor: s.col,
+            borderWidth: 2,
+            tension: 0.25
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } }
+        }
+      });
+    });
   }
-});
-
 
   // [8] INIT MAP
   let map, marker, polyline, trail = [];
@@ -122,7 +121,6 @@
   // [10] DRAW LIVE & ICCID & APPEND
   function drawLive(data) {
     const { ts, lat, lon, signal, volt, speed, nr1, nr2, nr3, iccid } = data;
-    // live table
     const rows = [
       ['Local Time', new Date(ts).toLocaleString()],
       ['ICCID', iccid || '–'],
@@ -133,7 +131,6 @@
     ];
     document.getElementById('latest').innerHTML =
       rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
-    // map update
     if (isFinite(lat) && isFinite(lon)) {
       marker.setLatLng([lat, lon]);
       trail.push([lat, lon]);
@@ -143,17 +140,15 @@
     }
   }
 
-  // [11] POLL LOOP (runs continuously, always uses the latest DEVICE)
+  // [11] POLL LOOP
   async function poll() {
     const feeds = getFeeds(DEVICE);
     const [gpsA, sigA, voltA, spA, n1A, n2A, n3A, icA] = await Promise.all([
       fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
-      fetchFeed(feeds.nr1),  fetchFeed(feeds.nr2),   fetchFeed(feeds.nr3),  fetchFeed(feeds.iccid)
+      fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
     ]);
-
     let lat = 0, lon = 0;
     try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
-
     const live = {
       ts:    gpsA[0]?.created_at,
       lat, lon,
@@ -165,10 +160,7 @@
       nr3:    parseFloat(n3A[0]?.value) || null,
       iccid:  icA[0]?.value || null
     };
-
     drawLive(live);
-
-    // append to charts
     const tsLabel = formatTime12h(live.ts);
     SENSORS.forEach(s => {
       const val = live[s.id];
@@ -181,7 +173,6 @@
       }
       s.chart.update();
     });
-
     setTimeout(poll, POLL_MS);
   }
 
@@ -193,7 +184,6 @@
 
   // [13] BOOTSTRAP & DEVICE CHANGE
   document.addEventListener('DOMContentLoaded', () => {
-    // build device dropdown
     const deviceSelect = document.getElementById('deviceSelect');
     DEVICES.forEach(dev => {
       const opt = document.createElement('option');
@@ -201,33 +191,19 @@
       opt.text  = dev.replace('skycafe-','SkyCafé ');
       deviceSelect.appendChild(opt);
     });
-
-    // when user picks a new device:
     deviceSelect.addEventListener('change', e => {
       DEVICE = e.target.value;
       showSpinner();
-
-      // clear old charts & live table & map trail
       document.getElementById('latest').innerHTML = '';
       trail = [];
       if (polyline) polyline.setLatLngs([]);
-
-      // re-init charts + reload history, then hide spinner
       initCharts();
-      updateCharts().then(() => {
-        hideSpinner();
-      });
-      // (poll loop will automatically start pulling live from the new DEVICE)
+      updateCharts().then(() => { hideSpinner(); });
     });
-
-    // initial load
     showSpinner();
     initCharts();
-    updateCharts()
-      .then(() => {
-        initMap();
-        hideSpinner();
-        poll();
-      });
+    updateCharts().then(() => {
+      initMap(); hideSpinner(); poll();
+    });
   });
 })();
