@@ -28,7 +28,7 @@
     { id: 'nr2',    label: 'NR2 °F',       col: COLORS.secondary, chart: null },
     { id: 'nr3',    label: 'NR3 °F',       col: COLORS.accent,    chart: null },
     { id: 'signal', label: 'RSSI (dBm)',   col: COLORS.text,      chart: null },
-    { id: 'volt',   label: 'Volt (mV)',    col: COLORS.card,      chart: null },
+    { id: 'volt',   label: 'Volt (mV)',    col: '#FF0000',        chart: null },
     { id: 'speed',  label: 'Speed (km/h)', col: COLORS.secondary, chart: null }
   ];
 
