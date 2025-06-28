@@ -78,8 +78,7 @@
     const ctr = document.getElementById('charts');
     ctr.innerHTML = '';
     SENSORS.forEach(s => {
-      const card = document.createElement('div');
-      card.className = 'chart-box';
+      const card = document.createElement('div'); card.className = 'chart-box';
       card.innerHTML = `<h2>${s.label}</h2><canvas></canvas>`;
       ctr.appendChild(card);
       const ctx = card.querySelector('canvas').getContext('2d');
@@ -91,7 +90,8 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: { legend: { display: false } },
-          scales: { x: { grid: { display: false } }, y: { grace: '5%' } }
+          scales: { x: { grid: { display: false }, ticks: { color: COLORS.text } },
+                    y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: COLORS.text }, grace: '5%' } }
         }
       });
     });
@@ -152,34 +152,29 @@
     ]);
     let lat = 0, lon = 0;
     try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
-    const pick = arr => { const v = arr[0]?.value; const n = parseFloat(v); return isNaN(n) ? null : n; };
     const live = {
       ts:    gpsA[0]?.created_at,
       lat, lon,
-      signal: pick(sigA),
-      volt:   pick(voltA),
-      speed:  pick(spA),
-      nr1:    pick(n1A),
-      nr2:    pick(n2A),
-      nr3:    pick(n3A),
+      signal: parseFloat(sigA[0]?.value) || null,
+      volt:   parseFloat(voltA[0]?.value) || null,
+      speed:  parseFloat(spA[0]?.value) || null,
+      nr1:    parseFloat(n1A[0]?.value) || null,
+      nr2:    parseFloat(n2A[0]?.value) || null,
+      nr3:    parseFloat(n3A[0]?.value) || null,
       iccid:  icA[0]?.value || null
     };
     drawLive(live);
-    // append new data points to each chart
     const timestamp = formatTime12h(live.ts);
     SENSORS.forEach(s => {
-      const val = live[s.id];
-      if (val == null) return;
+      const val = live[s.id]; if (val == null) return;
       s.chart.data.labels.push(timestamp);
       s.chart.data.datasets[0].data.push(val);
       if (s.chart.data.datasets[0].data.length > HIST) {
-        s.chart.data.labels.shift();
-        s.chart.data.datasets[0].data.shift();
+        s.chart.data.labels.shift(); s.chart.data.datasets[0].data.shift();
       }
       s.chart.update();
     });
     setTimeout(poll, POLL_MS);
-  }
   }
 
   // [12] CSV EXPORT (unchanged)
@@ -189,14 +184,9 @@
   document.addEventListener('DOMContentLoaded', () => {
     const deviceSelect = document.getElementById('deviceSelect');
     DEVICES.forEach(dev => {
-      const opt = document.createElement('option');
-      opt.value = dev; opt.text = dev.replace('skycafe-', 'SkyCafé ');
-      deviceSelect.appendChild(opt);
+      const opt = document.createElement('option'); opt.value = dev; opt.text = dev.replace('skycafe-', 'SkyCafé '); deviceSelect.appendChild(opt);
     });
-    deviceSelect.addEventListener('change', e => {
-      console.log('Device changed to', e.target.value);
-      DEVICE = e.target.value; initCharts(); updateCharts();
-    });
+    deviceSelect.addEventListener('change', e => { console.log('Device changed to', e.target.value); DEVICE = e.target.value; initCharts(); updateCharts(); });
     showSpinner(); initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
   });
 })();
