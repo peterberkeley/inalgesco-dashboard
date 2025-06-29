@@ -12,7 +12,7 @@
   function hideSpinner() { spinner.style.display = 'none'; }
 
   // [1] CONFIG
-  const UBIDOTS_TOKEN = "YOUR_UBIDOTS_TOKEN_HERE"; // <--- REPLACE THIS with your real Ubidots token!
+  const UBIDOTS_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
   const POLL_MS = 10000;
   const HIST    = 50;
   const TRAIL   = 50;
