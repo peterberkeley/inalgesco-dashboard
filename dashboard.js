@@ -155,9 +155,17 @@
     ]);
     let lat = null, lon = null;
 try {
-  if (gpsA[0] && gpsA[0].context) {
-    lat = parseFloat(gpsA[0].context.lat);
-    lon = parseFloat(gpsA[0].context.lng);
+  if (gpsA[0]) {
+    console.log('gpsA[0]:', gpsA[0]);
+    if (gpsA[0].context) {
+      lat = parseFloat(gpsA[0].context.lat);
+      lon = parseFloat(gpsA[0].context.lng);
+      console.log('PARSED lat:', lat, 'lon:', lon);
+    } else {
+      console.log('gpsA[0] does not have context:', gpsA[0]);
+    }
+  } else {
+    console.log('gpsA[0] is undefined or empty:', gpsA);
   }
 } catch (e) {
   console.error('Error parsing GPS context:', e, gpsA[0]);
