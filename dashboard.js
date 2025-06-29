@@ -17,7 +17,12 @@
   function hideSpinner() { spinner.style.display = 'none'; }
 
   // [1] CONFIG
-  const UBIDOTS_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
+  // TOKEN MAP: Use correct token per device
+  const DEVICE_TOKENS = {
+    "skycafe-1": "BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8",
+    "skycafe-2": "BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P"
+    // add more as needed
+  };
   const POLL_MS = 10000;
   const HIST    = 50;
   const TRAIL   = 50;
@@ -41,8 +46,10 @@
     let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${device}/${variable}/values?page_size=${limit}`;
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end)   url += `&end=${encodeURIComponent(end)}`;
+    // Use token based on current device, fallback to previous if unknown
+    const token = DEVICE_TOKENS[device] || "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
     const res = await fetch(url, {
-      headers: { "X-Auth-Token": UBIDOTS_TOKEN }
+      headers: { "X-Auth-Token": token }
     });
     if (!res.ok) return [];
     const json = await res.json();
@@ -176,12 +183,12 @@
     }
 
     const localStart = new Date(startInput);
-const localEnd = new Date(endInput);
-// Subtract 1 hour (3600 * 1000 ms) if you are at UTC+1
-localStart.setHours(localStart.getHours() - 1);
-localEnd.setHours(localEnd.getHours() - 1);
-const startISO = localStart.toISOString();
-const endISO = localEnd.toISOString();
+    const localEnd = new Date(endInput);
+    // Subtract 1 hour (3600 * 1000 ms) if you are at UTC+1
+    localStart.setHours(localStart.getHours() - 1);
+    localEnd.setHours(localEnd.getHours() - 1);
+    const startISO = localStart.toISOString();
+    const endISO = localEnd.toISOString();
 
     const csvFields = [
       "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
@@ -196,10 +203,10 @@ const endISO = localEnd.toISOString();
     ]);
 
     console.log("gpsList", gpsList);
-console.log("iccidList", iccidList);
-sensorLists.forEach((list, i) => {
-  console.log("Sensor", SENSORS[i].id, list);
-});
+    console.log("iccidList", iccidList);
+    sensorLists.forEach((list, i) => {
+      console.log("Sensor", SENSORS[i].id, list);
+    });
 
     // DEBUG OUTPUT: Print what is being fetched!
     console.log('CSV EXPORT DEBUG');
