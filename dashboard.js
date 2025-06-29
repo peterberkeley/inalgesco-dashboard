@@ -174,7 +174,7 @@
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] CSV EXPORT — full days only
+  // [12] CSV EXPORT — full days, ISO string for API range!
   document.getElementById('dlBtn').addEventListener('click', async ev => {
     ev.preventDefault();
 
@@ -184,24 +184,22 @@
       return alert('Please set both a start and end date.');
     }
 
-    // Parse start date at 00:00:00.000 local time
+    // Use full-day UTC ISO strings
     const localStart = new Date(startInput + 'T00:00:00');
-    // Parse end date at 23:59:59.999 local time
     const localEnd = new Date(endInput + 'T23:59:59.999');
-
-    const startMillis = localStart.getTime();
-    const endMillis = localEnd.getTime();
+    const startISO = localStart.toISOString();
+    const endISO = localEnd.toISOString();
 
     const csvFields = [
       "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
       ...SENSORS.map(s => s.id)
     ];
 
-    // Fetch all variable histories using milliseconds since epoch
+    // Fetch all variable histories using ISO strings
     const [gpsList, iccidList, ...sensorLists] = await Promise.all([
-      fetchUbidotsVar(DEVICE, 'gps', 1000, startMillis, endMillis),
-      fetchUbidotsVar(DEVICE, 'iccid', 1000, startMillis, endMillis),
-      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startMillis, endMillis))
+      fetchUbidotsVar(DEVICE, 'gps', 1000, startISO, endISO),
+      fetchUbidotsVar(DEVICE, 'iccid', 1000, startISO, endISO),
+      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startISO, endISO))
     ]);
 
     // Build a timestamp-indexed data map
