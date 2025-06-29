@@ -1,4 +1,3 @@
-// dashboard.js — supports skycafe-1 through skycafe-24
 (() => {
   // [0] THEME COLORS & SPINNER UTILITIES
   const COLORS = {
@@ -13,7 +12,7 @@
   function hideSpinner() { spinner.style.display = 'none'; }
 
   // [1] CONFIG
-  const USER    = 'Inalgescodatalogger';
+  const UBIDOTS_TOKEN = "YOUR_UBIDOTS_TOKEN_HERE"; // <--- REPLACE THIS with your real Ubidots token!
   const POLL_MS = 10000;
   const HIST    = 50;
   const TRAIL   = 50;
@@ -38,24 +37,27 @@
       .getPropertyValue(varName) || '').trim() || fallback;
   }
 
-  // [4] FEED KEYS
+  // [4] FEED KEYS (for compatibility, not actually used in API)
   function getFeeds(device) {
-    const feeds = { gps: `${device}.gps`, iccid: `${device}.iccid` };
-    SENSORS.forEach(s => feeds[s.id] = `${device}.${s.id}`);
+    const feeds = { gps: `gps`, iccid: `iccid` };
+    SENSORS.forEach(s => feeds[s.id] = s.id);
     return feeds;
   }
 
-  // [5] FETCH UTILITY
-  async function fetchFeed(feedKey, limit = 1) {
-    const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feedKey}/data`);
-    url.searchParams.set('limit', limit);
-    const res = await fetch(url);
+  // [5] FETCH UTILITY — Ubidots
+  async function fetchUbidotsVar(device, variable, limit = 1, start = null, end = null) {
+    let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${device}/${variable}/values?page_size=${limit}`;
+    if (start) url += `&start=${encodeURIComponent(start)}`;
+    if (end)   url += `&end=${encodeURIComponent(end)}`;
+    const res = await fetch(url, {
+      headers: { "X-Auth-Token": UBIDOTS_TOKEN }
+    });
     if (!res.ok) {
-      console.error(`Fetch failed [${feedKey}]:`, res.status);
+      console.error(`Failed to fetch ${device}/${variable}:`, res.status);
       return [];
     }
-    const data = await res.json();
-    return Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+    const json = await res.json();
+    return json.results || [];
   }
 
   // [6] FORMAT HELPERS
@@ -106,9 +108,8 @@
 
   // [9] UPDATE HISTORICAL DATA
   async function updateCharts() {
-    const feeds = getFeeds(DEVICE);
     await Promise.all(SENSORS.map(async s => {
-      const rows = await fetchFeed(feeds[s.id], HIST);
+      const rows = await fetchUbidotsVar(DEVICE, s.id, HIST);
       if (!rows.length) return;
       const labels = rows.map(r => formatTime12h(r.created_at));
       const values = rows.map(r => parseFloat(r.value) || null);
@@ -142,13 +143,24 @@
 
   // [11] POLL LOOP
   async function poll() {
-    const feeds = getFeeds(DEVICE);
+    // Fetch latest value for each variable from Ubidots
     const [gpsA, sigA, voltA, spA, n1A, n2A, n3A, icA] = await Promise.all([
-      fetchFeed(feeds.gps), fetchFeed(feeds.signal), fetchFeed(feeds.volt), fetchFeed(feeds.speed),
-      fetchFeed(feeds.nr1), fetchFeed(feeds.nr2), fetchFeed(feeds.nr3), fetchFeed(feeds.iccid)
+      fetchUbidotsVar(DEVICE, 'gps'),
+      fetchUbidotsVar(DEVICE, 'signal'),
+      fetchUbidotsVar(DEVICE, 'volt'),
+      fetchUbidotsVar(DEVICE, 'speed'),
+      fetchUbidotsVar(DEVICE, 'nr1'),
+      fetchUbidotsVar(DEVICE, 'nr2'),
+      fetchUbidotsVar(DEVICE, 'nr3'),
+      fetchUbidotsVar(DEVICE, 'iccid')
     ]);
     let lat = 0, lon = 0;
-    try { const g = JSON.parse(gpsA[0]?.value); lat = g.lat; lon = g.lon; } catch {}
+    try {
+      const g = gpsA[0] && (typeof gpsA[0].value === 'string'
+        ? JSON.parse(gpsA[0].value)
+        : gpsA[0].value);
+      lat = g.lat; lon = g.lon;
+    } catch {}
     const live = {
       ts:    gpsA[0]?.created_at,
       lat, lon,
@@ -176,83 +188,74 @@
     setTimeout(poll, POLL_MS);
   }
 
-// [12] CSV EXPORT
-document.getElementById('dlBtn').addEventListener('click', async ev => {
-  ev.preventDefault();
+  // [12] CSV EXPORT
+  document.getElementById('dlBtn').addEventListener('click', async ev => {
+    ev.preventDefault();
 
-  let startInput = document.getElementById('start').value;
-  let endInput   = document.getElementById('end').value;
-  if (!startInput || !endInput) {
-    return alert('Please set both a start and end date/time.');
-  }
-
-  // Convert to ISO for the API
-  const startISO = new Date(startInput).toISOString();
-  const endISO   = new Date(endInput).toISOString();
-
-  // Build list of all feed IDs
-  const feeds  = getFeeds(DEVICE);
-  const allIds = ['gps','iccid', ...SENSORS.map(s => s.id)];
-
-  // Fetch each feed and assemble into a timestamp-indexed map
-  const dataMap = {};  // { timestamp: { feedId: value, … }, … }
-  for (const id of allIds) {
-    const url = new URL(`https://io.adafruit.com/api/v2/${USER}/feeds/${feeds[id]}/data`);
-    url.searchParams.set('start_time', startISO);
-    url.searchParams.set('end_time',   endISO);
-    url.searchParams.set('limit',      1000);
-
-    try {
-      const res  = await fetch(url);
-      const body = await res.json();
-      const list = Array.isArray(body) ? body : (Array.isArray(body.data) ? body.data : []);
-      list.forEach(d => {
-        const ts = d.created_at;
-        if (!dataMap[ts]) dataMap[ts] = {};
-        dataMap[ts][id] = d.value;
-      });
-    } catch (err) {
-      console.error(`Failed to fetch ${id}:`, err);
+    let startInput = document.getElementById('start').value;
+    let endInput   = document.getElementById('end').value;
+    if (!startInput || !endInput) {
+      return alert('Please set both a start and end date/time.');
     }
-  }
 
-  // Build rows: header + one row per timestamp
-  const rows       = [];
-  const timestamps = Object.keys(dataMap).sort();
-  const header     = ['Date','Time', ...allIds];
-  rows.push(header);
+    // Convert to ISO for the API
+    const startISO = new Date(startInput).toISOString();
+    const endISO   = new Date(endInput).toISOString();
 
-  timestamps.forEach(ts => {
-    const dt   = new Date(ts);
-    const date = dt.toLocaleDateString();
-    const time = dt.toLocaleTimeString();
-    const row  = [
-      date,
-      time,
-      ...allIds.map(id => dataMap[ts][id] ?? '')
-    ];
-    rows.push(row);
+    // Build list of all variable IDs
+    const allIds = ['gps','iccid', ...SENSORS.map(s => s.id)];
+    // Fetch each variable from Ubidots
+    const dataMap = {};  // { timestamp: { varId: value, … }, … }
+    for (const id of allIds) {
+      try {
+        const data = await fetchUbidotsVar(DEVICE, id, 1000, startISO, endISO);
+        data.forEach(d => {
+          const ts = d.created_at;
+          if (!dataMap[ts]) dataMap[ts] = {};
+          dataMap[ts][id] = d.value;
+        });
+      } catch (err) {
+        console.error(`Failed to fetch ${id}:`, err);
+      }
+    }
+
+    // Build rows: header + one row per timestamp
+    const rows       = [];
+    const timestamps = Object.keys(dataMap).sort();
+    const header     = ['Date','Time', ...allIds];
+    rows.push(header);
+
+    timestamps.forEach(ts => {
+      const dt   = new Date(ts);
+      const date = dt.toLocaleDateString();
+      const time = dt.toLocaleTimeString();
+      const row  = [
+        date,
+        time,
+        ...allIds.map(id => dataMap[ts][id] ?? '')
+      ];
+      rows.push(row);
+    });
+
+    // Convert to semicolon-delimited CSV string, escaping inner quotes
+    const sepLine = 'sep=;\n';
+    const body = rows.map(row =>
+      row.map(cell => {
+        const s = String(cell).replace(/"/g, '""');
+        return `"${s}"`;
+      }).join(';')
+    ).join('\n');
+    const csv = sepLine + body;
+
+    // Trigger download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href     = URL.createObjectURL(blob);
+    link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   });
-
-  // Convert to semicolon-delimited CSV string, escaping inner quotes
-  const sepLine = 'sep=;\n';
-  const body = rows.map(row =>
-    row.map(cell => {
-      const s = String(cell).replace(/"/g, '""');
-      return `"${s}"`;
-    }).join(';')
-  ).join('\n');
-  const csv = sepLine + body;
-
-  // Trigger download
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href     = URL.createObjectURL(blob);
-  link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-});
 
   // [13] BOOTSTRAP & DEVICE CHANGE
   document.addEventListener('DOMContentLoaded', () => {
