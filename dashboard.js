@@ -195,6 +195,12 @@ const endISO = localEnd.toISOString();
       ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startISO, endISO))
     ]);
 
+    console.log("gpsList", gpsList);
+console.log("iccidList", iccidList);
+sensorLists.forEach((list, i) => {
+  console.log("Sensor", SENSORS[i].id, list);
+});
+
     // DEBUG OUTPUT: Print what is being fetched!
     console.log('CSV EXPORT DEBUG');
     console.log('DEVICE:', DEVICE);
