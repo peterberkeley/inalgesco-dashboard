@@ -153,19 +153,16 @@
       fetchUbidotsVar(DEVICE, 'nr3'),
       fetchUbidotsVar(DEVICE, 'iccid')
     ]);
-    let lat = 0, lon = 0;
+    let lat = null, lon = null;
 try {
-  const g = gpsA[0] && (typeof gpsA[0].value === 'string'
-    ? JSON.parse(gpsA[0].value)
-    : gpsA[0].value);
-  // For Ubidots, lat/lng are inside context object
-  if (g && g.context) {
-    lat = g.context.lat;
-    lon = g.context.lng; // <-- Use .lng here!
+  if (gpsA[0] && gpsA[0].context) {
+    lat = parseFloat(gpsA[0].context.lat);
+    lon = parseFloat(gpsA[0].context.lng);
   }
 } catch (e) {
   console.error('Error parsing GPS context:', e, gpsA[0]);
 }
+
     const live = {
       ts:    gpsA[0]?.created_at,
       lat, lon,
