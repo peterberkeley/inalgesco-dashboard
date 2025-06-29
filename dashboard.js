@@ -277,14 +277,17 @@ try {
       deviceSelect.appendChild(opt);
     });
     deviceSelect.addEventListener('change', e => {
-      DEVICE = e.target.value;
-      showSpinner();
-      document.getElementById('latest').innerHTML = '';
-      trail = [];
-      if (polyline) polyline.setLatLngs([]);
-      initCharts();
-      updateCharts().then(() => { hideSpinner(); });
-    });
+  DEVICE = e.target.value;
+  showSpinner();
+  document.getElementById('latest').innerHTML = '';
+  trail = [];
+  if (polyline) polyline.setLatLngs([]);
+  initCharts();
+  updateCharts().then(() => { 
+    hideSpinner();
+    poll(); // <--- THIS LINE IS NEW! Forces the dashboard to get new live data for the new device.
+  });
+});
     showSpinner();
     initCharts();
     updateCharts().then(() => {
