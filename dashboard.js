@@ -17,7 +17,6 @@
   function hideSpinner() { spinner.style.display = 'none'; }
 
   // [1] CONFIG
-  // TOKEN MAP: Use correct token per device
   const DEVICE_TOKENS = {
     "skycafe-1": "BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8",
     "skycafe-2": "BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P"
@@ -46,7 +45,6 @@
     let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${device}/${variable}/values?page_size=${limit}`;
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end)   url += `&end=${encodeURIComponent(end)}`;
-    // Use token based on current device, fallback to previous if unknown
     const token = DEVICE_TOKENS[device] || "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
     try {
       const res = await fetch(url, {
@@ -144,7 +142,6 @@
 
   // [11] POLL LOOP — Fetch live values from Ubidots for all fields
   async function poll() {
-    // Fetch latest value for each variable from Ubidots
     const [gpsArr, iccArr, ...sensorArrs] = await Promise.all([
       fetchUbidotsVar(DEVICE, 'gps'),
       fetchUbidotsVar(DEVICE, 'iccid'),
@@ -173,14 +170,11 @@
     let nr2    = (nr2Arr.length && nr2Arr[0].value) ? nr2Arr[0].value : null;
     let nr3    = (nr3Arr.length && nr3Arr[0].value) ? nr3Arr[0].value : null;
 
-    // Show in live table/map
     drawLive({ ts, iccid, lat, lon, speed, signal, volt, nr1, nr2, nr3 });
-
-    // Schedule next poll
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] CSV EXPORT — with debug output!
+  // [12] CSV EXPORT — with correct time format!
   document.getElementById('dlBtn').addEventListener('click', async ev => {
     ev.preventDefault();
 
@@ -192,24 +186,25 @@
 
     const localStart = new Date(startInput);
     const localEnd = new Date(endInput);
-    // Do NOT subtract any hours!
-    const startISO = localStart.toISOString();
-    const endISO = localEnd.toISOString();
+
+    // Use milliseconds since epoch for Ubidots API!
+    const startMillis = localStart.getTime();
+    const endMillis = localEnd.getTime();
 
     const csvFields = [
       "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
       ...SENSORS.map(s => s.id)
     ];
 
-    // Fetch all variable histories
+    // Fetch all variable histories using milliseconds since epoch
     const [gpsList, iccidList, ...sensorLists] = await Promise.all([
-      fetchUbidotsVar(DEVICE, 'gps', 1000, startISO, endISO),
-      fetchUbidotsVar(DEVICE, 'iccid', 1000, startISO, endISO),
-      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startISO, endISO))
+      fetchUbidotsVar(DEVICE, 'gps', 1000, startMillis, endMillis),
+      fetchUbidotsVar(DEVICE, 'iccid', 1000, startMillis, endMillis),
+      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startMillis, endMillis))
     ]);
 
     // DEBUG LOGS!
-    console.log('Fetching with:', DEVICE, startISO, endISO);
+    console.log('Fetching with:', DEVICE, startMillis, endMillis);
     console.log("gpsList", gpsList);
     console.log("iccidList", iccidList);
     sensorLists.forEach((list, i) => {
@@ -295,7 +290,6 @@
       opt.text  = dev.replace('skycafe-','SkyCafé ');
       deviceSelect.appendChild(opt);
     });
-    // Set the correct device if you have only one!
     deviceSelect.value = DEVICE;
     deviceSelect.addEventListener('change', e => {
       DEVICE = e.target.value;
@@ -306,7 +300,7 @@
       initCharts();
       updateCharts().then(() => { 
         hideSpinner();
-        poll(); // Key: always poll live data for new device!
+        poll();
       });
     });
     showSpinner();
