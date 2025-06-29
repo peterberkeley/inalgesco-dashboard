@@ -174,20 +174,21 @@
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] CSV EXPORT — with correct time format!
+  // [12] CSV EXPORT — full days only
   document.getElementById('dlBtn').addEventListener('click', async ev => {
     ev.preventDefault();
 
-    let startInput = document.getElementById('start').value;
+    let startInput = document.getElementById('start').value; // e.g. "2025-06-29"
     let endInput   = document.getElementById('end').value;
     if (!startInput || !endInput) {
-      return alert('Please set both a start and end date/time.');
+      return alert('Please set both a start and end date.');
     }
 
-    const localStart = new Date(startInput);
-    const localEnd = new Date(endInput);
+    // Parse start date at 00:00:00.000 local time
+    const localStart = new Date(startInput + 'T00:00:00');
+    // Parse end date at 23:59:59.999 local time
+    const localEnd = new Date(endInput + 'T23:59:59.999');
 
-    // Use milliseconds since epoch for Ubidots API!
     const startMillis = localStart.getTime();
     const endMillis = localEnd.getTime();
 
@@ -202,14 +203,6 @@
       fetchUbidotsVar(DEVICE, 'iccid', 1000, startMillis, endMillis),
       ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startMillis, endMillis))
     ]);
-
-    // DEBUG LOGS!
-    console.log('Fetching with:', DEVICE, startMillis, endMillis);
-    console.log("gpsList", gpsList);
-    console.log("iccidList", iccidList);
-    sensorLists.forEach((list, i) => {
-      console.log("Sensor", SENSORS[i].id, list);
-    });
 
     // Build a timestamp-indexed data map
     const dataMap = {};
@@ -243,8 +236,6 @@
 
     // Build rows
     const timestamps = Object.keys(dataMap).sort();
-    console.log('All CSV timestamps:', timestamps);
-
     const rows = [csvFields];
     timestamps.forEach(ts => {
       const dt = new Date(ts);
