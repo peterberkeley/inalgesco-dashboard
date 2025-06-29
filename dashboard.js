@@ -165,7 +165,7 @@
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] CSV EXPORT — fixed for GPS context!
+  // [12] CSV EXPORT — with debug output!
   document.getElementById('dlBtn').addEventListener('click', async ev => {
     ev.preventDefault();
 
@@ -178,7 +178,6 @@
     const startISO = new Date(startInput).toISOString();
     const endISO   = new Date(endInput).toISOString();
 
-    // Adjust fields for CSV
     const csvFields = [
       "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
       ...SENSORS.map(s => s.id)
@@ -190,6 +189,16 @@
       fetchUbidotsVar(DEVICE, 'iccid', 1000, startISO, endISO),
       ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startISO, endISO))
     ]);
+
+    // DEBUG OUTPUT: Print what is being fetched!
+    console.log('CSV EXPORT DEBUG');
+    console.log('DEVICE:', DEVICE);
+    console.log('Start:', startISO, 'End:', endISO);
+    console.log('gpsList:', gpsList);
+    console.log('iccidList:', iccidList);
+    sensorLists.forEach((arr, idx) => {
+      console.log(`sensor ${SENSORS[idx].id}:`, arr);
+    });
 
     // Build a timestamp-indexed data map
     const dataMap = {};
@@ -223,6 +232,8 @@
 
     // Build rows
     const timestamps = Object.keys(dataMap).sort();
+    console.log('All CSV timestamps:', timestamps);
+
     const rows = [csvFields];
     timestamps.forEach(ts => {
       const dt = new Date(ts);
