@@ -184,9 +184,7 @@
 
     const localStart = new Date(startInput);
     const localEnd = new Date(endInput);
-    // Subtract 1 hour (3600 * 1000 ms) if you are at UTC+1
-    localStart.setHours(localStart.getHours() - 1);
-    localEnd.setHours(localEnd.getHours() - 1);
+    // DO NOT SUBTRACT HOURS!
     const startISO = localStart.toISOString();
     const endISO = localEnd.toISOString();
 
@@ -202,20 +200,12 @@
       ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startISO, endISO))
     ]);
 
+    // DEBUG LOGS!
+    console.log('Fetching with:', DEVICE, startISO, endISO);
     console.log("gpsList", gpsList);
     console.log("iccidList", iccidList);
     sensorLists.forEach((list, i) => {
       console.log("Sensor", SENSORS[i].id, list);
-    });
-
-    // DEBUG OUTPUT: Print what is being fetched!
-    console.log('CSV EXPORT DEBUG');
-    console.log('DEVICE:', DEVICE);
-    console.log('Start:', startISO, 'End:', endISO);
-    console.log('gpsList:', gpsList);
-    console.log('iccidList:', iccidList);
-    sensorLists.forEach((arr, idx) => {
-      console.log(`sensor ${SENSORS[idx].id}:`, arr);
     });
 
     // Build a timestamp-indexed data map
@@ -274,47 +264,4 @@
     // CSV encode
     const sepLine = 'sep=;\n';
     const body = rows.map(row =>
-      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';')
-    ).join('\n');
-    const csv = sepLine + body;
-
-    // Trigger download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href     = URL.createObjectURL(blob);
-    link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  });
-
-  // [13] BOOTSTRAP & DEVICE CHANGE
-  document.addEventListener('DOMContentLoaded', () => {
-    const deviceSelect = document.getElementById('deviceSelect');
-    DEVICES.forEach(dev => {
-      const opt = document.createElement('option');
-      opt.value = dev;
-      opt.text  = dev.replace('skycafe-','SkyCafé ');
-      deviceSelect.appendChild(opt);
-    });
-    // Set the correct device if you have only one!
-    deviceSelect.value = DEVICE;
-    deviceSelect.addEventListener('change', e => {
-      DEVICE = e.target.value;
-      showSpinner();
-      document.getElementById('latest').innerHTML = '';
-      trail = [];
-      if (polyline) polyline.setLatLngs([]);
-      initCharts();
-      updateCharts().then(() => { 
-        hideSpinner();
-        poll(); // Key: always poll live data for new device!
-      });
-    });
-    showSpinner();
-    initCharts();
-    updateCharts().then(() => {
-      initMap(); hideSpinner(); poll();
-    });
-  });
-})();
+      row.map(cell => `"${String(cell).replace(/"/g
