@@ -48,12 +48,20 @@
     if (end)   url += `&end=${encodeURIComponent(end)}`;
     // Use token based on current device, fallback to previous if unknown
     const token = DEVICE_TOKENS[device] || "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
-    const res = await fetch(url, {
-      headers: { "X-Auth-Token": token }
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    return json.results || [];
+    try {
+      const res = await fetch(url, {
+        headers: { "X-Auth-Token": token }
+      });
+      if (!res.ok) {
+        console.error(`Fetch failed for ${url}:`, res.status, res.statusText);
+        return [];
+      }
+      const json = await res.json();
+      return json.results || [];
+    } catch (e) {
+      console.error(`Fetch threw error for ${url}:`, e);
+      return [];
+    }
   }
 
   // [6] FORMAT HELPERS
@@ -183,10 +191,10 @@
     }
 
     const localStart = new Date(startInput);
-const localEnd = new Date(endInput);
-// Do NOT subtract any hours!
-const startISO = localStart.toISOString();
-const endISO = localEnd.toISOString();
+    const localEnd = new Date(endInput);
+    // Do NOT subtract any hours!
+    const startISO = localStart.toISOString();
+    const endISO = localEnd.toISOString();
 
     const csvFields = [
       "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
@@ -264,4 +272,47 @@ const endISO = localEnd.toISOString();
     // CSV encode
     const sepLine = 'sep=;\n';
     const body = rows.map(row =>
-      row.map(cell => `"${String(cell).replace(/"/g
+      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';')
+    ).join('\n');
+    const csv = sepLine + body;
+
+    // Trigger download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href     = URL.createObjectURL(blob);
+    link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+
+  // [13] BOOTSTRAP & DEVICE CHANGE
+  document.addEventListener('DOMContentLoaded', () => {
+    const deviceSelect = document.getElementById('deviceSelect');
+    DEVICES.forEach(dev => {
+      const opt = document.createElement('option');
+      opt.value = dev;
+      opt.text  = dev.replace('skycafe-','SkyCafé ');
+      deviceSelect.appendChild(opt);
+    });
+    // Set the correct device if you have only one!
+    deviceSelect.value = DEVICE;
+    deviceSelect.addEventListener('change', e => {
+      DEVICE = e.target.value;
+      showSpinner();
+      document.getElementById('latest').innerHTML = '';
+      trail = [];
+      if (polyline) polyline.setLatLngs([]);
+      initCharts();
+      updateCharts().then(() => { 
+        hideSpinner();
+        poll(); // Key: always poll live data for new device!
+      });
+    });
+    showSpinner();
+    initCharts();
+    updateCharts().then(() => {
+      initMap(); hideSpinner(); poll();
+    });
+  });
+})();
