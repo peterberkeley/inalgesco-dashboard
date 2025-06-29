@@ -183,10 +183,10 @@
     }
 
     const localStart = new Date(startInput);
-    const localEnd = new Date(endInput);
-    // DO NOT SUBTRACT HOURS!
-    const startISO = localStart.toISOString();
-    const endISO = localEnd.toISOString();
+const localEnd = new Date(endInput);
+// Do NOT subtract any hours!
+const startISO = localStart.toISOString();
+const endISO = localEnd.toISOString();
 
     const csvFields = [
       "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
