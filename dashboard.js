@@ -175,8 +175,13 @@
       return alert('Please set both a start and end date/time.');
     }
 
-    const startISO = new Date(startInput).toISOString();
-    const endISO   = new Date(endInput).toISOString();
+    const localStart = new Date(startInput);
+const localEnd = new Date(endInput);
+// Subtract 1 hour (3600 * 1000 ms) if you are at UTC+1
+localStart.setHours(localStart.getHours() - 1);
+localEnd.setHours(localEnd.getHours() - 1);
+const startISO = localStart.toISOString();
+const endISO = localEnd.toISOString();
 
     const csvFields = [
       "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
