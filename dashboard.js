@@ -10,7 +10,6 @@
   const spinner = document.getElementById('spinner');
   function showSpinner() { spinner.style.display = 'block'; }
   function hideSpinner() { spinner.style.display = 'none'; }
-
   // [1] CONFIG
   const UBIDOTS_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
   const POLL_MS = 10000;
@@ -155,12 +154,18 @@
       fetchUbidotsVar(DEVICE, 'iccid')
     ]);
     let lat = 0, lon = 0;
-    try {
-      const g = gpsA[0] && (typeof gpsA[0].value === 'string'
-        ? JSON.parse(gpsA[0].value)
-        : gpsA[0].value);
-      lat = g.lat; lon = g.lon;
-    } catch {}
+try {
+  const g = gpsA[0] && (typeof gpsA[0].value === 'string'
+    ? JSON.parse(gpsA[0].value)
+    : gpsA[0].value);
+  // For Ubidots, lat/lng are inside context object
+  if (g && g.context) {
+    lat = g.context.lat;
+    lon = g.context.lng; // <-- Use .lng here!
+  }
+} catch (e) {
+  console.error('Error parsing GPS context:', e, gpsA[0]);
+}
     const live = {
       ts:    gpsA[0]?.created_at,
       lat, lon,
