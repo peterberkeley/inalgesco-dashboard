@@ -137,12 +137,14 @@
     ]);
 
     // Parse GPS
-    let ts = null, lat = null, lon = null, speed = null;
+    let ts = null, lat = null, lon = null, speed = null, alt = null, sats = null;
     if (gpsArr.length && gpsArr[0].context) {
       ts    = gpsArr[0].created_at ?? null;
       lat   = gpsArr[0].context.lat ?? null;
       lon   = gpsArr[0].context.lng ?? null;
       speed = gpsArr[0].context.speed ?? null;
+      alt   = gpsArr[0].context.alt ?? null;
+      sats  = gpsArr[0].context.sats ?? null;
     }
 
     // Parse ICCID
@@ -162,6 +164,100 @@
     // Schedule next poll
     setTimeout(poll, POLL_MS);
   }
+
+  // [12] CSV EXPORT — fixed for GPS context!
+  document.getElementById('dlBtn').addEventListener('click', async ev => {
+    ev.preventDefault();
+
+    let startInput = document.getElementById('start').value;
+    let endInput   = document.getElementById('end').value;
+    if (!startInput || !endInput) {
+      return alert('Please set both a start and end date/time.');
+    }
+
+    const startISO = new Date(startInput).toISOString();
+    const endISO   = new Date(endInput).toISOString();
+
+    // Adjust fields for CSV
+    const csvFields = [
+      "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
+      ...SENSORS.map(s => s.id)
+    ];
+
+    // Fetch all variable histories
+    const [gpsList, iccidList, ...sensorLists] = await Promise.all([
+      fetchUbidotsVar(DEVICE, 'gps', 1000, startISO, endISO),
+      fetchUbidotsVar(DEVICE, 'iccid', 1000, startISO, endISO),
+      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startISO, endISO))
+    ]);
+
+    // Build a timestamp-indexed data map
+    const dataMap = {};
+
+    // Merge GPS context into map
+    gpsList.forEach(g => {
+      const ts = g.created_at;
+      if (!dataMap[ts]) dataMap[ts] = {};
+      dataMap[ts].Lat = g.context?.lat ?? "";
+      dataMap[ts].Lon = g.context?.lng ?? "";
+      dataMap[ts].Alt = g.context?.alt ?? "";
+      dataMap[ts].Satellites = g.context?.sats ?? "";
+      dataMap[ts].Speed = g.context?.speed ?? "";
+    });
+
+    // Merge ICCID
+    iccidList.forEach(d => {
+      const ts = d.created_at;
+      if (!dataMap[ts]) dataMap[ts] = {};
+      dataMap[ts].ICCID = d.value ?? "";
+    });
+
+    // Merge sensors
+    SENSORS.forEach((s, idx) => {
+      sensorLists[idx].forEach(d => {
+        const ts = d.created_at;
+        if (!dataMap[ts]) dataMap[ts] = {};
+        dataMap[ts][s.id] = d.value ?? "";
+      });
+    });
+
+    // Build rows
+    const timestamps = Object.keys(dataMap).sort();
+    const rows = [csvFields];
+    timestamps.forEach(ts => {
+      const dt = new Date(ts);
+      const date = dt.toLocaleDateString();
+      const time = dt.toLocaleTimeString();
+      const row = [
+        date,
+        time,
+        dataMap[ts].Lat ?? "",
+        dataMap[ts].Lon ?? "",
+        dataMap[ts].Alt ?? "",
+        dataMap[ts].Satellites ?? "",
+        dataMap[ts].Speed ?? "",
+        dataMap[ts].ICCID ?? "",
+        ...SENSORS.map(s => dataMap[ts][s.id] ?? "")
+      ];
+      rows.push(row);
+    });
+
+    // CSV encode
+    const sepLine = 'sep=;\n';
+    const body = rows.map(row =>
+      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';')
+    ).join('\n');
+    const csv = sepLine + body;
+
+    // Trigger download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href     = URL.createObjectURL(blob);
+    link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
 
   // [13] BOOTSTRAP & DEVICE CHANGE
   document.addEventListener('DOMContentLoaded', () => {
