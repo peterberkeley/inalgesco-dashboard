@@ -174,101 +174,104 @@
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] CSV EXPORT — full days, ISO string for API range!
-  document.getElementById('dlBtn').addEventListener('click', async ev => {
-    ev.preventDefault();
+  // [12] CSV EXPORT — unified device values endpoint
+document.getElementById('dlBtn').addEventListener('click', async ev => {
+  ev.preventDefault();
 
-    let startInput = document.getElementById('start').value; // e.g. "2025-06-29"
-    let endInput   = document.getElementById('end').value;
-    if (!startInput || !endInput) {
-      return alert('Please set both a start and end date.');
+  // Get dates from the new <input type="date"> fields
+  const startInput = document.getElementById('start').value; // "2025-06-29"
+  const endInput   = document.getElementById('end').value;   // "2025-06-30"
+  if (!startInput || !endInput) {
+    return alert('Please select both a start and end date.');
+  }
+
+  // Build full-day ISO filters
+  const localStart = new Date(startInput + 'T00:00:00');
+  const localEnd   = new Date(endInput   + 'T23:59:59.999');
+  const startISO   = localStart.toISOString();
+  const endISO     = localEnd  .toISOString();
+
+  // Fetch *all* variables in one call
+  const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${DEVICE}/values?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}&page_size=1000`;
+  const token = DEVICE_TOKENS[DEVICE] || '';
+  let allValues = [];
+  try {
+    const res = await fetch(url, {
+      headers: { 'X-Auth-Token': token }
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const json = await res.json();
+    allValues = json.results || [];
+  } catch (e) {
+    console.error('Error fetching device values:', e);
+    return alert('Failed to fetch data from Ubidots. See console for details.');
+  }
+
+  // If we got nothing, bail early
+  if (!allValues.length) {
+    return alert('No data returned for that date range.');
+  }
+
+  // Build a timestamp-indexed map of { variable: value }
+  const dataMap = {};
+  allValues.forEach(pt => {
+    const ts = pt.created_at;
+    if (!dataMap[ts]) dataMap[ts] = {};
+    // handle gps context specially
+    if (pt.variable === 'gps' && pt.context) {
+      dataMap[ts].Lat = pt.context.lat ?? '';
+      dataMap[ts].Lon = pt.context.lng ?? '';
+      dataMap[ts].Alt = pt.context.alt ?? '';
+      dataMap[ts].Satellites = pt.context.sats ?? '';
+      dataMap[ts].Speed = pt.context.speed ?? '';
+    } else {
+      dataMap[ts][pt.variable] = pt.value ?? '';
     }
-
-    // Use full-day UTC ISO strings
-    const localStart = new Date(startInput + 'T00:00:00');
-    const localEnd = new Date(endInput + 'T23:59:59.999');
-    const startISO = localStart.toISOString();
-    const endISO = localEnd.toISOString();
-
-    const csvFields = [
-      "Date", "Time", "Lat", "Lon", "Alt", "Satellites", "Speed", "ICCID",
-      ...SENSORS.map(s => s.id)
-    ];
-
-    // Fetch all variable histories using ISO strings
-    const [gpsList, iccidList, ...sensorLists] = await Promise.all([
-      fetchUbidotsVar(DEVICE, 'gps', 1000, startISO, endISO),
-      fetchUbidotsVar(DEVICE, 'iccid', 1000, startISO, endISO),
-      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startISO, endISO))
-    ]);
-
-    // Build a timestamp-indexed data map
-    const dataMap = {};
-
-    // Merge GPS context into map
-    gpsList.forEach(g => {
-      const ts = g.created_at;
-      if (!dataMap[ts]) dataMap[ts] = {};
-      dataMap[ts].Lat = g.context?.lat ?? "";
-      dataMap[ts].Lon = g.context?.lng ?? "";
-      dataMap[ts].Alt = g.context?.alt ?? "";
-      dataMap[ts].Satellites = g.context?.sats ?? "";
-      dataMap[ts].Speed = g.context?.speed ?? "";
-    });
-
-    // Merge ICCID
-    iccidList.forEach(d => {
-      const ts = d.created_at;
-      if (!dataMap[ts]) dataMap[ts] = {};
-      dataMap[ts].ICCID = d.value ?? "";
-    });
-
-    // Merge sensors
-    SENSORS.forEach((s, idx) => {
-      sensorLists[idx].forEach(d => {
-        const ts = d.created_at;
-        if (!dataMap[ts]) dataMap[ts] = {};
-        dataMap[ts][s.id] = d.value ?? "";
-      });
-    });
-
-    // Build rows
-    const timestamps = Object.keys(dataMap).sort();
-    const rows = [csvFields];
-    timestamps.forEach(ts => {
-      const dt = new Date(ts);
-      const date = dt.toLocaleDateString();
-      const time = dt.toLocaleTimeString();
-      const row = [
-        date,
-        time,
-        dataMap[ts].Lat ?? "",
-        dataMap[ts].Lon ?? "",
-        dataMap[ts].Alt ?? "",
-        dataMap[ts].Satellites ?? "",
-        dataMap[ts].Speed ?? "",
-        dataMap[ts].ICCID ?? "",
-        ...SENSORS.map(s => dataMap[ts][s.id] ?? "")
-      ];
-      rows.push(row);
-    });
-
-    // CSV encode
-    const sepLine = 'sep=;\n';
-    const body = rows.map(row =>
-      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';')
-    ).join('\n');
-    const csv = sepLine + body;
-
-    // Trigger download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href     = URL.createObjectURL(blob);
-    link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   });
+
+  // Prepare CSV header fields
+  const csvFields = [
+    'Date','Time','Lat','Lon','Alt','Satellites','Speed','ICCID',
+    ...SENSORS.map(s => s.id)
+  ];
+
+  // Build rows in chronological order
+  const timestamps = Object.keys(dataMap).sort();
+  const rows = [csvFields];
+  timestamps.forEach(ts => {
+    const dt = new Date(ts);
+    const date = dt.toLocaleDateString();
+    const time = dt.toLocaleTimeString();
+    const row = [
+      date,
+      time,
+      dataMap[ts].Lat ?? '',
+      dataMap[ts].Lon ?? '',
+      dataMap[ts].Alt ?? '',
+      dataMap[ts].Satellites ?? '',
+      dataMap[ts].Speed ?? '',
+      dataMap[ts].ICCID ?? '',
+      ...SENSORS.map(s => dataMap[ts][s.id] ?? '')
+    ];
+    rows.push(row);
+  });
+
+  // Encode CSV using semicolon
+  const sepLine = 'sep=;\n';
+  const body = rows.map(r =>
+    r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(';')
+  ).join('\n');
+  const csv = sepLine + body;
+
+  // Trigger download
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+});
 
   // [13] BOOTSTRAP & DEVICE CHANGE
   document.addEventListener('DOMContentLoaded', () => {
