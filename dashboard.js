@@ -70,7 +70,8 @@
       ctr.appendChild(card);
       const ctx = card.querySelector('canvas').getContext('2d');
       s.chart = new Chart(ctx, {
-        type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
       });
     });
@@ -129,48 +130,81 @@
     setTimeout(poll,POLL_MS);
   }
 
-  // [12] CSV EXPORT + Maintenance Logic
-  document.getElementById('dlBtn').addEventListener('click', async ev => {
-    ev.preventDefault();
-    const statusEl = document.getElementById('expStatus'); statusEl.innerText='';
-    const startIn = document.getElementById('start').value; const endIn = document.getElementById('end').value;
-    if(!startIn||!endIn) return statusEl.innerText='Select start and end dates.';
-    const startMs=new Date(startIn+'T00:00:00').getTime(), endMs=new Date(endIn+'T23:59:59.999').getTime();
-    statusEl.innerText=`Fetching ${DEVICE} from ${startMs} to ${endMs}…`;
-    try{
-      const [gpsList,iccList,...senLists]=await Promise.all([
-        fetchUbidotsVar(DEVICE,'gps',1000,startMs,endMs),
-        fetchUbidotsVar(DEVICE,'iccid',1000,startMs,endMs),
-        ...SENSORS.map(s=>fetchUbidotsVar(DEVICE,s.id,1000,startMs,endMs))
-      ]);
-      const counts=[`GPS:${gpsList.length}`,`ICCID:${iccList.length}`,...senLists.map((l,i)=>`${SENSORS[i].id}:${l.length}`)].join(',');
-      statusEl.innerText=`Fetched → ${counts}`;
-      if(gpsList.length===0&&iccList.length===0&&senLists.every(l=>l.length===0)) return statusEl.innerText+='\nNo data.';
-      const dataMap={};
-      gpsList.forEach(g=>{const ts=g.created_at,c=g.context||{};dataMap[ts]=Object.assign(dataMap[ts]||{},{Lat:c.lat||'',Lon:c.lng||'',Alt:c.alt||'',Satellites:c.sats||'',Speed:c.speed||''});});
-      iccList.forEach(d=>{const ts=d.created_at;dataMap[ts]=dataMap[ts]||{};dataMap[ts].ICCID=d.value||'';});
-      SENSORS.forEach((s,idx)=>senLists[idx].forEach(d=>{const ts=d.created_at;dataMap[ts]=dataMap[ts]||{};dataMap[ts][s.id]=d.value||'';}));
-      const fields=['Date','Time','Lat','Lon','Alt','Satellites','Speed','ICCID',...SENSORS.map(s=>s.id)];
-      const rows=[fields];Object.keys(dataMap).sort().forEach(ts=>{const dt=new Date(+ts);rows.push([dt.toLocaleDateString(),dt.toLocaleTimeString(),dataMap[ts].Lat||'',dataMap[ts].Lon||'',dataMap[ts].Alt||'',dataMap[ts].Satellites||'',dataMap[ts].Speed||'',dataMap[ts].ICCID||'',...SENSORS.map(s=>dataMap[ts][s.id]||'')]);});
-      const sep='sep=;\n'; const body=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
-      const blob=new Blob([sep+body],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${DEVICE}-${startIn}-${endIn}.csv`;document.body.appendChild(a);a.click();document.body.removeChild(a);
-      statusEl.innerText+='\nDownload started.';
-    }catch(e){console.error(e);statusEl.innerText=`Error: ${e.message}`;}    
+  document.addEventListener('DOMContentLoaded', () => {
+    const deviceSelect = document.getElementById('deviceSelect');
+    DEVICES.forEach(dev => {
+      const opt = document.createElement('option'); opt.value = dev; opt.text = dev.replace('skycafe-','SkyCafé ');
+      deviceSelect.appendChild(opt);
+    });
+    deviceSelect.value = DEVICE;
+    deviceSelect.addEventListener('change', e => {
+      DEVICE = e.target.value;
+      showSpinner(); document.getElementById('latest').innerHTML = '';
+      trail = []; if(polyline) polyline.setLatLngs([]);
+      initCharts(); updateCharts().then(() => { hideSpinner(); poll(); });
+    });
 
-    // Maintenance logic
-    const FILTER=182, SERVICE=384, CODE='8971';
-    if(!localStorage.getItem('filterDate')) localStorage.setItem('filterDate',new Date().toISOString());
-    if(!localStorage.getItem('serviceDate')) localStorage.setItem('serviceDate',new Date().toISOString());
-    function daysSince(i){return Math.floor((Date.now()-new Date(i))/(1000*60*60*24));}
-    function render(){
-      const fDate=localStorage.getItem('filterDate'), sDate=localStorage.getItem('serviceDate');
-      const fd=daysSince(fDate), sd=daysSince(sDate);
-      const fEl=document.getElementById('filterStatus'), sEl=document.getElementById('serviceStatus');
-      if(fd<FILTER){const d=new Date(fDate);d.setDate(d.getDate()+FILTER);fEl.textContent=`Filter OK until ${d.toISOString().slice(0,10)}`;} else fEl.textContent='Filter needs changing';
-      if(sd<SERVICE) sEl.textContent=''; else sEl.textContent='Service due';
+    showSpinner(); initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
+
+    // ——— Maintenance Timer Logic ———
+    const FILTER_THRESHOLD  = 182;
+    const SERVICE_THRESHOLD = 384;
+    const SERVICE_CODE      = '8971';
+
+    const filterBtn  = document.getElementById('resetFilterBtn');
+    const serviceBtn = document.getElementById('resetServiceBtn');
+    filterBtn.style.display  = 'none';
+    serviceBtn.style.display = 'none';
+
+    function daysSince(iso) {
+      return Math.floor((Date.now() - new Date(iso)) / (1000 * 60 * 60 * 24));
     }
-    document.getElementById('resetFilterBtn').addEventListener('click',()=>{localStorage.setItem('filterDate',new Date().toISOString());render();});
-    document.getElementById('resetServiceBtn').addEventListener('click',()=>{ const e=prompt('Enter code:'); if(e===CODE){localStorage.setItem('serviceDate',new Date().toISOString());render();}else alert('Incorrect code.'); });
-    render();
+
+    if (!localStorage.getItem('filterDate'))  localStorage.setItem('filterDate',  new Date().toISOString());
+    if (!localStorage.getItem('serviceDate')) localStorage.setItem('serviceDate', new Date().toISOString());
+
+    function renderMaintenance() {
+      const fISO = localStorage.getItem('filterDate');
+      const sISO = localStorage.getItem('serviceDate');
+      const fDays = daysSince(fISO);
+      const sDays = daysSince(sISO);
+      const fEl = document.getElementById('filterStatus');
+      const sEl = document.getElementById('serviceStatus');
+
+      if (fDays < FILTER_THRESHOLD) {
+        const nextDate = new Date(fISO);
+        nextDate.setDate(nextDate.getDate() + FILTER_THRESHOLD);
+        fEl.textContent = `Filter OK until ${nextDate.toISOString().slice(0,10)}`;
+        filterBtn.style.display = 'none';
+      } else {
+        fEl.textContent = 'Filter needs changing';
+        filterBtn.style.display = 'inline-block';
+      }
+
+      if (sDays < SERVICE_THRESHOLD) {
+        sEl.textContent = '';
+        serviceBtn.style.display = 'none';
+      } else {
+        sEl.textContent = 'Service due';
+        serviceBtn.style.display = 'inline-block';
+      }
+    }
+
+    filterBtn.addEventListener('click', () => {
+      localStorage.setItem('filterDate', new Date().toISOString());
+      renderMaintenance();
+    });
+
+    serviceBtn.addEventListener('click', () => {
+      const entry = prompt('Enter Inalgesco service reset code:');
+      if (entry === SERVICE_CODE) {
+        localStorage.setItem('serviceDate', new Date().toISOString());
+        renderMaintenance();
+      } else {
+        alert('Incorrect code. Service not reset.');
+      }
+    });
+
+    renderMaintenance();
   });
 })();
