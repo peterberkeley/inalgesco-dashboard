@@ -9,10 +9,7 @@
   };
 
   function getCSS(varName, fallback = '') {
-    return (
-      getComputedStyle(document.documentElement)
-        .getPropertyValue(varName) || ''
-    ).trim() || fallback;
+    return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
   }
 
   const spinner = document.getElementById('spinner');
@@ -32,7 +29,7 @@
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
   let DEVICE = "skycafe-2";
 
-  // [2] SENSORS
+  // [2] SENSORS & ICCID
   const SENSORS = [
     { id: 'nr1',    label: 'NR1 °F',       col: COLORS.primary,   chart: null },
     { id: 'nr2',    label: 'NR2 °F',       col: COLORS.secondary, chart: null },
@@ -146,7 +143,7 @@
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] CSV EXPORT
+  // [12] CSV EXPORT — REVERT TO ISO FILTER
   document.getElementById('dlBtn').addEventListener('click', async ev => {
     ev.preventDefault();
     const statusEl = document.getElementById('expStatus'); statusEl.innerText = '';
@@ -167,22 +164,25 @@
       if (gpsList.length+iccidList.length+lists.reduce((a,b)=>a+b.length,0)===0)
         return statusEl.innerText += '
 No data.';
-      const dataMap={} ;
-      gpsList.forEach(g=>{const ts=g.created_at,c=g.context||{};dataMap[ts]={...dataMap[ts],Lat:c.lat,Lon:c.lng,Alt:c.alt,Satellites:c.sats,Speed:c.speed};});
-      iccidList.forEach(d=>{const ts=d.created_at;dataMap[ts]={...dataMap[ts],ICCID:d.value};});
-      SENSORS.forEach((s,i)=>lists[i].forEach(d=>{const ts=d.created_at;dataMap[ts]={...dataMap[ts],[s.id]:d.value};}));
+      const dataMap = {};
+      gpsList.forEach(g => { const ts=g.created_at, c=g.context||{}; dataMap[ts]={...dataMap[ts],Lat:c.lat,Lon:c.lng,Alt:c.alt,Satellites:c.sats,Speed:c.speed}; });
+      iccidList.forEach(d => { const ts=d.created_at; dataMap[ts]={...dataMap[ts],ICCID:d.value}; });
+      SENSORS.forEach((s,i)=>lists[i].forEach(d=>{ const ts=d.created_at; dataMap[ts]={...dataMap[ts],[s.id]:d.value}; }));
       const rows=[];
       rows.push(['Date','Time','Lat','Lon','Alt','Satellites','Speed','ICCID',...SENSORS.map(s=>s.id)]);
-      Object.keys(dataMap).sort().forEach(ts=>{const dt=new Date(ts);rows.push([dt.toLocaleDateString(),dt.toLocaleTimeString(),dataMap[ts].Lat||'',dataMap[ts].Lon||'',dataMap[ts].Alt||'',dataMap[ts].Satellites||'',dataMap[ts].Speed||'',dataMap[ts].ICCID||'',...SENSORS.map(s=>dataMap[ts][s.id]||'')]);});
-      const csv = 'sep=;
-'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('
+      Object.keys(dataMap).sort().forEach(ts=>{ const dt=new Date(ts); rows.push([dt.toLocaleDateString(),dt.toLocaleTimeString(),dataMap[ts].Lat||'',dataMap[ts].Lon||'',dataMap[ts].Alt||'',dataMap[ts].Satellites||'',dataMap[ts].Speed||'',dataMap[ts].ICCID||'',...SENSORS.map(s=>dataMap[ts][s.id]||'')]); });
+      const sepLine='sep=;
+';
+      const body=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('
 ');
-      const blob=new Blob([csv],{type:'text/csv'});
-      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${DEVICE}-${start}-${end}.csv`;document.body.appendChild(a);a.click();document.body.removeChild(a);
+      const csv=sepLine+body;
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      const link=document.createElement('a'); link.href=URL.createObjectURL(blob); link.download=`${DEVICE}-${start}-${end}.csv`;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
       statusEl.innerText+='
 Download started.';
-    } catch(e){console.error(e);statusEl.innerText=`Error: ${e.message}`;}
+    } catch(e) { console.error(e); statusEl.innerText=`Error: ${e.message}`; }
   });
 
-  // [13] BOOTSTRAP, POLL, MAINTENANCE OMITTED FOR BREVITY
+  // [13] BOOTSTRAP & POLL & MAINTENANCE omitted for brevity
 })();
