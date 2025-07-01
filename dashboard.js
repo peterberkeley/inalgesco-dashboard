@@ -20,7 +20,6 @@
   const DEVICE_TOKENS = {
     "skycafe-1": "BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8",
     "skycafe-2": "BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P"
-    // add more as needed
   };
   const POLL_MS = 10000;
   const HIST    = 50;
@@ -28,7 +27,7 @@
 
   // [1a] STATIC DEVICE LIST (skycafe-1 … skycafe-24)
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
-  let DEVICE = "skycafe-2"; // Default, but user can select any.
+  let DEVICE = "skycafe-2";
 
   // [2] SENSORS & ICCID
   const SENSORS = [
@@ -45,19 +44,13 @@
     let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${device}/${variable}/values?page_size=${limit}`;
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end)   url += `&end=${encodeURIComponent(end)}`;
-    const token = DEVICE_TOKENS[device] || "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
+    const token = DEVICE_TOKENS[device] || '';
     try {
-      const res = await fetch(url, {
-        headers: { "X-Auth-Token": token }
-      });
-      if (!res.ok) {
-        console.error(`Fetch failed for ${url}:`, res.status, res.statusText);
-        return [];
-      }
+      const res = await fetch(url, { headers: { "X-Auth-Token": token } });
+      if (!res.ok) return [];
       const json = await res.json();
       return json.results || [];
-    } catch (e) {
-      console.error(`Fetch threw error for ${url}:`, e);
+    } catch {
       return [];
     }
   }
@@ -77,21 +70,8 @@
       ctr.appendChild(card);
       const ctx = card.querySelector('canvas').getContext('2d');
       s.chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [{
-            data: [],
-            borderColor: s.col,
-            borderWidth: 2,
-            tension: 0.25
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } }
-        }
+        type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
       });
     });
   }
@@ -99,9 +79,9 @@
   // [8] INIT MAP
   let map, marker, polyline, trail = [];
   function initMap() {
-    map = L.map('map').setView([0, 0], 2);
+    map = L.map('map').setView([0,0],2);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
-    marker = L.marker([0, 0]).addTo(map);
+    marker = L.marker([0,0]).addTo(map);
     polyline = L.polyline([], { weight: 3 }).addTo(map);
   }
 
@@ -110,208 +90,87 @@
     await Promise.all(SENSORS.map(async s => {
       const rows = await fetchUbidotsVar(DEVICE, s.id, HIST);
       if (!rows.length) return;
-      const labels = rows.map(r => new Date(r.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }));
-      const values = rows.map(r => parseFloat(r.value) || null);
+      const labels = rows.map(r => new Date(r.created_at).toLocaleTimeString([], { hour:'numeric',minute:'2-digit',hour12:true }));
+      const vals   = rows.map(r => parseFloat(r.value)||null);
       s.chart.data.labels = labels;
-      s.chart.data.datasets[0].data = values;
+      s.chart.data.datasets[0].data = vals;
       s.chart.update();
     }));
   }
 
-  // [10] DRAW LIVE TABLE & MAP
+  // [10] DRAW LIVE & MAP
   function drawLive(data) {
     const { ts, iccid, lat, lon, speed, signal, volt, nr1, nr2, nr3 } = data;
     const rows = [
-      ['Local Time', ts ? new Date(ts).toLocaleString() : '–'],
-      ['ICCID', iccid ?? '–'],
-      ['Lat', fmt(lat, 6)], ['Lon', fmt(lon, 6)],
-      ['Speed (km/h)', fmt(speed, 1)], ['RSSI (dBm)', fmt(signal, 0)],
-      ['Volt (mV)', fmt(volt, 2)], ['NR1 °F', fmt(nr1, 1)],
-      ['NR2 °F', fmt(nr2, 1)], ['NR3 °F', fmt(nr3, 1)]
+      ['Local Time', ts ? new Date(ts).toLocaleString() : '–'],['ICCID',iccid||'–'],
+      ['Lat',fmt(lat,6)],['Lon',fmt(lon,6)],
+      ['Speed (km/h)',fmt(speed,1)],['RSSI (dBm)',fmt(signal,0)],
+      ['Volt (mV)',fmt(volt,2)],['NR1 °F',fmt(nr1,1)],['NR2 °F',fmt(nr2,1)],['NR3 °F',fmt(nr3,1)]
     ];
-    document.getElementById('latest').innerHTML =
-      rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
-    if (isFinite(lat) && isFinite(lon)) {
-      marker.setLatLng([lat, lon]);
-      trail.push([lat, lon]);
-      if (trail.length > TRAIL) trail.shift();
-      polyline.setLatLngs(trail);
-      map.setView([lat, lon], Math.max(map.getZoom(), 13));
+    document.getElementById('latest').innerHTML = rows.map(r=>`<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    if (isFinite(lat)&&isFinite(lon)){
+      marker.setLatLng([lat,lon]); trail.push([lat,lon]); if(trail.length>TRAIL) trail.shift(); polyline.setLatLngs(trail);
+      map.setView([lat,lon],Math.max(map.getZoom(),13));
     }
   }
 
-  // [11] POLL LOOP — Fetch live values from Ubidots for all fields
-  async function poll() {
+  // [11] POLL LOOP
+  async function poll(){
     const [gpsArr, iccArr, ...sensorArrs] = await Promise.all([
-      fetchUbidotsVar(DEVICE, 'gps'),
-      fetchUbidotsVar(DEVICE, 'iccid'),
-      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id))
+      fetchUbidotsVar(DEVICE,'gps'),fetchUbidotsVar(DEVICE,'iccid'),...SENSORS.map(s=>fetchUbidotsVar(DEVICE,s.id))
     ]);
-
-    // Parse GPS
-    let ts = null, lat = null, lon = null, speed = null, alt = null, sats = null;
-    if (gpsArr.length && gpsArr[0].context) {
-      ts    = gpsArr[0].created_at ?? null;
-      lat   = gpsArr[0].context.lat ?? null;
-      lon   = gpsArr[0].context.lng ?? null;
-      speed = gpsArr[0].context.speed ?? null;
-      alt   = gpsArr[0].context.alt ?? null;
-      sats  = gpsArr[0].context.sats ?? null;
-    }
-
-    // Parse ICCID
-    let iccid = (iccArr.length && iccArr[0].value) ? iccArr[0].value : null;
-
-    // Parse Sensors
-    const [sigArr, voltArr, spArr, nr1Arr, nr2Arr, nr3Arr] = sensorArrs;
-    let signal = (sigArr.length && sigArr[0].value) ? sigArr[0].value : null;
-    let volt   = (voltArr.length && voltArr[0].value) ? voltArr[0].value : null;
-    let nr1    = (nr1Arr.length && nr1Arr[0].value) ? nr1Arr[0].value : null;
-    let nr2    = (nr2Arr.length && nr2Arr[0].value) ? nr2Arr[0].value : null;
-    let nr3    = (nr3Arr.length && nr3Arr[0].value) ? nr3Arr[0].value : null;
-
-    drawLive({ ts, iccid, lat, lon, speed, signal, volt, nr1, nr2, nr3 });
-    setTimeout(poll, POLL_MS);
+    let ts=null,lat=null,lon=null,speed=null,alt=null,sats=null;
+    if(gpsArr.length&&gpsArr[0].context){ const c=gpsArr[0].context; ts=gpsArr[0].created_at;lat=c.lat;lon=c.lng;speed=c.speed;alt=c.alt;sats=c.sats; }
+    const iccid = (iccArr.length&&iccArr[0].value)?iccArr[0].value:null;
+    const [sigArr,voltArr,spArr,nr1Arr,nr2Arr,nr3Arr] = sensorArrs;
+    const signal = sigArr[0]?.value||null; const voltVal = voltArr[0]?.value||null;
+    const n1 = nr1Arr[0]?.value||null, n2 = nr2Arr[0]?.value||null, n3 = nr3Arr[0]?.value||null;
+    drawLive({ts,iccid,lat,lon,speed,signal,volt:voltVal,nr1:n1,nr2:n2,nr3:n3});
+    setTimeout(poll,POLL_MS);
   }
 
-  // [12] CSV EXPORT — per-variable ms‐since‐epoch filter + on-page status
-document.getElementById('dlBtn').addEventListener('click', async ev => {
-  ev.preventDefault();
-  const statusEl = document.getElementById('expStatus');
-  statusEl.innerText = '';
-
-  // 1) Read dates
-  const startInput = document.getElementById('start').value; // "2025-06-29"
-  const endInput   = document.getElementById('end').value;   // "2025-07-01"
-  if (!startInput || !endInput) {
-    return statusEl.innerText = 'Please select both a start and end date.';
-  }
-
-  // 2) Compute full-day ms‐since‐epoch
-  const startMs = new Date(startInput + 'T00:00:00').getTime();
-  const endMs   = new Date(endInput   + 'T23:59:59.999').getTime();
-
-  statusEl.innerText = `Fetching data for ${DEVICE} from ${startMs} to ${endMs}…`;
-
-  try {
-    // 3) Fetch per-variable with ms epoch
-    const [gpsList, iccidList, ...sensorLists] = await Promise.all([
-      fetchUbidotsVar(DEVICE, 'gps',   1000, startMs, endMs),
-      fetchUbidotsVar(DEVICE, 'iccid', 1000, startMs, endMs),
-      ...SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, 1000, startMs, endMs))
-    ]);
-
-    // 4) Show counts
-    const counts = [
-      `GPS: ${gpsList.length}`,
-      `ICCID: ${iccidList.length}`,
-      ...sensorLists.map((lst, i) => `${SENSORS[i].id}: ${lst.length}`)
-    ].join(', ');
-    statusEl.innerText = `Fetched → ${counts}`;
-
-    // 5) Bail if no data
-    if (
-      gpsList.length === 0 &&
-      iccidList.length === 0 &&
-      sensorLists.every(lst => lst.length === 0)
-    ) {
-      return statusEl.innerText += '\nNo data returned for that range.';
-    }
-
-    // 6) Merge into dataMap
-    const dataMap = {};
-    gpsList.forEach(g => {
-      const ts = g.created_at;
-      const c  = g.context || {};
-      dataMap[ts] = Object.assign(dataMap[ts] || {}, {
-        Lat:        c.lat || '',
-        Lon:        c.lng || '',
-        Alt:        c.alt || '',
-        Satellites: c.sats || '',
-        Speed:      c.speed || ''
-      });
-    });
-    iccidList.forEach(d => {
-      const ts = d.created_at;
-      dataMap[ts] = dataMap[ts] || {};
-      dataMap[ts].ICCID = d.value || '';
-    });
-    SENSORS.forEach((s, idx) => {
-      sensorLists[idx].forEach(d => {
-        const ts = d.created_at;
-        dataMap[ts] = dataMap[ts] || {};
-        dataMap[ts][s.id] = d.value || '';
-      });
-    });
-
-    // 7) Build CSV rows
-    const csvFields = ['Date','Time','Lat','Lon','Alt','Satellites','Speed','ICCID', ...SENSORS.map(s=>s.id)];
-    const timestamps = Object.keys(dataMap).sort();
-    const rows = [csvFields];
-    timestamps.forEach(ts => {
-      const dt   = new Date(Number(ts));
-      const date = dt.toLocaleDateString();
-      const time = dt.toLocaleTimeString();
-      rows.push([
-        date,
-        time,
-        dataMap[ts].Lat        || '',
-        dataMap[ts].Lon        || '',
-        dataMap[ts].Alt        || '',
-        dataMap[ts].Satellites || '',
-        dataMap[ts].Speed      || '',
-        dataMap[ts].ICCID      || '',
-        ...SENSORS.map(s => dataMap[ts][s.id] || '')
+  // [12] CSV EXPORT + Maintenance Logic
+  document.getElementById('dlBtn').addEventListener('click', async ev => {
+    ev.preventDefault();
+    const statusEl = document.getElementById('expStatus'); statusEl.innerText='';
+    const startIn = document.getElementById('start').value; const endIn = document.getElementById('end').value;
+    if(!startIn||!endIn) return statusEl.innerText='Select start and end dates.';
+    const startMs=new Date(startIn+'T00:00:00').getTime(), endMs=new Date(endIn+'T23:59:59.999').getTime();
+    statusEl.innerText=`Fetching ${DEVICE} from ${startMs} to ${endMs}…`;
+    try{
+      const [gpsList,iccList,...senLists]=await Promise.all([
+        fetchUbidotsVar(DEVICE,'gps',1000,startMs,endMs),
+        fetchUbidotsVar(DEVICE,'iccid',1000,startMs,endMs),
+        ...SENSORS.map(s=>fetchUbidotsVar(DEVICE,s.id,1000,startMs,endMs))
       ]);
-    });
+      const counts=[`GPS:${gpsList.length}`,`ICCID:${iccList.length}`,...senLists.map((l,i)=>`${SENSORS[i].id}:${l.length}`)].join(',');
+      statusEl.innerText=`Fetched → ${counts}`;
+      if(gpsList.length===0&&iccList.length===0&&senLists.every(l=>l.length===0)) return statusEl.innerText+='\nNo data.';
+      const dataMap={};
+      gpsList.forEach(g=>{const ts=g.created_at,c=g.context||{};dataMap[ts]=Object.assign(dataMap[ts]||{},{Lat:c.lat||'',Lon:c.lng||'',Alt:c.alt||'',Satellites:c.sats||'',Speed:c.speed||''});});
+      iccList.forEach(d=>{const ts=d.created_at;dataMap[ts]=dataMap[ts]||{};dataMap[ts].ICCID=d.value||'';});
+      SENSORS.forEach((s,idx)=>senLists[idx].forEach(d=>{const ts=d.created_at;dataMap[ts]=dataMap[ts]||{};dataMap[ts][s.id]=d.value||'';}));
+      const fields=['Date','Time','Lat','Lon','Alt','Satellites','Speed','ICCID',...SENSORS.map(s=>s.id)];
+      const rows=[fields];Object.keys(dataMap).sort().forEach(ts=>{const dt=new Date(+ts);rows.push([dt.toLocaleDateString(),dt.toLocaleTimeString(),dataMap[ts].Lat||'',dataMap[ts].Lon||'',dataMap[ts].Alt||'',dataMap[ts].Satellites||'',dataMap[ts].Speed||'',dataMap[ts].ICCID||'',...SENSORS.map(s=>dataMap[ts][s.id]||'')]);});
+      const sep='sep=;\n'; const body=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+      const blob=new Blob([sep+body],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${DEVICE}-${startIn}-${endIn}.csv`;document.body.appendChild(a);a.click();document.body.removeChild(a);
+      statusEl.innerText+='\nDownload started.';
+    }catch(e){console.error(e);statusEl.innerText=`Error: ${e.message}`;}    
 
-    // 8) Encode & download
-    const sepLine = 'sep=;\n';
-    const body = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
-    const csv  = sepLine + body;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href     = URL.createObjectURL(blob);
-    link.download = `${DEVICE}-${startInput}-${endInput}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    statusEl.innerText += '\nDownload started.';
-  } catch (err) {
-    console.error(err);
-    statusEl.innerText = `Error: ${err.message}`;
-  }
-});
-
-
-
-  // [13] BOOTSTRAP & DEVICE CHANGE
-  document.addEventListener('DOMContentLoaded', () => {
-    const deviceSelect = document.getElementById('deviceSelect');
-    DEVICES.forEach(dev => {
-      const opt = document.createElement('option');
-      opt.value = dev;
-      opt.text  = dev.replace('skycafe-','SkyCafé ');
-      deviceSelect.appendChild(opt);
-    });
-    deviceSelect.value = DEVICE;
-    deviceSelect.addEventListener('change', e => {
-      DEVICE = e.target.value;
-      showSpinner();
-      document.getElementById('latest').innerHTML = '';
-      trail = [];
-      if (polyline) polyline.setLatLngs([]);
-      initCharts();
-      updateCharts().then(() => { 
-        hideSpinner();
-        poll();
-      });
-    });
-    showSpinner();
-    initCharts();
-    updateCharts().then(() => {
-      initMap(); hideSpinner(); poll();
-    });
+    // Maintenance logic
+    const FILTER=182, SERVICE=384, CODE='8971';
+    if(!localStorage.getItem('filterDate')) localStorage.setItem('filterDate',new Date().toISOString());
+    if(!localStorage.getItem('serviceDate')) localStorage.setItem('serviceDate',new Date().toISOString());
+    function daysSince(i){return Math.floor((Date.now()-new Date(i))/(1000*60*60*24));}
+    function render(){
+      const fDate=localStorage.getItem('filterDate'), sDate=localStorage.getItem('serviceDate');
+      const fd=daysSince(fDate), sd=daysSince(sDate);
+      const fEl=document.getElementById('filterStatus'), sEl=document.getElementById('serviceStatus');
+      if(fd<FILTER){const d=new Date(fDate);d.setDate(d.getDate()+FILTER);fEl.textContent=`Filter OK until ${d.toISOString().slice(0,10)}`;} else fEl.textContent='Filter needs changing';
+      if(sd<SERVICE) sEl.textContent=''; else sEl.textContent='Service due';
+    }
+    document.getElementById('resetFilterBtn').addEventListener('click',()=>{localStorage.setItem('filterDate',new Date().toISOString());render();});
+    document.getElementById('resetServiceBtn').addEventListener('click',()=>{ const e=prompt('Enter code:'); if(e===CODE){localStorage.setItem('serviceDate',new Date().toISOString());render();}else alert('Incorrect code.'); });
+    render();
   });
 })();
