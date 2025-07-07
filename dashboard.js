@@ -17,13 +17,21 @@
   // [1] CONFIGURATION
   const DEVICE_TOKENS = {
     'skycafe-1': 'BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8',
-    'skycafe-2': 'BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P'
+    'skycafe-2': 'BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P',
+    'skycafe-3': '', // Missing
+    'skycafe-4': 'BBUS-02xhIPOIpmMrGv5OwS2XX5La6Nn7ma',
+    'skycafe-5': '', // Missing
+    'skycafe-6': '', // Missing
+    'skycafe-7': '', // Missing
+    'skycafe-8': 'BBUS-KgQ7uvh3QgFNeRj6EGQTvTKH91Y0hv',
+    // Add more tokens here as you get them...
   };
+
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
 
   // [1a] DEVICE LIST
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
-  let DEVICE = 'skycafe-2';
+  let DEVICE = 'skycafe-1';
 
   // [2] SENSORS
   const SENSORS = [
@@ -41,6 +49,7 @@
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end)   url += `&end=${encodeURIComponent(end)}`;
     const token = DEVICE_TOKENS[dev] || '';
+    if (!token) return []; // No token, return empty
     try {
       const res = await fetch(url, { headers: { 'X-Auth-Token': token } });
       if (!res.ok) return [];
@@ -113,6 +122,11 @@
 
   // [11] POLL LOOP
   async function poll() {
+    if (!DEVICE_TOKENS[DEVICE]) {
+      document.getElementById('latest').innerHTML = '<tr><td colspan="2" style="color:red;">No token for this device. Data unavailable.</td></tr>';
+      setTimeout(poll, POLL_MS);
+      return;
+    }
     const [gpsArr, iccArr, ...sensorArrs] = await Promise.all([
       fetchUbidotsVar(DEVICE,'gps'),
       fetchUbidotsVar(DEVICE,'iccid'),
@@ -138,10 +152,20 @@
   // [12] BOOTSTRAP & INIT
   document.addEventListener('DOMContentLoaded', () => {
     const deviceSelect = document.getElementById('deviceSelect');
+    deviceSelect.innerHTML = '';
     DEVICES.forEach(dev => {
-      const opt = document.createElement('option'); opt.value=dev; opt.text=dev.replace('skycafe-','SkyCafé ');
+      const opt = document.createElement('option');
+      opt.value = dev;
+      opt.text = dev.replace('skycafe-','SkyCafé ');
+      if (!DEVICE_TOKENS[dev]) {
+        opt.disabled = true;
+        opt.text += ' (No Token)';
+      }
       deviceSelect.appendChild(opt);
     });
+    // Select first device with a token as default
+    const firstAvailable = DEVICES.find(d => DEVICE_TOKENS[d]);
+    DEVICE = firstAvailable || DEVICES[0];
     deviceSelect.value = DEVICE;
     deviceSelect.addEventListener('change', e => {
       DEVICE = e.target.value;
