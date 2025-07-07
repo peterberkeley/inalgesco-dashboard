@@ -22,7 +22,7 @@
     'skycafe-7': '', // Missing
   
 
-    'skycafe-9': 'BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2',
+    'skycafe-10': 'BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2',
     // Add more tokens here as you get them...
   };
 
