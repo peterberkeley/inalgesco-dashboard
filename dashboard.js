@@ -172,31 +172,28 @@
     });
     initCharts(); updateCharts().then(() => { initMap(); poll(); });
 
-   // ---- CSV EXPORT ----
+  // ---- CSV EXPORT ----
 const dlBtn = document.getElementById('dlBtn');
 if (dlBtn) {
   dlBtn.addEventListener('click', async () => {
     dlBtn.disabled = true;
     dlBtn.textContent = "Downloading...";
-    // Parse date range
+    // Parse date range and convert to UNIX ms timestamps
     let startRaw = document.getElementById('start')?.value;
     let endRaw = document.getElementById('end')?.value;
     let start = null, end = null;
 
-    // If user set a start date, convert to ISO string at 00:00:00Z
     if (startRaw) {
-      start = new Date(startRaw + 'T00:00:00Z').toISOString();
+      start = new Date(startRaw + 'T00:00:00Z').getTime();
     }
-    // If user set an end date, convert to ISO string at 23:59:59.999Z
     if (endRaw) {
-      end = new Date(endRaw + 'T23:59:59.999Z').toISOString();
+      end = new Date(endRaw + 'T23:59:59.999Z').getTime();
     }
 
     // Fetch HIST records per sensor, filtered by date range if given
     const rowsBySensor = await Promise.all(
       SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, HIST, start, end))
     );
-    // Get max available rows count (per sensor)
     const maxLen = Math.max(...rowsBySensor.map(r => r.length));
     if (maxLen === 0) {
       alert("No data available to export for this device.");
@@ -204,11 +201,9 @@ if (dlBtn) {
       dlBtn.textContent = "Download";
       return;
     }
-    // Compose CSV header
     let header = ['Time'].concat(SENSORS.map(s => s.label));
     let csv = [header.join(',')];
 
-    // Compose CSV rows (align by array index)
     for (let i = 0; i < maxLen; i++) {
       let t = rowsBySensor[0][i]?.created_at || '';
       let row = [t ? new Date(t).toLocaleString() : ''];
@@ -218,7 +213,6 @@ if (dlBtn) {
       csv.push(row.join(','));
     }
 
-    // Download as file
     const blob = new Blob([csv.join('\r\n')], {type: 'text/csv'});
     const url = URL.createObjectURL(blob);
 
@@ -235,3 +229,4 @@ if (dlBtn) {
   });
 }
 // ---- END CSV EXPORT ----
+
