@@ -1,179 +1,137 @@
-(() => {
-  // [0] THEME COLORS & SPINNER
-  const COLORS = {
-    primary: getCSS('--color-primary'),
-    secondary: getCSS('--color-secondary'),
-    accent: getCSS('--color-accent'),
-    text: getCSS('--color-text'),
-    card: getCSS('--color-card')
-  };
-  function getCSS(varName, fallback = '') {
-    return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
-  }
-  const spinner = document.getElementById('spinner');
-  function showSpinner() { spinner.style.display = 'block'; }
-  function hideSpinner() { spinner.style.display = 'none'; }
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <!-- [1] META & TITLE -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sky Café Trucks Dashboard</title>
 
-  // [1] CONFIGURATION
-  const DEVICE_TOKENS = {
-    'skycafe-1': 'BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8',
-    'skycafe-2': 'BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P',
-    'skycafe-3': '', // Missing
-    'skycafe-4': 'BBUS-02xhIPOIpmMrGv5OwS2XX5La6Nn7ma',
-    'skycafe-5': '', // Missing
-    'skycafe-6': '', // Missing
-    'skycafe-7': '', // Missing
-    'skycafe-8': 'BBUS-KgQ7uvh3QgFNeRj6EGQTvTKH91Y0hv',
-    // Add more tokens here as you get them...
-  };
+  <!-- [2] STYLES & LIBRARIES -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  const POLL_MS = 10000, HIST = 50, TRAIL = 50;
-
-  // [1a] DEVICE LIST
-  const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
-  let DEVICE = 'skycafe-1';
-
-  // [2] SENSORS
-  const SENSORS = [
-    { id: 'nr1', label: 'NR1 °F', col: COLORS.primary, chart: null },
-    { id: 'nr2', label: 'NR2 °F', col: COLORS.secondary, chart: null },
-    { id: 'nr3', label: 'NR3 °F', col: COLORS.accent, chart: null },
-    { id: 'signal', label: 'RSSI (dBm)', col: COLORS.text, chart: null },
-    { id: 'volt', label: 'Volt (mV)', col: '#FF0000', chart: null },
-    { id: 'speed', label: 'Speed (km/h)', col: COLORS.secondary, chart: null }
-  ];
-
-  // [5] FETCH FROM UBIDOTS
-  async function fetchUbidotsVar(dev, variable, limit = 1, start = null, end = null) {
-    let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/${variable}/values?page_size=${limit}`;
-    if (start) url += `&start=${encodeURIComponent(start)}`;
-    if (end)   url += `&end=${encodeURIComponent(end)}`;
-    const token = DEVICE_TOKENS[dev] || '';
-    if (!token) return []; // No token, return empty
-    try {
-      const res = await fetch(url, { headers: { 'X-Auth-Token': token } });
-      if (!res.ok) return [];
-      const js = await res.json();
-      return js.results || [];
-    } catch {
-      return [];
+  <!-- [3] CUSTOM STYLES -->
+  <style>
+    :root {
+      --color-bg: #f9fafb;
+      --color-card: #ffffff;
+      --color-text: #1f2937;
+      --color-primary: #3b82f6;
+      --color-secondary: #10b981;
+      --color-accent: #f59e0b;
     }
-  }
-
-  // [6] FORMAT HELPER
-  const fmt = (v, p = 1) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(p);
-
-  // [7] INITIALIZE CHARTS
-  function initCharts() {
-    const ctr = document.getElementById('charts');
-    ctr.innerHTML = '';
-    SENSORS.forEach(s => {
-      s.chart = null;
-      const card = document.createElement('div'); card.className = 'chart-box';
-      card.innerHTML = `<h2>${s.label}</h2><canvas></canvas>`;
-      ctr.appendChild(card);
-      const ctx = card.querySelector('canvas').getContext('2d');
-      s.chart = new Chart(ctx, {
-        type: 'line',
-        data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-      });
-    });
-  }
-
-  // [8] INITIALIZE MAP
-  let map, marker, polyline, trail = [];
-  function initMap() {
-    map = L.map('map').setView([0,0],2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
-    marker = L.marker([0,0]).addTo(map);
-    polyline = L.polyline([], { weight: 3 }).addTo(map);
-  }
-
-  // [9] UPDATE HISTORICAL CHARTS
-  async function updateCharts() {
-    await Promise.all(SENSORS.map(async s => {
-      const rows = await fetchUbidotsVar(DEVICE, s.id, HIST);
-      if (!rows.length) return;
-      s.chart.data.labels    = rows.map(r => new Date(r.created_at).toLocaleTimeString([], { hour:'numeric', minute:'2-digit', hour12:true }));
-      s.chart.data.datasets[0].data = rows.map(r => parseFloat(r.value) || null);
-      s.chart.update();
-    }));
-  }
-
-  // [10] DRAW LIVE & MAP
-  function drawLive(data) {
-    const { ts, iccid, lat, lon, speed, signal, volt, nr1, nr2, nr3 } = data;
-    const rows = [
-      ['Local Time', ts ? new Date(ts).toLocaleString() : '–'],
-      ['ICCID', iccid || '–'],
-      ['Lat', fmt(lat,6)], ['Lon', fmt(lon,6)],
-      ['Speed (km/h)', fmt(speed,1)], ['RSSI (dBm)', fmt(signal,0)],
-      ['Volt (mV)', fmt(volt,2)], ['NR1 °F', fmt(nr1,1)], ['NR2 °F', fmt(nr2,1)], ['NR3 °F', fmt(nr3,1)]
-    ];
-    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
-    if (isFinite(lat) && isFinite(lon)) {
-      marker.setLatLng([lat,lon]);
-      trail.push([lat,lon]); if (trail.length > TRAIL) trail.shift();
-      polyline.setLatLngs(trail);
-      map.setView([lat,lon], Math.max(map.getZoom(),13));
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: 'Inter', sans-serif;
     }
-  }
-
-  // [11] POLL LOOP
-  async function poll() {
-    if (!DEVICE_TOKENS[DEVICE]) {
-      document.getElementById('latest').innerHTML = '<tr><td colspan="2" style="color:red;">No token for this device. Data unavailable.</td></tr>';
-      setTimeout(poll, POLL_MS);
-      return;
+    #charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
     }
-    const [gpsArr, iccArr, ...sensorArrs] = await Promise.all([
-      fetchUbidotsVar(DEVICE,'gps'),
-      fetchUbidotsVar(DEVICE,'iccid'),
-      ...SENSORS.map(s => fetchUbidotsVar(DEVICE,s.id))
-    ]);
-    let ts=null, lat=null, lon=null, speed=null;
-    if (gpsArr[0]?.context) {
-      ts    = gpsArr[0].created_at;
-      lat   = gpsArr[0].context.lat;
-      lon   = gpsArr[0].context.lng;
-      speed = gpsArr[0].context.speed;
+    .chart-box {
+      background: var(--color-card);
+      border-radius: 1rem;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      padding-bottom: 2rem;
+      transition: box-shadow 0.2s ease;
+      height: 360px;
     }
-    const iccidVal = iccArr[0]?.value || null;
-    const signalVal = sensorArrs[0][0]?.value || null;
-    const voltVal   = sensorArrs[1][0]?.value || null;
-    const nr1Val    = sensorArrs[2][0]?.value || null;
-    const nr2Val    = sensorArrs[3][0]?.value || null;
-    const nr3Val    = sensorArrs[4][0]?.value || null;
-    drawLive({ ts, iccid: iccidVal, lat, lon, speed, signal: signalVal, volt: voltVal, nr1: nr1Val, nr2: nr2Val, nr3: nr3Val });
-    setTimeout(poll, POLL_MS);
-  }
+    .chart-box:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+    .chart-box h2 { margin-bottom: 0.75rem; font-size: 1.25rem; }
+    .chart-box canvas { flex:1; width:100% !important; height:260px !important; }
 
-  // [12] BOOTSTRAP & INIT
-  document.addEventListener('DOMContentLoaded', () => {
-    const deviceSelect = document.getElementById('deviceSelect');
-    deviceSelect.innerHTML = '';
-    DEVICES.forEach(dev => {
-      const opt = document.createElement('option');
-      opt.value = dev;
-      opt.text = dev.replace('skycafe-','SkyCafé ');
-      if (!DEVICE_TOKENS[dev]) {
-        opt.disabled = true;
-        opt.text += ' (No Token)';
-      }
-      deviceSelect.appendChild(opt);
-    });
-    // Select first device with a token as default
-    const firstAvailable = DEVICES.find(d => DEVICE_TOKENS[d]);
-    DEVICE = firstAvailable || DEVICES[0];
-    deviceSelect.value = DEVICE;
-    deviceSelect.addEventListener('change', e => {
-      DEVICE = e.target.value;
-      showSpinner();
-      document.getElementById('latest').innerHTML = '';
-      trail=[]; polyline.setLatLngs([]);
-      initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
-    });
-    showSpinner(); initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
-  });
-})();
+    .export-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .export-controls input { flex: 1 1 8rem; min-width: 6rem; }
+
+    #deviceSelect, #dlBtn {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    #deviceSelect:hover, #dlBtn:hover { background: var(--color-secondary); }
+    #dlBtn:disabled { background: gray; cursor:not-allowed; }
+
+    #start, #end { font-size: 60%; }
+
+    #spinner {
+      position: fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      border:4px solid rgba(0,0,0,0.1);
+      border-top:4px solid var(--color-primary);
+      border-radius:50%; width:40px; height:40px;
+      animation:spin 1s linear infinite; display:none; z-index:1000;
+    }
+    @keyframes spin { to{ transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="spinner"></div>
+  <header class="p-4 shadow-md flex items-center" style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
+    <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png" alt="Sky Café Trucks" class="h-10" />
+    <h1 class="ml-4 text-2xl font-semibold text-white">Sky Café Trucks Dashboard</h1>
+    <div class="ml-auto">
+      <label class="text-white font-medium">
+        Device:
+        <select id="deviceSelect" class="ml-2 p-1 rounded"></select>
+      </label>
+    </div>
+  </header>
+
+  <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <section class="lg:col-span-1 space-y-6">
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
+        <table id="latest" class="w-full text-sm"></table>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
+        <div class="export-controls mb-4">
+          <input type="date" id="start" class="border p-1 rounded" />
+          <input type="date" id="end" class="border p-1 rounded" />
+          <button id="dlBtn">Download</button>
+        </div>
+        <div id="expStatus" class="text-sm text-gray-600"></div>
+      </div>
+
+      <div class="maintenance p-4 bg-white rounded-2xl shadow">
+        <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
+        <p id="filterStatus" class="mb-2"></p>
+        <button id="resetFilterBtn" class="mr-2 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600" style="display:none;">
+          Reset Filter
+        </button>
+        <p id="serviceStatus" class="mt-4 mb-2 text-red-600 font-semibold"></p>
+        <button id="resetServiceBtn" class="px-3 py-1 rounded bg-gray-500 text-white hover:bg-gray-600" style="display:none;">
+          Reset Service
+        </button>
+      </div>
+    </section>
+
+    <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div id="charts" class="col-span-2"></div>
+      <div class="bg-white rounded-2xl shadow p-4 col-span-2 md:col-span-2">
+        <h2 class="text-lg font-semibold mb-2">Map View</h2>
+        <div id="map" class="h-64 rounded-lg"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
