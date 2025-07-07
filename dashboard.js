@@ -1,5 +1,5 @@
 (() => {
-  // [0] THEME COLORS & SPINNER
+  // [0] THEME COLORS
   const COLORS = {
     primary: getCSS('--color-primary'),
     secondary: getCSS('--color-secondary'),
@@ -10,9 +10,6 @@
   function getCSS(varName, fallback = '') {
     return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
   }
-  const spinner = document.getElementById('spinner');
-  function showSpinner() { spinner.style.display = 'block'; }
-  function hideSpinner() { spinner.style.display = 'none'; }
 
   // [1] CONFIGURATION
   const DEVICE_TOKENS = {
@@ -149,7 +146,7 @@
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] BOOTSTRAP & INIT
+  // [12] BOOTSTRAP & INIT (NO SPINNER)
   document.addEventListener('DOMContentLoaded', () => {
     const deviceSelect = document.getElementById('deviceSelect');
     deviceSelect.innerHTML = '';
@@ -169,11 +166,10 @@
     deviceSelect.value = DEVICE;
     deviceSelect.addEventListener('change', e => {
       DEVICE = e.target.value;
-      showSpinner();
       document.getElementById('latest').innerHTML = '';
       trail=[]; polyline.setLatLngs([]);
-      initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
+      initCharts(); updateCharts().then(() => { initMap(); poll(); });
     });
-    showSpinner(); initCharts(); updateCharts().then(() => { initMap(); hideSpinner(); poll(); });
+    initCharts(); updateCharts().then(() => { initMap(); poll(); });
   });
 })();
