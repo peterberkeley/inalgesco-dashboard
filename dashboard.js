@@ -194,9 +194,15 @@
     }
     if (resetServiceBtn) {
       resetServiceBtn.onclick = () => {
-        if (confirm("Mark service as done today?")) {
+        // Prompt for service code before resetting!
+        const code = prompt("Enter service reset code:");
+        if (code === null) return; // Cancelled
+        if (code.trim() === "8971") {
           localStorage.setItem(`${DEVICE}-service`, new Date().toISOString());
           updateMaintenanceStatus();
+          alert("Service reset successful.");
+        } else {
+          alert("Incorrect code. Service was not reset.");
         }
       };
     }
