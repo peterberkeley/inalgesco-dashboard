@@ -25,12 +25,9 @@
   };
 
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
-
-  // [1a] DEVICE LIST
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
   let DEVICE = 'skycafe-1';
 
-  // [2] SENSORS
   const SENSORS = [
     { id: 'nr1', label: 'NR1 °F', col: COLORS.primary, chart: null },
     { id: 'nr2', label: 'NR2 °F', col: COLORS.secondary, chart: null },
@@ -40,13 +37,12 @@
     { id: 'speed', label: 'Speed (km/h)', col: COLORS.secondary, chart: null }
   ];
 
-  // [5] FETCH FROM UBIDOTS
   async function fetchUbidotsVar(dev, variable, limit = 1, start = null, end = null) {
     let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/${variable}/values?page_size=${limit}`;
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end)   url += `&end=${encodeURIComponent(end)}`;
     const token = DEVICE_TOKENS[dev] || '';
-    if (!token) return []; // No token, return empty
+    if (!token) return [];
     try {
       const res = await fetch(url, { headers: { 'X-Auth-Token': token } });
       if (!res.ok) return [];
@@ -57,10 +53,8 @@
     }
   }
 
-  // [6] FORMAT HELPER
   const fmt = (v, p = 1) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(p);
 
-  // [7] INITIALIZE CHARTS
   function initCharts() {
     const ctr = document.getElementById('charts');
     ctr.innerHTML = '';
@@ -78,7 +72,6 @@
     });
   }
 
-  // [8] INITIALIZE MAP
   let map, marker, polyline, trail = [];
   function initMap() {
     map = L.map('map').setView([0,0],2);
@@ -87,7 +80,6 @@
     polyline = L.polyline([], { weight: 3 }).addTo(map);
   }
 
-  // [9] UPDATE HISTORICAL CHARTS
   async function updateCharts() {
     await Promise.all(SENSORS.map(async s => {
       const rows = await fetchUbidotsVar(DEVICE, s.id, HIST);
@@ -98,7 +90,6 @@
     }));
   }
 
-  // [10] DRAW LIVE & MAP
   function drawLive(data) {
     const { ts, iccid, lat, lon, speed, signal, volt, nr1, nr2, nr3 } = data;
     const rows = [
@@ -117,7 +108,6 @@
     }
   }
 
-  // [11] POLL LOOP
   async function poll() {
     if (!DEVICE_TOKENS[DEVICE]) {
       document.getElementById('latest').innerHTML = '<tr><td colspan="2" style="color:red;">No token for this device. Data unavailable.</td></tr>';
@@ -146,8 +136,8 @@
     setTimeout(poll, POLL_MS);
   }
 
-  // [12] BOOTSTRAP & INIT (NO SPINNER)
   document.addEventListener('DOMContentLoaded', () => {
+    // Device selector setup
     const deviceSelect = document.getElementById('deviceSelect');
     deviceSelect.innerHTML = '';
     DEVICES.forEach(dev => {
@@ -160,7 +150,6 @@
       }
       deviceSelect.appendChild(opt);
     });
-    // Select first device with a token as default
     const firstAvailable = DEVICES.find(d => DEVICE_TOKENS[d]);
     DEVICE = firstAvailable || DEVICES[0];
     deviceSelect.value = DEVICE;
@@ -172,61 +161,60 @@
     });
     initCharts(); updateCharts().then(() => { initMap(); poll(); });
 
-  // ---- CSV EXPORT ----
-const dlBtn = document.getElementById('dlBtn');
-if (dlBtn) {
-  dlBtn.addEventListener('click', async () => {
-    dlBtn.disabled = true;
-    dlBtn.textContent = "Downloading...";
-    // Parse date range and convert to UNIX ms timestamps
-    let startRaw = document.getElementById('start')?.value;
-    let endRaw = document.getElementById('end')?.value;
-    let start = null, end = null;
+    // CSV EXPORT BUTTON handler (robust, safe)
+    const dlBtn = document.getElementById('dlBtn');
+    if (dlBtn) {
+      dlBtn.addEventListener('click', async () => {
+        dlBtn.disabled = true;
+        dlBtn.textContent = "Downloading...";
 
-    if (startRaw) {
-      start = new Date(startRaw + 'T00:00:00Z').getTime();
+        let startRaw = document.getElementById('start')?.value;
+        let endRaw = document.getElementById('end')?.value;
+        let start = null, end = null;
+        if (startRaw) {
+          start = new Date(startRaw + 'T00:00:00Z').getTime();
+        }
+        if (endRaw) {
+          end = new Date(endRaw + 'T23:59:59.999Z').getTime();
+        }
+
+        // Fetch HIST records per sensor, filtered by date range if given
+        const rowsBySensor = await Promise.all(
+          SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, HIST, start, end))
+        );
+        const maxLen = Math.max(...rowsBySensor.map(r => r.length));
+        if (maxLen === 0) {
+          alert("No data available to export for this device.");
+          dlBtn.disabled = false;
+          dlBtn.textContent = "Download";
+          return;
+        }
+        let header = ['Time'].concat(SENSORS.map(s => s.label));
+        let csv = [header.join(',')];
+
+        for (let i = 0; i < maxLen; i++) {
+          let t = rowsBySensor[0][i]?.created_at || '';
+          let row = [t ? new Date(t).toLocaleString() : ''];
+          for (let s = 0; s < SENSORS.length; s++) {
+            row.push(rowsBySensor[s][i]?.value ?? '');
+          }
+          csv.push(row.join(','));
+        }
+
+        const blob = new Blob([csv.join('\r\n')], {type: 'text/csv'});
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${DEVICE}_data_${(new Date).toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        dlBtn.disabled = false;
+        dlBtn.textContent = "Download";
+      });
     }
-    if (endRaw) {
-      end = new Date(endRaw + 'T23:59:59.999Z').getTime();
-    }
-
-    // Fetch HIST records per sensor, filtered by date range if given
-    const rowsBySensor = await Promise.all(
-      SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, HIST, start, end))
-    );
-    const maxLen = Math.max(...rowsBySensor.map(r => r.length));
-    if (maxLen === 0) {
-      alert("No data available to export for this device.");
-      dlBtn.disabled = false;
-      dlBtn.textContent = "Download";
-      return;
-    }
-    let header = ['Time'].concat(SENSORS.map(s => s.label));
-    let csv = [header.join(',')];
-
-    for (let i = 0; i < maxLen; i++) {
-      let t = rowsBySensor[0][i]?.created_at || '';
-      let row = [t ? new Date(t).toLocaleString() : ''];
-      for (let s = 0; s < SENSORS.length; s++) {
-        row.push(rowsBySensor[s][i]?.value ?? '');
-      }
-      csv.push(row.join(','));
-    }
-
-    const blob = new Blob([csv.join('\r\n')], {type: 'text/csv'});
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${DEVICE}_data_${(new Date).toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    dlBtn.disabled = false;
-    dlBtn.textContent = "Download";
   });
-}
-// ---- END CSV EXPORT ----
-
+})();
