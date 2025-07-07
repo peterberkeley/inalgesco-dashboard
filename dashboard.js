@@ -138,8 +138,8 @@
 
   // === Maintenance Countdown Logic ===
   function updateMaintenanceStatus() {
-    const filterDays = 30;   // Days between filter changes
-    const serviceDays = 180; // Days between services
+    const filterDays = 30;
+    const serviceDays = 180;
     const now = new Date();
 
     const filterKey = `${DEVICE}-filter`;
@@ -181,25 +181,28 @@
     }
   }
 
+  // --- Robust Handlers (always re-attached) ---
   function setupMaintenanceHandlers() {
     const resetFilterBtn = document.getElementById('resetFilterBtn');
     const resetServiceBtn = document.getElementById('resetServiceBtn');
+
     if (resetFilterBtn) {
       resetFilterBtn.onclick = () => {
         if (confirm("Mark filter change as done today?")) {
           localStorage.setItem(`${DEVICE}-filter`, new Date().toISOString());
           updateMaintenanceStatus();
+          setupMaintenanceHandlers();
         }
       };
     }
     if (resetServiceBtn) {
       resetServiceBtn.onclick = () => {
-        // Prompt for service code before resetting!
         const code = prompt("Enter service reset code:");
-        if (code === null) return; // Cancelled
+        if (code === null) return;
         if (code.trim() === "8971") {
           localStorage.setItem(`${DEVICE}-service`, new Date().toISOString());
           updateMaintenanceStatus();
+          setupMaintenanceHandlers();
           alert("Service reset successful.");
         } else {
           alert("Incorrect code. Service was not reset.");
@@ -231,6 +234,7 @@
       trail=[]; polyline.setLatLngs([]);
       initCharts(); updateCharts().then(() => { initMap(); poll(); });
       updateMaintenanceStatus();
+      setupMaintenanceHandlers();
     });
     initCharts(); updateCharts().then(() => { initMap(); poll(); });
 
@@ -290,8 +294,11 @@
     }
 
     // Maintenance logic setup
-    setupMaintenanceHandlers();
     updateMaintenanceStatus();
-    setInterval(updateMaintenanceStatus, 60 * 60 * 1000);
+    setupMaintenanceHandlers();
+    setInterval(() => {
+      updateMaintenanceStatus();
+      setupMaintenanceHandlers();
+    }, 60 * 60 * 1000);
   });
 })();
