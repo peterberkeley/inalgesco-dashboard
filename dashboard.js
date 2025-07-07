@@ -172,57 +172,66 @@
     });
     initCharts(); updateCharts().then(() => { initMap(); poll(); });
 
-    // ---- CSV EXPORT ----
-    const dlBtn = document.getElementById('dlBtn');
-    if (dlBtn) {
-      dlBtn.addEventListener('click', async () => {
-        dlBtn.disabled = true;
-        dlBtn.textContent = "Downloading...";
-        const start = document.getElementById('start')?.value;
-        const end = document.getElementById('end')?.value;
+   // ---- CSV EXPORT ----
+const dlBtn = document.getElementById('dlBtn');
+if (dlBtn) {
+  dlBtn.addEventListener('click', async () => {
+    dlBtn.disabled = true;
+    dlBtn.textContent = "Downloading...";
+    // Parse date range
+    let startRaw = document.getElementById('start')?.value;
+    let endRaw = document.getElementById('end')?.value;
+    let start = null, end = null;
 
-        // Fetch HIST records per sensor, with date filtering if available
-        const rowsBySensor = await Promise.all(
-          SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, HIST, start, end))
-        );
-        // Get max available rows count (per sensor)
-        const maxLen = Math.max(...rowsBySensor.map(r => r.length));
-        if (maxLen === 0) {
-          alert("No data available to export for this device.");
-          dlBtn.disabled = false;
-          dlBtn.textContent = "Download";
-          return;
-        }
-        // Compose CSV header
-        let header = ['Time'].concat(SENSORS.map(s => s.label));
-        let csv = [header.join(',')];
-
-        // Compose CSV rows (align by array index)
-        for (let i = 0; i < maxLen; i++) {
-          let t = rowsBySensor[0][i]?.created_at || '';
-          let row = [t ? new Date(t).toLocaleString() : ''];
-          for (let s = 0; s < SENSORS.length; s++) {
-            row.push(rowsBySensor[s][i]?.value ?? '');
-          }
-          csv.push(row.join(','));
-        }
-
-        // Download as file
-        const blob = new Blob([csv.join('\r\n')], {type: 'text/csv'});
-        const url = URL.createObjectURL(blob);
-
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${DEVICE}_data_${(new Date).toISOString().slice(0,10)}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        dlBtn.disabled = false;
-        dlBtn.textContent = "Download";
-      });
+    // If user set a start date, convert to ISO string at 00:00:00Z
+    if (startRaw) {
+      start = new Date(startRaw + 'T00:00:00Z').toISOString();
     }
-    // ---- END CSV EXPORT ----
+    // If user set an end date, convert to ISO string at 23:59:59.999Z
+    if (endRaw) {
+      end = new Date(endRaw + 'T23:59:59.999Z').toISOString();
+    }
+
+    // Fetch HIST records per sensor, filtered by date range if given
+    const rowsBySensor = await Promise.all(
+      SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, HIST, start, end))
+    );
+    // Get max available rows count (per sensor)
+    const maxLen = Math.max(...rowsBySensor.map(r => r.length));
+    if (maxLen === 0) {
+      alert("No data available to export for this device.");
+      dlBtn.disabled = false;
+      dlBtn.textContent = "Download";
+      return;
+    }
+    // Compose CSV header
+    let header = ['Time'].concat(SENSORS.map(s => s.label));
+    let csv = [header.join(',')];
+
+    // Compose CSV rows (align by array index)
+    for (let i = 0; i < maxLen; i++) {
+      let t = rowsBySensor[0][i]?.created_at || '';
+      let row = [t ? new Date(t).toLocaleString() : ''];
+      for (let s = 0; s < SENSORS.length; s++) {
+        row.push(rowsBySensor[s][i]?.value ?? '');
+      }
+      csv.push(row.join(','));
+    }
+
+    // Download as file
+    const blob = new Blob([csv.join('\r\n')], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${DEVICE}_data_${(new Date).toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    dlBtn.disabled = false;
+    dlBtn.textContent = "Download";
   });
-})();
+}
+// ---- END CSV EXPORT ----
