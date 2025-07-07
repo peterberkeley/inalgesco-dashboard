@@ -136,6 +136,72 @@
     setTimeout(poll, POLL_MS);
   }
 
+  // === Maintenance Countdown Logic ===
+  function updateMaintenanceStatus() {
+    const filterDays = 30;   // Days between filter changes
+    const serviceDays = 180; // Days between services
+    const now = new Date();
+
+    const filterKey = `${DEVICE}-filter`;
+    const serviceKey = `${DEVICE}-service`;
+
+    let lastFilter = localStorage.getItem(filterKey);
+    let lastService = localStorage.getItem(serviceKey);
+
+    lastFilter = lastFilter ? new Date(lastFilter) : new Date(now.getTime() - 365 * 86400000);
+    lastService = lastService ? new Date(lastService) : new Date(now.getTime() - 365 * 86400000);
+
+    const filterUsed = Math.floor((now - lastFilter) / 86400000);
+    const serviceUsed = Math.floor((now - lastService) / 86400000);
+    const filterLeft = filterDays - filterUsed;
+    const serviceLeft = serviceDays - serviceUsed;
+
+    const filterStatus = document.getElementById('filterStatus');
+    const serviceStatus = document.getElementById('serviceStatus');
+    const resetFilterBtn = document.getElementById('resetFilterBtn');
+    const resetServiceBtn = document.getElementById('resetServiceBtn');
+
+    if (filterStatus) {
+      if (filterLeft < 0) {
+        filterStatus.innerHTML = `<span style="color:red;font-weight:bold;">Filter change overdue by ${-filterLeft} day(s)!</span>`;
+        resetFilterBtn.style.display = '';
+      } else {
+        filterStatus.innerHTML = `Filter: <b>${filterLeft} day(s) left</b> until next change.`;
+        resetFilterBtn.style.display = filterLeft <= 3 ? '' : 'none';
+      }
+    }
+    if (serviceStatus) {
+      if (serviceLeft < 0) {
+        serviceStatus.innerHTML = `<span style="color:red;font-weight:bold;">Service overdue by ${-serviceLeft} day(s)!</span>`;
+        resetServiceBtn.style.display = '';
+      } else {
+        serviceStatus.innerHTML = `Service: <b>${serviceLeft} day(s) left</b> until next service.`;
+        resetServiceBtn.style.display = serviceLeft <= 7 ? '' : 'none';
+      }
+    }
+  }
+
+  function setupMaintenanceHandlers() {
+    const resetFilterBtn = document.getElementById('resetFilterBtn');
+    const resetServiceBtn = document.getElementById('resetServiceBtn');
+    if (resetFilterBtn) {
+      resetFilterBtn.onclick = () => {
+        if (confirm("Mark filter change as done today?")) {
+          localStorage.setItem(`${DEVICE}-filter`, new Date().toISOString());
+          updateMaintenanceStatus();
+        }
+      };
+    }
+    if (resetServiceBtn) {
+      resetServiceBtn.onclick = () => {
+        if (confirm("Mark service as done today?")) {
+          localStorage.setItem(`${DEVICE}-service`, new Date().toISOString());
+          updateMaintenanceStatus();
+        }
+      };
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     // Device selector setup
     const deviceSelect = document.getElementById('deviceSelect');
@@ -158,6 +224,7 @@
       document.getElementById('latest').innerHTML = '';
       trail=[]; polyline.setLatLngs([]);
       initCharts(); updateCharts().then(() => { initMap(); poll(); });
+      updateMaintenanceStatus();
     });
     initCharts(); updateCharts().then(() => { initMap(); poll(); });
 
@@ -178,7 +245,6 @@
           end = new Date(endRaw + 'T23:59:59.999Z').getTime();
         }
 
-        // Fetch HIST records per sensor, filtered by date range if given
         const rowsBySensor = await Promise.all(
           SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, HIST, start, end))
         );
@@ -216,5 +282,10 @@
         dlBtn.textContent = "Download";
       });
     }
+
+    // Maintenance logic setup
+    setupMaintenanceHandlers();
+    updateMaintenanceStatus();
+    setInterval(updateMaintenanceStatus, 60 * 60 * 1000);
   });
 })();
