@@ -20,8 +20,9 @@
     'skycafe-5': '', // Missing
     'skycafe-6': '', // Missing
     'skycafe-7': '', // Missing
-    'skycafe-8': 'BBUS-KgQ7uvh3QgFNeRj6EGQTvTKH91Y0hv',
-    'skycafe-8': 'BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2',
+  
+
+    'skycafe-9': 'BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2',
     // Add more tokens here as you get them...
   };
 
