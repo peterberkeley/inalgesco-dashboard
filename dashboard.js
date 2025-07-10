@@ -55,6 +55,25 @@
     }
   }
 
+  // -------- PATCHED: fetch all records in date range (paging) --------
+  async function fetchAllUbidotsVar(dev, variable, start = null, end = null) {
+    const token = DEVICE_TOKENS[dev] || '';
+    if (!token) return [];
+    let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/${variable}/values?page_size=1000`;
+    if (start) url += `&start=${encodeURIComponent(start)}`;
+    if (end)   url += `&end=${encodeURIComponent(end)}`;
+    let results = [];
+    while (url) {
+      const res = await fetch(url, { headers: { 'X-Auth-Token': token } });
+      if (!res.ok) break;
+      const js = await res.json();
+      results = results.concat(js.results || []);
+      url = js.next; // will be null if no more pages
+    }
+    return results;
+  }
+  // -------------------------------------------------------------------
+
   const fmt = (v, p = 1) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(p);
 
   function initCharts() {
@@ -240,7 +259,7 @@
     });
     initCharts(); updateCharts().then(() => { initMap(); poll(); });
 
-    // CSV EXPORT BUTTON handler (robust, safe)
+    // CSV EXPORT BUTTON handler (now fetches ALL for date range!)
     const dlBtn = document.getElementById('dlBtn');
     if (dlBtn) {
       dlBtn.addEventListener('click', async () => {
@@ -257,8 +276,9 @@
           end = new Date(endRaw + 'T23:59:59.999Z').getTime();
         }
 
+        // PATCH: Use fetchAllUbidotsVar to get all points!
         const rowsBySensor = await Promise.all(
-          SENSORS.map(s => fetchUbidotsVar(DEVICE, s.id, HIST, start, end))
+          SENSORS.map(s => fetchAllUbidotsVar(DEVICE, s.id, start, end))
         );
         const maxLen = Math.max(...rowsBySensor.map(r => r.length));
         if (maxLen === 0) {
