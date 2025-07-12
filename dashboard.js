@@ -43,16 +43,17 @@
     }
   }
 
-  // --- Fetch Dallas addresses (16-char hex) for current truck
+  // --- Fetch Dallas addresses (16-char hex, lowercase) for current truck
   async function fetchDallasAddresses(dev) {
     try {
       const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/variables?token=${UBIDOTS_TOKEN}`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const js = await res.json();
+      // Lowercase everything!
       return js.results
-        .map(v => v.label)
-        .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
+        .map(v => v.label.toLowerCase())
+        .filter(lbl => /^[0-9a-f]{16}$/.test(lbl))
         .sort();
     } catch {
       return [];
@@ -74,6 +75,7 @@
         mapped: null,
         calibration: 0,
       };
+      // always use lowercase to index mapping!
       let label = mapped[addr]?.label?.trim() || addr;
       let offset = typeof mapped[addr]?.offset === 'number' ? mapped[addr].offset : 0;
       return {
@@ -131,6 +133,7 @@
     }
   }
 
+  // Continue in part 2...
   // Fetch all records in date range (paging)
   async function fetchAllUbidotsVar(dev, variable, start = null, end = null) {
     const token = UBIDOTS_TOKEN;
@@ -149,7 +152,7 @@
     return results;
   }
 
-  // --- Update charts for dynamic sensor addresses
+  // --- Update charts for dynamic sensor addresses (lowercase keys)
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
@@ -165,7 +168,7 @@
     }));
   }
 
-  // --- Live Table for dynamic sensor slots
+  // --- Live Table for dynamic sensor slots (lowercase)
   function drawLive(data, SENSORS) {
     let { ts, iccid, lat, lon, speed, signal, volt, addresses, readings } = data;
     if (!ts) ts = Date.now();
@@ -188,8 +191,7 @@
     }
   }
 
-  // Continue to part 2...
-  // --- Main polling and display logic
+  // --- Main polling and display logic (lowercase address keys)
   async function poll(SENSORS) {
     const [gpsArr, iccArr] = await Promise.all([
       fetchUbidotsVar(DEVICE,'gps'),
@@ -230,7 +232,7 @@
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
 
-  // --- CSV Export for all dynamic sensors
+  // --- CSV Export for all dynamic sensors (lowercase keys)
   async function csvExport(SENSORS) {
     const dlBtn = document.getElementById('dlBtn');
     if (dlBtn) {
@@ -296,7 +298,7 @@
     }
 
     const now = Date.now();
-    const offlineCutoff = 60 * 60 * 1000; // 1 hour
+    const offlineCutoff = 60 * 60 * 1000;
     let deviceStatus = {};
     await Promise.all(DEVICES.map(async dev => {
       let lastTs = await getDeviceLastTimestamp(dev);
@@ -344,7 +346,7 @@
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
     csvExport(SENSORS);
 
-    // --- Maintenance/handlers (unchanged from your previous code) ---
+    // Maintenance/handlers logic (unchanged from your previous code)...
     function updateMaintenanceStatus() {
       const filterDays = 30;
       const serviceDays = 180;
