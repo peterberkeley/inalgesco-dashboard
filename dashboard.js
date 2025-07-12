@@ -13,18 +13,18 @@
 
   // [1] CONFIGURATION
   const DEVICE_TOKENS = {
-    'skycafe-1': 'BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8',
-    'skycafe-2': 'BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P',
-    'skycafe-3': '', // Missing
-    'skycafe-4': 'BBUS-02xhIPOIpmMrGv5OwS2XX5La6Nn7ma',
-    'skycafe-5': '', // Missing
-    'skycafe-6': '', // Missing
-    'skycafe-7': '', // Missing
-    'skycafe-8': 'BBUS-KgQ7uvh3QgFNeRj6EGQTvTKH91Y0hv',
-    'skycafe-9': 'BBUS-OCoYOgeBSeIOOlExVxm59W1dqVYB7p',
-    'skycafe-10': 'BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2',
-    // Add more tokens here as you get them...
-  };
+  'skycafe-1': 'BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8',
+  'skycafe-2': 'BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P',
+  'skycafe-3': '', // Missing
+  'skycafe-4': 'BBUS-02xhIPOIpmMrGv5OwS2XX5La6Nn7ma',
+  'skycafe-5': '', // Missing
+  'skycafe-6': '', // Missing
+  'skycafe-7': '', // Missing
+  'skycafe-8': 'BBUS-KgQ7uvh3QgFNeRj6EGQTvTKH91Y0hv',
+  'skycafe-9': 'BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK', // <--- UPDATED TOKEN
+  'skycafe-10': 'BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2',
+  // Add more tokens here as you get them...
+};
 
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
