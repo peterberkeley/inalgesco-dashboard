@@ -63,8 +63,8 @@
   </div>
   <script>
     // --- CONFIG: Set your credentials here ---
-    const UBIDOTS_TOKEN = "BBUS-29e88e37d6ba6cc1b2278acfc9612a340de"; // CHANGE THIS!
-    const PASSWORD = "Peter123";             // CHANGE THIS!
+    const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L"; // CHANGE THIS!
+    const PASSWORD = "Skycafe8971";             // CHANGE THIS!
     const DEVICE = "config";
     const VARIABLE = "sensor_map";
 
@@ -141,94 +141,94 @@
         tbl.appendChild(tr);
       });
     }
-      // --- Add Sensor Row ---
-      document.getElementById("addSensorBtn").onclick = function() {
-        if (!mapData[currentTruck]) mapData[currentTruck] = {};
-        let addr = prompt("Enter sensor address (e.g. 287592D61000001B):");
-        if (!addr) return;
-        addr = addr.trim().toUpperCase();
-        if (!/^[0-9A-F]{16}$/.test(addr)) {
-          alert("Address must be 16 hex characters.");
-          return;
-        }
-        if (!mapData[currentTruck][addr])
-          mapData[currentTruck][addr] = { label: "", offset: 0 };
-        renderSensorTable();
-      };
 
-      // --- Delete Sensor Row ---
-      document.getElementById("sensorTable").addEventListener("click", function(e) {
-        if (e.target.classList.contains("delSensorBtn")) {
-          const row = e.target.closest("tr");
-          const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
-          delete mapData[currentTruck][addr];
-          renderSensorTable();
-        }
-      });
-
-      // --- Update Mappings Live ---
-      document.getElementById("sensorTable").addEventListener("input", function(e) {
-        const tbl = document.getElementById("sensorTable").querySelector("tbody");
-        const sensors = {};
-        Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-          let addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
-          if (!/^[0-9A-F]{16}$/.test(addr)) return;
-          let label = tr.querySelector(".sensorLabel").value.trim();
-          let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
-          sensors[addr] = { label, offset };
-        });
-        mapData[currentTruck] = sensors;
-      });
-
-      // --- Save to Ubidots ---
-      document.getElementById("saveBtn").onclick = async function() {
-        document.getElementById("saveBtn").disabled = true;
-        document.getElementById("statusMsg").textContent = "Saving...";
-        try {
-          let payload = JSON.stringify(mapData);
-let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ value: JSON.stringify(payload) })
-  // Note the second JSON.stringify!
-});
-          if (!res.ok) throw new Error("Failed to save");
-          document.getElementById("statusMsg").textContent = "Saved to Ubidots!";
-        } catch (e) {
-          document.getElementById("statusMsg").textContent = "Failed to save.";
-        }
-        setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
-        document.getElementById("saveBtn").disabled = false;
-      };
-
-      // --- Fetch Existing Mapping from Ubidots ---
-      async function fetchConfig() {
-        document.getElementById("statusMsg").textContent = "Loading...";
-        try {
-          let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
-          if (!res.ok) throw new Error("Not found");
-          let js = await res.json();
-          let raw = js.results && js.results.length ? js.results[0].value : "{}";
-          // If Ubidots encoded as a string, parse again
-          if (typeof raw === "string") raw = JSON.parse(raw);
-          mapData = raw;
-        } catch (e) {
-          mapData = {};
-        }
-        refreshTruckSelect();
-        renderSensorTable();
-        document.getElementById("statusMsg").textContent = "";
+    // --- Add Sensor Row ---
+    document.getElementById("addSensorBtn").onclick = function() {
+      if (!mapData[currentTruck]) mapData[currentTruck] = {};
+      let addr = prompt("Enter sensor address (e.g. 287592D61000001B):");
+      if (!addr) return;
+      addr = addr.trim().toUpperCase();
+      if (!/^[0-9A-F]{16}$/.test(addr)) {
+        alert("Address must be 16 hex characters.");
+        return;
       }
+      if (!mapData[currentTruck][addr])
+        mapData[currentTruck][addr] = { label: "", offset: 0 };
+      renderSensorTable();
+    };
 
-      // --- Initialize ---
-      window.onload = fetchConfig;
-
-      // --- Ensure sensorTable is always rendered on unlock ---
-      document.getElementById("unlockBtn").addEventListener("click", function() {
-        refreshTruckSelect();
+    // --- Delete Sensor Row ---
+    document.getElementById("sensorTable").addEventListener("click", function(e) {
+      if (e.target.classList.contains("delSensorBtn")) {
+        const row = e.target.closest("tr");
+        const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
+        delete mapData[currentTruck][addr];
         renderSensorTable();
-      });
+      }
+    });
 
-    </script>
+    // --- Update Mappings Live ---
+    document.getElementById("sensorTable").addEventListener("input", function(e) {
+      const tbl = document.getElementById("sensorTable").querySelector("tbody");
+      const sensors = {};
+      Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
+        let addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
+        if (!/^[0-9A-F]{16}$/.test(addr)) return;
+        let label = tr.querySelector(".sensorLabel").value.trim();
+        let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
+        sensors[addr] = { label, offset };
+      });
+      mapData[currentTruck] = sensors;
+    });
+
+    // --- Save to Ubidots using context field ---
+    document.getElementById("saveBtn").onclick = async function() {
+      document.getElementById("saveBtn").disabled = true;
+      document.getElementById("statusMsg").textContent = "Saving...";
+      try {
+        let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            value: 0,
+            context: mapData
+          })
+        });
+        if (!res.ok) throw new Error("Failed to save");
+        document.getElementById("statusMsg").textContent = "Saved to Ubidots!";
+      } catch (e) {
+        document.getElementById("statusMsg").textContent = "Failed to save.";
+      }
+      setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
+      document.getElementById("saveBtn").disabled = false;
+    };
+
+    // --- Fetch Existing Mapping from Ubidots context field ---
+    async function fetchConfig() {
+      document.getElementById("statusMsg").textContent = "Loading...";
+      try {
+        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
+        if (!res.ok) throw new Error("Not found");
+        let js = await res.json();
+        let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
+        mapData = context;
+      } catch (e) {
+        mapData = {};
+      }
+      refreshTruckSelect();
+      renderSensorTable();
+      document.getElementById("statusMsg").textContent = "";
+    }
+
+    // --- Initialize ---
+    window.onload = fetchConfig;
+
+    // --- Ensure sensorTable is always rendered on unlock ---
+    document.getElementById("unlockBtn").addEventListener("click", function() {
+      refreshTruckSelect();
+      renderSensorTable();
+    });
+
+  </script>
 </body>
 </html>
