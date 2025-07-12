@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SkyCafé Sensor Mapping Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #f7fafc; font-family: 'Inter', sans-serif; }
+    .container { max-width: 620px; margin: 2rem auto; }
+    .locked { filter: blur(6px) grayscale(0.6); pointer-events: none; }
+    input[type="text"], input[type="number"] { border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; }
+    th, td { padding: 5px 8px; }
+    .btn { background: #2563eb; color: #fff; border-radius: 5px; padding: 6px 18px; font-weight: 600; }
+    .btn:hover { background: #0ea5e9; }
+    .error { color: #b91c1c; font-weight: 600; }
+    .success { color: #059669; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
+    <div id="lockscreen" class="flex flex-col items-center justify-center py-16">
+      <h2 class="text-xl mb-4 font-semibold">Admin Access Required</h2>
+      <input id="adminPass" type="password" placeholder="Enter password" class="mb-2 p-2 rounded border" />
+      <button id="unlockBtn" class="btn">Unlock</button>
+      <div id="authError" class="error mt-2"></div>
+    </div>
+    <div id="adminPage" style="display:none;">
+      <h1 class="text-2xl font-bold mb-2 text-blue-700">SkyCafé Sensor Mapping Admin</h1>
+      <p class="mb-4 text-gray-600">Assign location names and calibration to each sensor per truck.<br>
+        <b>Download JSON</b> after edits, then upload it to GitHub.<br>
+        <span class="text-xs text-gray-500">(Your dashboard will read from the updated JSON.)</span>
+      </p>
+      <div class="mb-3 flex flex-row gap-2 items-center">
+        <label for="truckSelect" class="font-medium">Truck:</label>
+        <select id="truckSelect" class="p-1 rounded border"></select>
+        <button id="addTruckBtn" class="btn text-xs px-2 py-1">+ Add Truck</button>
+        <button id="delTruckBtn" class="btn text-xs px-2 py-1 bg-red-600 hover:bg-red-700">Delete</button>
+      </div>
+      <div class="mb-6">
+        <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
+          <thead>
+            <tr class="bg-blue-200">
+              <th class="w-2/12">Sensor Address</th>
+              <th class="w-4/12">Label</th>
+              <th class="w-2/12">Calibration Offset (°)</th>
+              <th class="w-1/12"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button id="addSensorBtn" class="btn mt-3">+ Add Sensor</button>
+      </div>
+      <div class="flex flex-row gap-4 items-center mt-2">
+        <button id="downloadBtn" class="btn">Download JSON</button>
+        <span id="statusMsg" class="ml-2"></span>
+      </div>
+      <div class="mt-6 text-xs text-gray-400">
+        <p>For help: <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></p>
+      </div>
+    </div>
+  </div>
+  <script>
+    // --- Settings ---
+    const PASSWORD = "Skycafe8971"; // <<< CHANGE THIS! (min. 8 chars)
+    const DEFAULT_TRUCKS = Array.from({length: 24}, (_, i) => `skycafe-${i+1}`);
+    const MAP_URL = "https://peterberkeley.github.io/inalgesco-dashboard/sensor-map.json";
+
+    // --- Utility: Download JSON as file ---
+    function downloadObjectAsJson(exportObj, exportName) {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute("href", dataStr);
+      dlAnchor.setAttribute("download", exportName + ".json");
+      document.body.appendChild(dlAnchor);
+      dlAnchor.click();
+      dlAnchor.remove();
+    }
+
+    // --- State ---
+    let mapData = {};
+    let currentTruck = DEFAULT_TRUCKS[0];
+
+    // --- Auth ---
+    const lockscreen = document.getElementById("lockscreen");
+    const adminPage = document.getElementById("adminPage");
+    document.getElementById("unlockBtn").onclick = function() {
+      const pass = document.getElementById("adminPass").value;
+      if (pass.length < 8) {
+        document.getElementById("authError").textContent = "Password too short.";
+        return;
+      }
+      if (pass === PASSWORD) {
+        lockscreen.style.display = "none";
+        adminPage.style.display = "";
+      } else {
+        document.getElementById("authError").textContent = "Incorrect password.";
+      }
+    };
+
+    // --- Truck Select & Load ---
+    function refreshTruckSelect() {
+      const sel = document.getElementById("truckSelect");
+      sel.innerHTML = '';
+      Object.keys(mapData).concat(DEFAULT_TRUCKS).filter((v,i,a)=>a.indexOf(v)===i).forEach(truck => {
+        const opt = document.createElement("option");
+        opt.value = truck;
+        opt.textContent = truck;
+        if (truck === currentTruck) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+    document.getElementById("truckSelect").onchange = function(e) {
+      currentTruck = e.target.value;
+      renderSensorTable();
+    };
+    document.getElementById("addTruckBtn").onclick = function() {
+      const n = prompt("Enter new truck/device name:");
+      if (!n) return;
+      if (!mapData[n]) mapData[n] = {};
+      currentTruck = n;
+      refreshTruckSelect(); renderSensorTable();
+    };
+    document.getElementById("delTruckBtn").onclick = function() {
+      if (!confirm("Delete all mappings for this truck?")) return;
+      delete mapData[currentTruck];
+      currentTruck = DEFAULT_TRUCKS[0];
+      refreshTruckSelect(); renderSensorTable();
+    };
+
+    // --- Sensors Table ---
+    function renderSensorTable() {
+      const tbl = document.getElementById("sensorTable").querySelector("tbody");
+      tbl.innerHTML = '';
+      const sensors = mapData[currentTruck] || {};
+      Object.entries(sensors).forEach(([addr, obj], idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input type="text" value="${addr}" data-idx="${idx}" class="sensorAddr" style="width:120px"/></td>
+          <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px"/></td>
+          <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px"/></td>
+          <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn">x</button></td>
+        `;
+        tbl.appendChild(tr);
+      });
+    }
+      // --- Add Sensor Row ---
+      document.getElementById("addSensorBtn").onclick = function() {
+        if (!mapData[currentTruck]) mapData[currentTruck] = {};
+        let addr = prompt("Enter sensor address (e.g. 287592D61000001B):");
+        if (!addr) return;
+        addr = addr.trim().toUpperCase();
+        if (!/^[0-9A-F]{16}$/.test(addr)) {
+          alert("Address must be 16 hex characters.");
+          return;
+        }
+        if (!mapData[currentTruck][addr])
+          mapData[currentTruck][addr] = { label: "", offset: 0 };
+        renderSensorTable();
+      };
+
+      // --- Delete Sensor Row ---
+      document.getElementById("sensorTable").addEventListener("click", function(e) {
+        if (e.target.classList.contains("delSensorBtn")) {
+          const row = e.target.closest("tr");
+          const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
+          delete mapData[currentTruck][addr];
+          renderSensorTable();
+        }
+      });
+
+      // --- Update Mappings Live ---
+      document.getElementById("sensorTable").addEventListener("input", function(e) {
+        const tbl = document.getElementById("sensorTable").querySelector("tbody");
+        const sensors = {};
+        Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
+          let addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
+          if (!/^[0-9A-F]{16}$/.test(addr)) return;
+          let label = tr.querySelector(".sensorLabel").value.trim();
+          let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
+          sensors[addr] = { label, offset };
+        });
+        mapData[currentTruck] = sensors;
+      });
+
+      // --- Download JSON File ---
+      document.getElementById("downloadBtn").onclick = function() {
+        downloadObjectAsJson(mapData, "sensor-map");
+        document.getElementById("statusMsg").textContent =
+          "Downloaded! Upload to your GitHub sensor-map.json.";
+        setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 4000);
+      };
+
+      // --- Fetch Existing Mapping (if available) ---
+      async function fetchConfig() {
+        try {
+          let res = await fetch(MAP_URL + "?v=" + Date.now());
+          if (!res.ok) throw new Error("Not found");
+          mapData = await res.json();
+        } catch {
+          mapData = {};
+        }
+        refreshTruckSelect();
+        renderSensorTable();
+      }
+
+      // --- Initialize ---
+      window.onload = fetchConfig;
+
+      // --- Ensure sensorTable is always rendered on unlock ---
+      document.getElementById("unlockBtn").addEventListener("click", function() {
+        refreshTruckSelect();
+        renderSensorTable();
+      });
+
+    </script>
+</body>
+</html>
