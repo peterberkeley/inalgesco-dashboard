@@ -183,8 +183,8 @@
         if (!res.ok) throw new Error("Failed to fetch vars");
         const js = await res.json();
         knownAddresses = js.results
-          .map(v => v.label.toUpperCase())
-          .filter(lbl => /^[0-9A-F]{16}$/.test(lbl));
+          .map(v => v.label)
+.filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl));
       } catch {
         knownAddresses = [];
       }
