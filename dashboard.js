@@ -16,9 +16,10 @@
 
   // [1] CONFIGURATION
   const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
+  const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
   const CONFIG_DEVICE = "config";
   const CONFIG_VARIABLE = "sensor_map";
-  const CONFIG_URL = `https://industrial.api.ubidots.com/api/v1.6/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN}`;
+  const CONFIG_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN}`;
 
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
@@ -43,17 +44,16 @@
     }
   }
 
-  // --- Fetch Dallas addresses (16-char hex, lowercase) for current truck
+  // --- Fetch Dallas addresses (16-char hex) for current truck
   async function fetchDallasAddresses(dev) {
     try {
-      const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/variables?token=${UBIDOTS_TOKEN}`;
+      const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const js = await res.json();
-      // Lowercase everything!
       return js.results
-        .map(v => v.label.toLowerCase())
-        .filter(lbl => /^[0-9a-f]{16}$/.test(lbl))
+        .map(v => v.label)
+        .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
         .sort();
     } catch {
       return [];
@@ -75,7 +75,6 @@
         mapped: null,
         calibration: 0,
       };
-      // always use lowercase to index mapping!
       let label = mapped[addr]?.label?.trim() || addr;
       let offset = typeof mapped[addr]?.offset === 'number' ? mapped[addr].offset : 0;
       return {
@@ -120,7 +119,7 @@
 
   // --- Fetch last N values for any sensor address
   async function fetchUbidotsVar(dev, variable, limit = 1) {
-    let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/${variable}/values?page_size=${limit}`;
+    let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}`;
     const token = UBIDOTS_TOKEN;
     if (!token) return [];
     try {
@@ -133,12 +132,12 @@
     }
   }
 
-  // Continue in part 2...
+  // Continue to part 2...
   // Fetch all records in date range (paging)
   async function fetchAllUbidotsVar(dev, variable, start = null, end = null) {
     const token = UBIDOTS_TOKEN;
     if (!token) return [];
-    let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/${variable}/values?page_size=1000`;
+    let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=1000`;
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end)   url += `&end=${encodeURIComponent(end)}`;
     let results = [];
@@ -147,12 +146,12 @@
       if (!res.ok) break;
       const js = await res.json();
       results = results.concat(js.results || []);
-      url = js.next; // will be null if no more pages
+      url = js.next;
     }
     return results;
   }
 
-  // --- Update charts for dynamic sensor addresses (lowercase keys)
+  // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
@@ -168,7 +167,7 @@
     }));
   }
 
-  // --- Live Table for dynamic sensor slots (lowercase)
+  // --- Live Table for dynamic sensor slots
   function drawLive(data, SENSORS) {
     let { ts, iccid, lat, lon, speed, signal, volt, addresses, readings } = data;
     if (!ts) ts = Date.now();
@@ -191,7 +190,7 @@
     }
   }
 
-  // --- Main polling and display logic (lowercase address keys)
+  // --- Main polling and display logic
   async function poll(SENSORS) {
     const [gpsArr, iccArr] = await Promise.all([
       fetchUbidotsVar(DEVICE,'gps'),
@@ -232,7 +231,7 @@
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
 
-  // --- CSV Export for all dynamic sensors (lowercase keys)
+  // --- CSV Export for all dynamic sensors
   async function csvExport(SENSORS) {
     const dlBtn = document.getElementById('dlBtn');
     if (dlBtn) {
@@ -287,7 +286,7 @@
 
     async function getDeviceLastTimestamp(dev) {
       try {
-        const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/`;
+        const url = `${UBIDOTS_BASE}/devices/${dev}/`;
         const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
         if (!res.ok) return 0;
         const js = await res.json();
@@ -298,7 +297,7 @@
     }
 
     const now = Date.now();
-    const offlineCutoff = 60 * 60 * 1000;
+    const offlineCutoff = 60 * 60 * 1000; // 1 hour
     let deviceStatus = {};
     await Promise.all(DEVICES.map(async dev => {
       let lastTs = await getDeviceLastTimestamp(dev);
@@ -346,7 +345,7 @@
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
     csvExport(SENSORS);
 
-    // Maintenance/handlers logic (unchanged from your previous code)...
+    // --- Maintenance logic (unchanged) ---
     function updateMaintenanceStatus() {
       const filterDays = 30;
       const serviceDays = 180;
