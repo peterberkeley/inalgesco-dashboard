@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background: #f7fafc; font-family: 'Inter', sans-serif; }
-    .container { max-width: 620px; margin: 2rem auto; }
+    .container { max-width: 640px; margin: 2rem auto; }
     .locked { filter: blur(6px) grayscale(0.6); pointer-events: none; }
     input[type="text"], input[type="number"] { border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; }
     th, td { padding: 5px 8px; }
@@ -27,9 +27,10 @@
     </div>
     <div id="adminPage" style="display:none;">
       <h1 class="text-2xl font-bold mb-2 text-blue-700">SkyCafé Sensor Mapping Admin</h1>
-      <p class="mb-4 text-gray-600">Assign location names and calibration to each sensor per truck.<br>
-        <b>Download JSON</b> after edits, then upload it to GitHub.<br>
-        <span class="text-xs text-gray-500">(Your dashboard will read from the updated JSON.)</span>
+      <p class="mb-4 text-gray-600">
+        Assign location names and calibration to each sensor per truck.<br>
+        <b>Save</b> after edits to update Ubidots for all users.<br>
+        <span class="text-xs text-gray-500">(Your dashboard will read live from Ubidots.)</span>
       </p>
       <div class="mb-3 flex flex-row gap-2 items-center">
         <label for="truckSelect" class="font-medium">Truck:</label>
@@ -52,7 +53,7 @@
         <button id="addSensorBtn" class="btn mt-3">+ Add Sensor</button>
       </div>
       <div class="flex flex-row gap-4 items-center mt-2">
-        <button id="downloadBtn" class="btn">Download JSON</button>
+        <button id="saveBtn" class="btn">Save to Ubidots</button>
         <span id="statusMsg" class="ml-2"></span>
       </div>
       <div class="mt-6 text-xs text-gray-400">
@@ -61,23 +62,19 @@
     </div>
   </div>
   <script>
-    // --- Settings ---
-    const PASSWORD = "Skycafe8971"; // <<< CHANGE THIS! (min. 8 chars)
-    const DEFAULT_TRUCKS = Array.from({length: 24}, (_, i) => `skycafe-${i+1}`);
-    const MAP_URL = "https://peterberkeley.github.io/inalgesco-dashboard/sensor-map.json";
+    // --- CONFIG: Set your credentials here ---
+    const UBIDOTS_TOKEN = "YOUR_UBIDOTS_TOKEN_HERE"; // CHANGE THIS!
+    const PASSWORD = "YourPasswordHere";             // CHANGE THIS!
+    const DEVICE = "config";
+    const VARIABLE = "sensor_map";
 
-    // --- Utility: Download JSON as file ---
-    function downloadObjectAsJson(exportObj, exportName) {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
-      const dlAnchor = document.createElement('a');
-      dlAnchor.setAttribute("href", dataStr);
-      dlAnchor.setAttribute("download", exportName + ".json");
-      document.body.appendChild(dlAnchor);
-      dlAnchor.click();
-      dlAnchor.remove();
-    }
+    // --- Utility: Ubidots URLs ---
+    const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
+    const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values?page_size=1`;
+    const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values`;
 
     // --- State ---
+    const DEFAULT_TRUCKS = Array.from({length: 24}, (_, i) => `skycafe-${i+1}`);
     let mapData = {};
     let currentTruck = DEFAULT_TRUCKS[0];
 
@@ -183,25 +180,43 @@
         mapData[currentTruck] = sensors;
       });
 
-      // --- Download JSON File ---
-      document.getElementById("downloadBtn").onclick = function() {
-        downloadObjectAsJson(mapData, "sensor-map");
-        document.getElementById("statusMsg").textContent =
-          "Downloaded! Upload to your GitHub sensor-map.json.";
-        setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 4000);
+      // --- Save to Ubidots ---
+      document.getElementById("saveBtn").onclick = async function() {
+        document.getElementById("saveBtn").disabled = true;
+        document.getElementById("statusMsg").textContent = "Saving...";
+        try {
+          let payload = JSON.stringify(mapData);
+          let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ value: payload })
+          });
+          if (!res.ok) throw new Error("Failed to save");
+          document.getElementById("statusMsg").textContent = "Saved to Ubidots!";
+        } catch (e) {
+          document.getElementById("statusMsg").textContent = "Failed to save.";
+        }
+        setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
+        document.getElementById("saveBtn").disabled = false;
       };
 
-      // --- Fetch Existing Mapping (if available) ---
+      // --- Fetch Existing Mapping from Ubidots ---
       async function fetchConfig() {
+        document.getElementById("statusMsg").textContent = "Loading...";
         try {
-          let res = await fetch(MAP_URL + "?v=" + Date.now());
+          let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
           if (!res.ok) throw new Error("Not found");
-          mapData = await res.json();
-        } catch {
+          let js = await res.json();
+          let raw = js.results && js.results.length ? js.results[0].value : "{}";
+          // If Ubidots encoded as a string, parse again
+          if (typeof raw === "string") raw = JSON.parse(raw);
+          mapData = raw;
+        } catch (e) {
           mapData = {};
         }
         refreshTruckSelect();
         renderSensorTable();
+        document.getElementById("statusMsg").textContent = "";
       }
 
       // --- Initialize ---
