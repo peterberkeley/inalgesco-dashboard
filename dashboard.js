@@ -13,7 +13,7 @@
 
   // [1] CONFIGURATION
   // --- Use single account token for all devices ---
-  const UBIDOTS_TOKEN = "BBUS-6Lyp5x45HcRvzw1eOVF1DfBQBnAP7L"; // <-- EDIT as needed
+  const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L"; // YOUR ORG TOKEN
   const CONFIG_DEVICE = "config";
   const CONFIG_VARIABLE = "sensor_map";
   const CONFIG_URL = `https://industrial.api.ubidots.com/api/v1.6/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN}`;
@@ -208,8 +208,8 @@
     // 1. Fetch mapping config first!
     SENSOR_MAP = await fetchSensorMapConfig();
 
-    // ... the rest of your existing code, unchanged ...
-    // (the rest of your device select, CSV export, maintenance, etc)
+    // (Continue with your existing code here, unchanged)
+    // ... (device selector, CSV export, maintenance, handlers, etc.) ...
     // Everything works as before, but now uses live mapping!
     // (Paste the rest of your document.addEventListener code block as in your current file)
   });
