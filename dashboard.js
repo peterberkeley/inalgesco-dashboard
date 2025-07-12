@@ -29,17 +29,20 @@
   let DALLAS_LIST = [];  // List of sorted sensor addresses for this truck
 
   // --- Fetch mapping/calibration config from Ubidots context
-  async function fetchSensorMapConfig() {
-    try {
-      const res = await fetch(CONFIG_URL);
-      if (!res.ok) throw new Error("Failed to fetch sensor map config");
-      const js = await res.json();
-      return (js.results && js.results[0] && js.results[0].context) ? js.results[0].context : {};
-    } catch (e) {
-      console.error("Error fetching sensor map config:", e);
-      return {};
-    }
+  async function fetchDallasAddresses(dev) {
+  try {
+    const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/variables?token=${UBIDOTS_TOKEN}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const js = await res.json();
+    return js.results
+      .map(v => v.label)                                   // <-- Use label as-is
+      .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))        // <-- Case-insensitive match
+      .sort();
+  } catch {
+    return [];
   }
+}
 
   // Fetch Dallas sensor addresses (16-char hex) for current truck
   async function fetchDallasAddresses(dev) {
