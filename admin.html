@@ -9,12 +9,21 @@
     body { background: #f7fafc; font-family: 'Inter', sans-serif; }
     .container { max-width: 640px; margin: 2rem auto; }
     .locked { filter: blur(6px) grayscale(0.6); pointer-events: none; }
-    input[type="text"], input[type="number"] { border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; }
+    input[type="text"], input[type="number"], select { border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; }
     th, td { padding: 5px 8px; }
     .btn { background: #2563eb; color: #fff; border-radius: 5px; padding: 6px 18px; font-weight: 600; }
     .btn:hover { background: #0ea5e9; }
     .error { color: #b91c1c; font-weight: 600; }
     .success { color: #059669; font-weight: 600; }
+    .dropdown-modal {
+      position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.2); z-index: 10000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dropdown-modal-box {
+      background: #fff; border-radius: 1rem; padding: 2rem 2rem 1.5rem 2rem; min-width: 320px;
+      box-shadow: 0 10px 32px rgba(0,0,0,0.13);
+    }
   </style>
 </head>
 <body>
@@ -60,11 +69,22 @@
         <p>For help: <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></p>
       </div>
     </div>
+    <!-- Modal for Address Dropdown -->
+    <div id="addrDropdownModal" class="dropdown-modal" style="display:none;">
+      <div class="dropdown-modal-box">
+        <div class="mb-3 font-medium">Select sensor address to add:</div>
+        <select id="addrDropdown" class="w-full mb-4"></select>
+        <div class="flex flex-row gap-2">
+          <button id="addrDropdownOk" class="btn">OK</button>
+          <button id="addrDropdownCancel" class="btn bg-gray-400 hover:bg-gray-600">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
   <script>
     // --- CONFIG: Set your credentials here ---
-    const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L"; // CHANGE THIS!
-    const PASSWORD = "Skycafe8971";             // CHANGE THIS!
+    const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
+    const PASSWORD = "Skycafe8971";
     const DEVICE = "config";
     const VARIABLE = "sensor_map";
 
@@ -72,11 +92,29 @@
     const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values`;
+    const DEVICES_URL = `${UBIDOTS_BASE}/devices?token=${UBIDOTS_TOKEN}`;
 
-    // --- State ---
-    const DEFAULT_TRUCKS = Array.from({length: 24}, (_, i) => `skycafe-${i+1}`);
+    let DEFAULT_TRUCKS = [];
     let mapData = {};
-    let currentTruck = DEFAULT_TRUCKS[0];
+    let currentTruck = null;
+    let knownAddresses = [];
+
+    // Fetch active trucks (existing in mapping or with variables in Ubidots)
+    async function fetchActiveTrucks() {
+      try {
+        const res = await fetch(DEVICES_URL);
+        if (!res.ok) throw new Error("Failed to fetch devices");
+        const js = await res.json();
+        DEFAULT_TRUCKS = js.results
+          .filter(d => d.label && d.label.startsWith('skycafe-'))
+          .map(d => d.label);
+        if (DEFAULT_TRUCKS.length === 0) DEFAULT_TRUCKS = ['skycafe-12'];
+        currentTruck = DEFAULT_TRUCKS[0];
+      } catch {
+        DEFAULT_TRUCKS = ['skycafe-12'];
+        currentTruck = DEFAULT_TRUCKS[0];
+      }
+    }
 
     // --- Auth ---
     const lockscreen = document.getElementById("lockscreen");
@@ -99,16 +137,24 @@
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       sel.innerHTML = '';
-      Object.keys(mapData).concat(DEFAULT_TRUCKS).filter((v,i,a)=>a.indexOf(v)===i).forEach(truck => {
+      const allTrucks = Array.from(new Set(
+        Object.keys(mapData).concat(DEFAULT_TRUCKS)
+      ));
+      allTrucks.forEach(truck => {
         const opt = document.createElement("option");
         opt.value = truck;
         opt.textContent = truck;
         if (truck === currentTruck) opt.selected = true;
         sel.appendChild(opt);
       });
+      if (!allTrucks.includes(currentTruck)) {
+        currentTruck = allTrucks[0];
+        sel.value = currentTruck;
+      }
     }
-    document.getElementById("truckSelect").onchange = function(e) {
+    document.getElementById("truckSelect").onchange = async function(e) {
       currentTruck = e.target.value;
+      await fetchKnownAddresses();
       renderSensorTable();
     };
     document.getElementById("addTruckBtn").onclick = function() {
@@ -125,6 +171,23 @@
       refreshTruckSelect(); renderSensorTable();
     };
 
+    // --- Fetch known Dallas sensor addresses for current truck from Ubidots ---
+    async function fetchKnownAddresses() {
+      knownAddresses = [];
+      try {
+        const url = `${UBIDOTS_BASE}/devices/${currentTruck}/variables?token=${UBIDOTS_TOKEN}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Failed to fetch vars");
+        const js = await res.json();
+        // Dallas addresses are 16-character hex variables (no context fields like "gps", "signal", etc)
+        knownAddresses = js.results
+          .map(v => v.label)
+          .filter(lbl => /^[0-9A-F]{16}$/i.test(lbl));
+      } catch {
+        knownAddresses = [];
+      }
+    }
+
     // --- Sensors Table ---
     function renderSensorTable() {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
@@ -133,7 +196,7 @@
       Object.entries(sensors).forEach(([addr, obj], idx) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td><input type="text" value="${addr}" data-idx="${idx}" class="sensorAddr" style="width:120px"/></td>
+          <td><input type="text" value="${addr}" data-idx="${idx}" class="sensorAddr" style="width:120px" readonly/></td>
           <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px"/></td>
           <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px"/></td>
           <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn">x</button></td>
@@ -142,19 +205,39 @@
       });
     }
 
-    // --- Add Sensor Row ---
-    document.getElementById("addSensorBtn").onclick = function() {
-      if (!mapData[currentTruck]) mapData[currentTruck] = {};
-      let addr = prompt("Enter sensor address (e.g. 287592D61000001B):");
-      if (!addr) return;
-      addr = addr.trim().toUpperCase();
-      if (!/^[0-9A-F]{16}$/.test(addr)) {
-        alert("Address must be 16 hex characters.");
+    // --- Add Sensor Row via Dropdown ---
+    document.getElementById("addSensorBtn").onclick = async function() {
+      await fetchKnownAddresses();
+      const sensors = mapData[currentTruck] || {};
+      // Only offer addresses not already mapped
+      const unused = knownAddresses.filter(addr => !(addr in sensors));
+      if (unused.length === 0) {
+        alert("No unused sensors available for this truck.\nA new sensor must send data first.");
         return;
       }
-      if (!mapData[currentTruck][addr])
+      // Populate dropdown
+      const modal = document.getElementById("addrDropdownModal");
+      const sel = document.getElementById("addrDropdown");
+      sel.innerHTML = '';
+      unused.forEach(addr => {
+        const opt = document.createElement("option");
+        opt.value = addr;
+        opt.textContent = addr;
+        sel.appendChild(opt);
+      });
+      modal.style.display = '';
+      // Modal handlers
+      document.getElementById("addrDropdownOk").onclick = function() {
+        const addr = sel.value;
+        if (!addr) return;
+        if (!mapData[currentTruck]) mapData[currentTruck] = {};
         mapData[currentTruck][addr] = { label: "", offset: 0 };
-      renderSensorTable();
+        modal.style.display = 'none';
+        renderSensorTable();
+      };
+      document.getElementById("addrDropdownCancel").onclick = function() {
+        modal.style.display = 'none';
+      };
     };
 
     // --- Delete Sensor Row ---
@@ -206,6 +289,7 @@
     // --- Fetch Existing Mapping from Ubidots context field ---
     async function fetchConfig() {
       document.getElementById("statusMsg").textContent = "Loading...";
+      await fetchActiveTrucks();
       try {
         let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
         if (!res.ok) throw new Error("Not found");
@@ -216,6 +300,7 @@
         mapData = {};
       }
       refreshTruckSelect();
+      await fetchKnownAddresses();
       renderSensorTable();
       document.getElementById("statusMsg").textContent = "";
     }
@@ -224,8 +309,9 @@
     window.onload = fetchConfig;
 
     // --- Ensure sensorTable is always rendered on unlock ---
-    document.getElementById("unlockBtn").addEventListener("click", function() {
+    document.getElementById("unlockBtn").addEventListener("click", async function() {
       refreshTruckSelect();
+      await fetchKnownAddresses();
       renderSensorTable();
     });
 
