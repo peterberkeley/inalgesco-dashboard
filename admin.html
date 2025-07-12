@@ -184,13 +184,16 @@
         const js = await res.json();
         knownAddresses = js.results
           .map(v => v.label)
-.filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl));
+          .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl));
+        // --- DEBUG LINE: show known addresses on the admin page ---
+        document.getElementById("statusMsg").textContent = "Known addresses: " + JSON.stringify(knownAddresses);
       } catch {
         knownAddresses = [];
-        document.getElementById("statusMsg").textContent = "Known addresses: " + JSON.stringify(knownAddresses);
+        document.getElementById("statusMsg").textContent = "No addresses found";
       }
     }
 
+    // CONTINUE TO PART 2...
     // --- Sensors Table ---
     function renderSensorTable() {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
@@ -207,13 +210,14 @@
         tbl.appendChild(tr);
       });
     }
+
     // --- Add Sensor Row via Dropdown ---
     document.getElementById("addSensorBtn").onclick = async function() {
       await fetchKnownAddresses();
-      // Build sensors mapping, all uppercase
+      // Build sensors mapping as-is (no upper/lowercase change)
       const sensors = {};
-      Object.keys(mapData[currentTruck] || {}).forEach(a => sensors[a.toUpperCase()] = true);
-      // Only offer addresses not already mapped (case-insensitive)
+      Object.keys(mapData[currentTruck] || {}).forEach(a => sensors[a] = true);
+      // Only offer addresses not already mapped
       const unused = knownAddresses.filter(addr => !sensors[addr]);
       if (unused.length === 0) {
         alert("No unused sensors available for this truck.\nA new sensor must send data first.");
@@ -249,7 +253,7 @@
       if (e.target.classList.contains("delSensorBtn")) {
         const row = e.target.closest("tr");
         const addr = row.querySelector(".sensorAddr").value.trim();
-delete mapData[currentTruck][addr];
+        delete mapData[currentTruck][addr];
         renderSensorTable();
       }
     });
@@ -260,7 +264,7 @@ delete mapData[currentTruck][addr];
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
         let addr = tr.querySelector(".sensorAddr").value.trim();
-if (!/^[0-9a-fA-F]{16}$/.test(addr)) return;
+        if (!/^[0-9a-fA-F]{16}$/.test(addr)) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
         sensors[addr] = { label, offset };
