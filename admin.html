@@ -234,7 +234,7 @@
         const addr = sel.value;
         if (!addr) return;
         if (!mapData[currentTruck]) mapData[currentTruck] = {};
-        mapData[currentTruck][addr.toUpperCase()] = { label: "", offset: 0 };
+        mapData[currentTruck][addr] = { label: "", offset: 0 };
         modal.style.display = 'none';
         renderSensorTable();
       };
@@ -247,8 +247,8 @@
     document.getElementById("sensorTable").addEventListener("click", function(e) {
       if (e.target.classList.contains("delSensorBtn")) {
         const row = e.target.closest("tr");
-        const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
-        delete mapData[currentTruck][addr];
+        const addr = row.querySelector(".sensorAddr").value.trim();
+delete mapData[currentTruck][addr];
         renderSensorTable();
       }
     });
@@ -258,8 +258,8 @@
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-        let addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
-        if (!/^[0-9A-F]{16}$/.test(addr)) return;
+        let addr = tr.querySelector(".sensorAddr").value.trim();
+if (!/^[0-9a-fA-F]{16}$/.test(addr)) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
         sensors[addr] = { label, offset };
