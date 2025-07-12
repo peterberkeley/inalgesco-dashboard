@@ -210,7 +210,11 @@
       await fetchKnownAddresses();
       const sensors = mapData[currentTruck] || {};
       // Only offer addresses not already mapped
-      const unused = knownAddresses.filter(addr => !(addr in sensors));
+      const sensors = {};
+Object.keys(mapData[currentTruck] || {}).forEach(a => sensors[a.toUpperCase()] = true);
+const unused = knownAddresses
+  .map(a => a.toUpperCase())
+  .filter(addr => !sensors[addr]);
       if (unused.length === 0) {
         alert("No unused sensors available for this truck.\nA new sensor must send data first.");
         return;
