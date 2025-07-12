@@ -216,27 +216,69 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    // Device selector setup
+  // --- Device status check and selector with memory + gray-out ---
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Utility to check device "last activity"
+    async function getDeviceLastTimestamp(dev) {
+      try {
+        const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/`;
+        const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
+        if (!res.ok) return 0;
+        const js = await res.json();
+        // Use the device's 'last_activity' timestamp if available (in ms)
+        return new Date(js.last_activity).getTime() || 0;
+      } catch {
+        return 0;
+      }
+    }
+
+    // Determine offline devices (no activity in last hour)
+    const now = Date.now();
+    const offlineCutoff = 60 * 60 * 1000; // 1 hour
+    let deviceStatus = {};
+    await Promise.all(DEVICES.map(async dev => {
+      let lastTs = await getDeviceLastTimestamp(dev);
+      deviceStatus[dev] = (now - lastTs < offlineCutoff) ? 'online' : 'offline';
+    }));
+
+    // Device selector setup, with gray-out for offline
     const deviceSelect = document.getElementById('deviceSelect');
     deviceSelect.innerHTML = '';
+
+    // Get last selected device from localStorage
+    let savedDevice = localStorage.getItem('selectedDevice');
+    if (!savedDevice || !DEVICES.includes(savedDevice)) {
+      savedDevice = DEVICES[0];
+    }
+    DEVICE = savedDevice;
+
     DEVICES.forEach(dev => {
       const opt = document.createElement('option');
       opt.value = dev;
       opt.text = dev.replace('skycafe-','SkyCafé ');
-      // No need to check for DEVICE_TOKENS, all have access with UBIDOTS_TOKEN
+      if (deviceStatus[dev] === 'offline') {
+        opt.disabled = true;
+        opt.text += ' (Offline)';
+        opt.style.color = '#aaa'; // gray out text
+        opt.style.background = '#f4f4f4';
+      }
       deviceSelect.appendChild(opt);
     });
-    DEVICE = DEVICES[0];
+
     deviceSelect.value = DEVICE;
     deviceSelect.addEventListener('change', e => {
       DEVICE = e.target.value;
+      localStorage.setItem('selectedDevice', DEVICE);
       document.getElementById('latest').innerHTML = '';
-      trail=[]; polyline.setLatLngs([]);
+      trail = []; polyline.setLatLngs([]);
       initCharts(); updateCharts().then(() => { initMap(); poll(); });
       updateMaintenanceStatus();
       setupMaintenanceHandlers();
     });
+
+    // Persist device even on page refresh
+    localStorage.setItem('selectedDevice', DEVICE);
+
     initCharts(); updateCharts().then(() => { initMap(); poll(); });
 
     // CSV EXPORT BUTTON handler (now fetches ALL for date range!)
