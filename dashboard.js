@@ -12,19 +12,8 @@
   }
 
   // [1] CONFIGURATION
-  const DEVICE_TOKENS = {
-  'skycafe-1': 'BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8',
-  'skycafe-2': 'BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P',
-  'skycafe-3': '', // Missing
-  'skycafe-4': 'BBUS-02xhIPOIpmMrGv5OwS2XX5La6Nn7ma',
-  'skycafe-5': '', // Missing
-  'skycafe-6': '', // Missing
-  'skycafe-7': '', // Missing
-  'skycafe-8': 'BBUS-KgQ7uvh3QgFNeRj6EGQTvTKH91Y0hv',
-  'skycafe-9': 'BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK', // <--- UPDATED TOKEN
-  'skycafe-10': 'BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2',
-  // Add more tokens here as you get them...
-};
+  // --- Use single account token for all devices ---
+  const UBIDOTS_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
@@ -43,7 +32,7 @@
     let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/${variable}/values?page_size=${limit}`;
     if (start) url += `&start=${encodeURIComponent(start)}`;
     if (end)   url += `&end=${encodeURIComponent(end)}`;
-    const token = DEVICE_TOKENS[dev] || '';
+    const token = UBIDOTS_TOKEN;
     if (!token) return [];
     try {
       const res = await fetch(url, { headers: { 'X-Auth-Token': token } });
@@ -57,7 +46,7 @@
 
   // -------- PATCHED: fetch all records in date range (paging) --------
   async function fetchAllUbidotsVar(dev, variable, start = null, end = null) {
-    const token = DEVICE_TOKENS[dev] || '';
+    const token = UBIDOTS_TOKEN;
     if (!token) return [];
     let url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/${variable}/values?page_size=1000`;
     if (start) url += `&start=${encodeURIComponent(start)}`;
@@ -130,11 +119,6 @@
   }
 
   async function poll() {
-    if (!DEVICE_TOKENS[DEVICE]) {
-      document.getElementById('latest').innerHTML = '<tr><td colspan="2" style="color:red;">No token for this device. Data unavailable.</td></tr>';
-      setTimeout(poll, POLL_MS);
-      return;
-    }
     const [gpsArr, iccArr, ...sensorArrs] = await Promise.all([
       fetchUbidotsVar(DEVICE,'gps'),
       fetchUbidotsVar(DEVICE,'iccid'),
@@ -240,14 +224,10 @@
       const opt = document.createElement('option');
       opt.value = dev;
       opt.text = dev.replace('skycafe-','SkyCafé ');
-      if (!DEVICE_TOKENS[dev]) {
-        opt.disabled = true;
-        opt.text += ' (No Token)';
-      }
+      // No need to check for DEVICE_TOKENS, all have access with UBIDOTS_TOKEN
       deviceSelect.appendChild(opt);
     });
-    const firstAvailable = DEVICES.find(d => DEVICE_TOKENS[d]);
-    DEVICE = firstAvailable || DEVICES[0];
+    DEVICE = DEVICES[0];
     deviceSelect.value = DEVICE;
     deviceSelect.addEventListener('change', e => {
       DEVICE = e.target.value;
