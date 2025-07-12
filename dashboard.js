@@ -44,22 +44,6 @@
   }
 }
 
-  // Fetch Dallas sensor addresses (16-char hex) for current truck
-  async function fetchDallasAddresses(dev) {
-    try {
-      const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/variables?token=${UBIDOTS_TOKEN}`;
-      const res = await fetch(url);
-      if (!res.ok) return [];
-      const js = await res.json();
-      return js.results
-        .map(v => v.label.toUpperCase())
-        .filter(lbl => /^[0-9A-F]{16}$/.test(lbl))
-        .sort();
-    } catch {
-      return [];
-    }
-  }
-
   // --- Dynamic SENSORS table for up to 5 sensors (sorted)
   function buildSensorSlots() {
     // Get up to 5 addresses for the current device, sorted
