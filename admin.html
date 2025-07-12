@@ -91,13 +91,12 @@
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values`;
     const DEVICES_URL = `${UBIDOTS_BASE}/devices?token=${UBIDOTS_TOKEN}`;
-
     let DEFAULT_TRUCKS = [];
     let mapData = {};
     let currentTruck = null;
     let knownAddresses = [];
 
-    // Fetch active trucks
+    // --- Fetch active trucks (existing in mapping or with variables in Ubidots) ---
     async function fetchActiveTrucks() {
       try {
         const res = await fetch(DEVICES_URL);
@@ -172,23 +171,30 @@
       refreshTruckSelect(); renderSensorTable();
     };
 
-    // --- Fetch known Dallas sensor addresses for current truck from Ubidots (ALWAYS LOWERCASE) ---
+    // --- Fetch known Dallas sensor addresses for current truck from Ubidots ---
     async function fetchKnownAddresses() {
       knownAddresses = [];
       try {
-        const url = `${UBIDOTS_BASE}/devices/${currentTruck}/variables?token=${UBIDOTS_TOKEN}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch vars");
-        const js = await res.json();
-        // Lowercase all addresses
-        knownAddresses = js.results
-          .map(v => v.label?.toLowerCase())
-          .filter(lbl => /^[0-9a-f]{16}$/.test(lbl));
+        // Use the "variable search by device" method for Industrial API
+        // This fetches ALL variables, not just the default 20 (use page looping for many sensors)
+        let url = `${UBIDOTS_BASE}/variables/?device=${currentTruck}&page_size=100&token=${UBIDOTS_TOKEN}`;
+        let all = [];
+        while (url) {
+          const res = await fetch(url);
+          if (!res.ok) break;
+          const js = await res.json();
+          all = all.concat(js.results || []);
+          url = js.next;
+        }
+        // Dallas addresses: 16-char hex label, not e.g. "nr1", "signal", etc.
+        knownAddresses = all
+          .map(v => v.label)
+          .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl));
       } catch {
         knownAddresses = [];
       }
     }
-    // --- Sensors Table (LOWERCASE keys) ---
+    // --- Sensors Table ---
     function renderSensorTable() {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
@@ -205,14 +211,14 @@
       });
     }
 
-    // --- Add Sensor Row via Dropdown (LOWERCASE) ---
+    // --- Add Sensor Row via Dropdown ---
     document.getElementById("addSensorBtn").onclick = async function() {
       await fetchKnownAddresses();
-      // Build sensors mapping as lowercase
+      // Build sensors mapping, case-insensitive, upper
       const sensors = {};
       Object.keys(mapData[currentTruck] || {}).forEach(a => sensors[a.toLowerCase()] = true);
-      // Only offer addresses not already mapped
-      const unused = knownAddresses.filter(addr => !sensors[addr]);
+      // Only offer addresses not already mapped (case-insensitive)
+      const unused = knownAddresses.filter(addr => !sensors[addr.toLowerCase()]);
       if (unused.length === 0) {
         alert("No unused sensors available for this truck.\nA new sensor must send data first.");
         return;
@@ -233,7 +239,7 @@
         const addr = sel.value;
         if (!addr) return;
         if (!mapData[currentTruck]) mapData[currentTruck] = {};
-        mapData[currentTruck][addr.toLowerCase()] = { label: "", offset: 0 };
+        mapData[currentTruck][addr] = { label: "", offset: 0 };
         modal.style.display = 'none';
         renderSensorTable();
       };
@@ -242,23 +248,23 @@
       };
     };
 
-    // --- Delete Sensor Row (LOWERCASE) ---
+    // --- Delete Sensor Row ---
     document.getElementById("sensorTable").addEventListener("click", function(e) {
       if (e.target.classList.contains("delSensorBtn")) {
         const row = e.target.closest("tr");
-        const addr = row.querySelector(".sensorAddr").value.trim().toLowerCase();
+        const addr = row.querySelector(".sensorAddr").value.trim();
         delete mapData[currentTruck][addr];
         renderSensorTable();
       }
     });
 
-    // --- Update Mappings Live (LOWERCASE) ---
+    // --- Update Mappings Live ---
     document.getElementById("sensorTable").addEventListener("input", function(e) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-        let addr = tr.querySelector(".sensorAddr").value.trim().toLowerCase();
-        if (!/^[0-9a-f]{16}$/.test(addr)) return;
+        let addr = tr.querySelector(".sensorAddr").value.trim();
+        if (!/^[0-9a-fA-F]{16}$/.test(addr)) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
         sensors[addr] = { label, offset };
@@ -266,7 +272,7 @@
       mapData[currentTruck] = sensors;
     });
 
-    // --- Save to Ubidots using context field (no changes) ---
+    // --- Save to Ubidots using context field ---
     document.getElementById("saveBtn").onclick = async function() {
       document.getElementById("saveBtn").disabled = true;
       document.getElementById("statusMsg").textContent = "Saving...";
@@ -288,7 +294,7 @@
       document.getElementById("saveBtn").disabled = false;
     };
 
-    // --- Fetch Existing Mapping from Ubidots context field (no changes) ---
+    // --- Fetch Existing Mapping from Ubidots context field ---
     async function fetchConfig() {
       document.getElementById("statusMsg").textContent = "Loading...";
       await fetchActiveTrucks();
@@ -297,16 +303,6 @@
         if (!res.ok) throw new Error("Not found");
         let js = await res.json();
         let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
-        // Make all keys lowercase just in case!
-        Object.keys(context).forEach(dev => {
-          if (context[dev]) {
-            let sensors = {};
-            Object.keys(context[dev]).forEach(addr => {
-              sensors[addr.toLowerCase()] = context[dev][addr];
-            });
-            context[dev] = sensors;
-          }
-        });
         mapData = context;
       } catch (e) {
         mapData = {};
@@ -319,7 +315,6 @@
 
     // --- Initialize ---
     window.onload = fetchConfig;
-
   </script>
 </body>
 </html>
