@@ -11,6 +11,9 @@
     return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
   }
 
+  // Debug banner for diagnostics
+  document.body.insertAdjacentHTML('afterbegin', '<div style="color:red;padding:10px;font-size:16px;" id="debugBanner">dashboard.js loaded</div>');
+
   // [1] CONFIGURATION
   const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
   const CONFIG_DEVICE = "config";
@@ -19,7 +22,7 @@
 
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
-  let DEVICE = 'skycafe-1';
+  let DEVICE = 'skycafe-12';
 
   // SENSOR_MAP will be populated from Ubidots context
   let SENSOR_MAP = {};
@@ -29,27 +32,37 @@
   let DALLAS_LIST = [];  // List of sorted sensor addresses for this truck
 
   // --- Fetch mapping/calibration config from Ubidots context
-  async function fetchDallasAddresses(dev) {
-  try {
-    const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/variables?token=${UBIDOTS_TOKEN}`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const js = await res.json();
-    return js.results
-      .map(v => v.label)
-      .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
-      .sort();
-  } catch {
-    return [];
+  async function fetchSensorMapConfig() {
+    try {
+      const res = await fetch(CONFIG_URL);
+      if (!res.ok) throw new Error("Failed to fetch sensor map config");
+      const js = await res.json();
+      return (js.results && js.results[0] && js.results[0].context) ? js.results[0].context : {};
+    } catch (e) {
+      return {};
+    }
   }
-}
+
+  // --- Fetch Dallas addresses (16-char hex) for current truck
+  async function fetchDallasAddresses(dev) {
+    try {
+      const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/variables?token=${UBIDOTS_TOKEN}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const js = await res.json();
+      return js.results
+        .map(v => v.label)
+        .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
+        .sort();
+    } catch {
+      return [];
+    }
+  }
 
   // --- Dynamic SENSORS table for up to 5 sensors (sorted)
   function buildSensorSlots() {
-    // Get up to 5 addresses for the current device, sorted
     const mapped = SENSOR_MAP[DEVICE] || {};
-    const allAddr = DALLAS_LIST.slice(0,5); // Alphabetical, up to 5
-    // Fill up to 5
+    const allAddr = DALLAS_LIST.slice(0,5);
     while (allAddr.length < 5) allAddr.push(null);
     return allAddr.map((addr, idx) => {
       if (!addr) return {
@@ -118,7 +131,7 @@
     }
   }
 
-  // -------- PATCHED: fetch all records in date range (paging) --------
+  // Fetch all records in date range (paging)
   async function fetchAllUbidotsVar(dev, variable, start = null, end = null) {
     const token = UBIDOTS_TOKEN;
     if (!token) return [];
@@ -135,15 +148,14 @@
     }
     return results;
   }
-  // -------------------------------------------------------------------
 
-  // --- PATCH: Dynamic updateCharts for up to 5 sensor addresses ---
+  // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
       const rows = await fetchUbidotsVar(DEVICE, s.address, HIST);
       if (!rows.length) return;
-      s.chart.data.labels    = rows.map(r => new Date(r.created_at).toLocaleTimeString([], { hour:'numeric', minute:'2-digit', hour12:true }));
+      s.chart.data.labels = rows.map(r => new Date(r.created_at).toLocaleTimeString([], { hour:'numeric', minute:'2-digit', hour12:true }));
       s.chart.data.datasets[0].data = rows.map(r => {
         let val = parseFloat(r.value);
         if (typeof s.calibration === 'number') val += s.calibration;
@@ -153,7 +165,7 @@
     }));
   }
 
-  // --- PATCH: Live Table/Display for dynamic sensor slots ---
+  // --- Live Table for dynamic sensor slots
   function drawLive(data, SENSORS) {
     let { ts, iccid, lat, lon, speed, signal, volt, addresses, readings } = data;
     if (!ts) ts = Date.now();
@@ -176,10 +188,9 @@
     }
   }
 
-  // ...maintenance/CSV/selector logic is below (unchanged, but will use dynamic SENSORS)...
-  // === PATCHED: poll sets ts from any available variable ===
+  // Continue to part 2...
+  // --- Main polling and display logic
   async function poll(SENSORS) {
-    // Get latest GPS and ICCID
     const [gpsArr, iccArr] = await Promise.all([
       fetchUbidotsVar(DEVICE,'gps'),
       fetchUbidotsVar(DEVICE,'iccid')
@@ -194,14 +205,12 @@
     if (!ts) ts = iccArr[0]?.created_at || Date.now();
     const iccidVal = iccArr[0]?.value || null;
 
-    // Dynamic sensor readings
     let readings = {};
     await Promise.all(SENSORS.filter(s=>s.address).map(async s => {
       const vals = await fetchUbidotsVar(DEVICE, s.address, 1);
       if (vals.length && vals[0].value != null) readings[s.address] = parseFloat(vals[0].value);
     }));
 
-    // Fetch signal, volt, etc.
     let [signalArr, voltArr, speedArr] = await Promise.all([
       fetchUbidotsVar(DEVICE,'signal',1),
       fetchUbidotsVar(DEVICE,'volt',1),
@@ -221,7 +230,7 @@
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
 
-  // === PATCHED: CSV Export for all dynamic sensors ===
+  // --- CSV Export for all dynamic sensors
   async function csvExport(SENSORS) {
     const dlBtn = document.getElementById('dlBtn');
     if (dlBtn) {
@@ -233,7 +242,6 @@
         let start = null, end = null;
         if (startRaw) start = new Date(startRaw + 'T00:00:00Z').getTime();
         if (endRaw) end = new Date(endRaw + 'T23:59:59.999Z').getTime();
-        // Fetch all points for each dynamic sensor
         const rowsBySensor = await Promise.all(
           SENSORS.map(s =>
             s.address ? fetchAllUbidotsVar(DEVICE, s.address, start, end) : Promise.resolve([])
@@ -271,12 +279,10 @@
     }
   }
 
-  // === Device selector and initialization ===
+  // --- Device selector and initialization ---
   document.addEventListener('DOMContentLoaded', async () => {
-    // Fetch admin mapping and device list
     SENSOR_MAP = await fetchSensorMapConfig();
 
-    // Utility to check device "last activity"
     async function getDeviceLastTimestamp(dev) {
       try {
         const url = `https://industrial.api.ubidots.com/api/v1.6/devices/${dev}/`;
@@ -289,7 +295,6 @@
       }
     }
 
-    // Determine offline devices (no activity in last hour)
     const now = Date.now();
     const offlineCutoff = 60 * 60 * 1000; // 1 hour
     let deviceStatus = {};
@@ -298,7 +303,6 @@
       deviceStatus[dev] = (now - lastTs < offlineCutoff) ? 'online' : 'offline';
     }));
 
-    // Device selector setup, with gray-out for offline
     const deviceSelect = document.getElementById('deviceSelect');
     deviceSelect.innerHTML = '';
     let savedDevice = localStorage.getItem('selectedDevice');
@@ -325,7 +329,6 @@
       localStorage.setItem('selectedDevice', DEVICE);
       document.getElementById('latest').innerHTML = '';
       trail = []; polyline.setLatLngs([]);
-      // Update dynamic sensor list for new truck
       DALLAS_LIST = await fetchDallasAddresses(DEVICE);
       const SENSORS = buildSensorSlots();
       initCharts(SENSORS);
@@ -335,18 +338,13 @@
       setupMaintenanceHandlers();
     });
 
-    // Initial fetch of dynamic sensors
     DALLAS_LIST = await fetchDallasAddresses(DEVICE);
     const SENSORS = buildSensorSlots();
     initCharts(SENSORS);
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
     csvExport(SENSORS);
 
-    // --- Maintenance logic, CSV, handlers, etc (no change) ---
-    // (Copy-paste the rest of your existing maintenance/handlers logic as before,
-    // they will now reference the dynamic SENSORS array if needed.)
-
-    // Maintenance countdown logic (unchanged)
+    // --- Maintenance/handlers (unchanged from your previous code) ---
     function updateMaintenanceStatus() {
       const filterDays = 30;
       const serviceDays = 180;
@@ -384,7 +382,6 @@
         }
       }
     }
-
     function setupMaintenanceHandlers() {
       const resetFilterBtn = document.getElementById('resetFilterBtn');
       const resetServiceBtn = document.getElementById('resetServiceBtn');
