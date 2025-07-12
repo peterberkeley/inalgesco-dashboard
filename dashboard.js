@@ -100,8 +100,10 @@
     }));
   }
 
+  // === PATCHED: drawLive now always shows a Local Time ===
   function drawLive(data) {
-    const { ts, iccid, lat, lon, speed, signal, volt, nr1, nr2, nr3 } = data;
+    let { ts, iccid, lat, lon, speed, signal, volt, nr1, nr2, nr3 } = data;
+    if (!ts) ts = Date.now(); // fallback to now if missing
     const rows = [
       ['Local Time', ts ? new Date(ts).toLocaleString() : '–'],
       ['ICCID', iccid || '–'],
@@ -118,6 +120,7 @@
     }
   }
 
+  // === PATCHED: poll sets ts from any available variable ===
   async function poll() {
     const [gpsArr, iccArr, ...sensorArrs] = await Promise.all([
       fetchUbidotsVar(DEVICE,'gps'),
@@ -125,12 +128,15 @@
       ...SENSORS.map(s => fetchUbidotsVar(DEVICE,s.id))
     ]);
     let ts=null, lat=null, lon=null, speed=null;
+    // Try GPS timestamp first
+    if (gpsArr[0]?.created_at) ts = gpsArr[0].created_at;
     if (gpsArr[0]?.context) {
-      ts    = gpsArr[0].created_at;
       lat   = gpsArr[0].context.lat;
       lon   = gpsArr[0].context.lng;
       speed = gpsArr[0].context.speed;
     }
+    // Fallback to iccid or any sensor timestamp if GPS is missing
+    if (!ts) ts = iccArr[0]?.created_at || sensorArrs.find(a => a[0]?.created_at)?.[0]?.created_at || Date.now();
     const iccidVal = iccArr[0]?.value || null;
     const signalVal = sensorArrs[0][0]?.value || null;
     const voltVal   = sensorArrs[1][0]?.value || null;
