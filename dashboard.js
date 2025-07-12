@@ -36,8 +36,8 @@
     if (!res.ok) return [];
     const js = await res.json();
     return js.results
-      .map(v => v.label)                                   // <-- Use label as-is
-      .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))        // <-- Case-insensitive match
+      .map(v => v.label)
+      .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
       .sort();
   } catch {
     return [];
