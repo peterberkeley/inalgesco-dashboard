@@ -186,11 +186,12 @@
         document.getElementById("statusMsg").textContent = "Saving...";
         try {
           let payload = JSON.stringify(mapData);
-          let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ value: payload })
-          });
+let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ value: JSON.stringify(payload) })
+  // Note the second JSON.stringify!
+});
           if (!res.ok) throw new Error("Failed to save");
           document.getElementById("statusMsg").textContent = "Saved to Ubidots!";
         } catch (e) {
