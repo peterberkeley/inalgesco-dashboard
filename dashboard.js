@@ -11,9 +11,6 @@
     return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
   }
 
-  // Debug banner for diagnostics
-  document.body.insertAdjacentHTML('afterbegin', '<div style="color:red;padding:10px;font-size:16px;" id="debugBanner">dashboard.js loaded</div>');
-
   // [1] CONFIGURATION
   const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
   const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
