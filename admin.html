@@ -196,21 +196,22 @@
     }
     // --- Sensors Table ---
     function renderSensorTable() {
-      const tbl = document.getElementById("sensorTable").querySelector("tbody");
-      tbl.innerHTML = '';
-      const sensors = mapData[currentTruck] || {};
-      Object.entries(sensors).forEach(([addr, obj], idx) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><input type="text" value="${addr}" data-idx="${idx}" class="sensorAddr" style="width:120px" readonly/></td>
-          <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px"/></td>
-          <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px"/></td>
-          <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn">x</button></td>
-        `;
-        tbl.appendChild(tr);
-      });
-    }
-
+  const tbl = document.getElementById("sensorTable").querySelector("tbody");
+  tbl.innerHTML = '';
+  const sensors = mapData[currentTruck] || {};
+  // Only show sensors that are currently present (knownAddresses)
+  knownAddresses.forEach((addr, idx) => {
+    const obj = sensors[addr] || {}; // mapped details or empty
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" value="${addr}" data-idx="${idx}" class="sensorAddr" style="width:120px" readonly/></td>
+      <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px"/></td>
+      <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px"/></td>
+      <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn">x</button></td>
+    `;
+    tbl.appendChild(tr);
+  });
+}
     // --- Add Sensor Row via Dropdown ---
     document.getElementById("addSensorBtn").onclick = async function() {
       await fetchKnownAddresses();
