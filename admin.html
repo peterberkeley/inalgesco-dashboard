@@ -8,6 +8,7 @@
   <style>
     body { background: #f7fafc; font-family: 'Inter', sans-serif; }
     .container { max-width: 640px; margin: 2rem auto; }
+    .locked { filter: blur(6px) grayscale(0.6); pointer-events: none; }
     input[type="text"], input[type="number"], select { border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; }
     th, td { padding: 5px 8px; }
     .btn { background: #2563eb; color: #fff; border-radius: 5px; padding: 6px 18px; font-weight: 600; }
@@ -27,38 +28,46 @@
 </head>
 <body>
   <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
-    <h1 class="text-2xl font-bold mb-2 text-blue-700">SkyCafé Sensor Mapping Admin</h1>
-    <p class="mb-4 text-gray-600">
-      Assign location names and calibration to each sensor per truck.<br>
-      <b>Save</b> after edits to update Ubidots for all users.<br>
-      <span class="text-xs text-gray-500">(Your dashboard will read live from Ubidots.)</span>
-    </p>
-    <div class="mb-3 flex flex-row gap-2 items-center">
-      <label for="truckSelect" class="font-medium">Truck:</label>
-      <select id="truckSelect" class="p-1 rounded border"></select>
-      <button id="addTruckBtn" class="btn text-xs px-2 py-1">+ Add Truck</button>
-      <button id="delTruckBtn" class="btn text-xs px-2 py-1 bg-red-600 hover:bg-red-700">Delete</button>
+    <div id="lockscreen" class="flex flex-col items-center justify-center py-16">
+      <h2 class="text-xl mb-4 font-semibold">Admin Access Required</h2>
+      <input id="adminPass" type="password" placeholder="Enter password" class="mb-2 p-2 rounded border" />
+      <button id="unlockBtn" class="btn">Unlock</button>
+      <div id="authError" class="error mt-2"></div>
     </div>
-    <div class="mb-6">
-      <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
-        <thead>
-          <tr class="bg-blue-200">
-            <th class="w-2/12">Sensor Address</th>
-            <th class="w-4/12">Label</th>
-            <th class="w-2/12">Calibration Offset (°)</th>
-            <th class="w-1/12"></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <button id="addSensorBtn" class="btn mt-3">+ Add Sensor</button>
-    </div>
-    <div class="flex flex-row gap-4 items-center mt-2">
-      <button id="saveBtn" class="btn">Save to Ubidots</button>
-      <span id="statusMsg" class="ml-2"></span>
-    </div>
-    <div class="mt-6 text-xs text-gray-400">
-      <p>For help: <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></p>
+    <div id="adminPage" style="display:none;">
+      <h1 class="text-2xl font-bold mb-2 text-blue-700">SkyCafé Sensor Mapping Admin</h1>
+      <p class="mb-4 text-gray-600">
+        Assign location names and calibration to each sensor per truck.<br>
+        <b>Save</b> after edits to update Ubidots for all users.<br>
+        <span class="text-xs text-gray-500">(Your dashboard will read live from Ubidots.)</span>
+      </p>
+      <div class="mb-3 flex flex-row gap-2 items-center">
+        <label for="truckSelect" class="font-medium">Truck:</label>
+        <select id="truckSelect" class="p-1 rounded border"></select>
+        <button id="addTruckBtn" class="btn text-xs px-2 py-1">+ Add Truck</button>
+        <button id="delTruckBtn" class="btn text-xs px-2 py-1 bg-red-600 hover:bg-red-700">Delete</button>
+      </div>
+      <div class="mb-6">
+        <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
+          <thead>
+            <tr class="bg-blue-200">
+              <th class="w-2/12">Sensor Address</th>
+              <th class="w-4/12">Label</th>
+              <th class="w-2/12">Calibration Offset (°)</th>
+              <th class="w-1/12"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button id="addSensorBtn" class="btn mt-3">+ Add Sensor</button>
+      </div>
+      <div class="flex flex-row gap-4 items-center mt-2">
+        <button id="saveBtn" class="btn">Save to Ubidots</button>
+        <span id="statusMsg" class="ml-2"></span>
+      </div>
+      <div class="mt-6 text-xs text-gray-400">
+        <p>For help: <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></p>
+      </div>
     </div>
     <!-- Modal for Address Dropdown -->
     <div id="addrDropdownModal" class="dropdown-modal" style="display:none;">
@@ -73,10 +82,12 @@
     </div>
   </div>
   <script>
+    // --- CONFIG: Set your credentials here ---
     const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
-    const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
+    const PASSWORD = "Skycafe8971";
     const DEVICE = "config";
     const VARIABLE = "sensor_map";
+    const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values`;
     const DEVICES_URL = `${UBIDOTS_BASE}/devices?token=${UBIDOTS_TOKEN}`;
@@ -84,51 +95,50 @@
     let DEFAULT_TRUCKS = [];
     let mapData = {};
     let currentTruck = null;
-    let knownAddresses = [];
-    let recentSensorAddresses = []; // sensors seen in last 3 min
+    let recentSensorAddresses = [];
 
-    // --- Fetch active trucks (existing in mapping or with variables in Ubidots)
-    async function fetchActiveTrucks() {
-      try {
-        const res = await fetch(DEVICES_URL);
-        if (!res.ok) throw new Error("Failed to fetch devices");
-        const js = await res.json();
-        DEFAULT_TRUCKS = js.results
-          .filter(d => d.label && d.label.startsWith('skycafe-'))
-          .map(d => d.label);
-        if (DEFAULT_TRUCKS.length === 0) DEFAULT_TRUCKS = ['skycafe-12'];
-        currentTruck = DEFAULT_TRUCKS[0];
-      } catch {
-        DEFAULT_TRUCKS = ['skycafe-12'];
-        currentTruck = DEFAULT_TRUCKS[0];
-      }
-    }
-
-    // --- Fetch recently active Dallas sensor addresses (last 3 min) ---
+    // --- Fetch only sensors active in last 3min for selected truck ---
     async function fetchRecentSensorAddresses() {
-      // Query all variables for this truck; filter for 16-char hex and recent value
-      const url = `${UBIDOTS_BASE}/variables/?device=${currentTruck}&token=${UBIDOTS_TOKEN}`;
-      recentSensorAddresses = [];
+      const minAgo = Date.now() - 3 * 60 * 1000;
+      let result = [];
+      // Query all variables seen for this truck in last 3min
+      let url = `${UBIDOTS_BASE}/variables/?device=${currentTruck}&token=${UBIDOTS_TOKEN}`;
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch vars");
-        const js = await res.json();
-        const now = Date.now();
-        // Only addresses seen (value) in last 3 minutes
-        recentSensorAddresses = js.results
+        let res = await fetch(url);
+        if (!res.ok) { recentSensorAddresses = []; return; }
+        let js = await res.json();
+        result = js.results
           .filter(v =>
             /^[0-9a-fA-F]{16}$/.test(v.label) &&
-            v.last_value && v.last_value.timestamp &&
-            now - v.last_value.timestamp < 3 * 60 * 1000
+            v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo
           )
-          .map(v => v.label.toUpperCase())
-          .sort();
+          .map(v => v.label.toUpperCase());
       } catch {
-        recentSensorAddresses = [];
+        result = [];
       }
+      recentSensorAddresses = result;
     }
 
-    // --- Truck Select & Load ---
+    // --- Auth: Lock screen always shown first ---
+    const lockscreen = document.getElementById("lockscreen");
+    const adminPage = document.getElementById("adminPage");
+    document.getElementById("unlockBtn").onclick = async function() {
+      const pass = document.getElementById("adminPass").value;
+      if (pass.length < 8) {
+        document.getElementById("authError").textContent = "Password too short.";
+        return;
+      }
+      if (pass === PASSWORD) {
+        lockscreen.style.display = "none";
+        adminPage.style.display = "";
+        refreshTruckSelect();
+        await fetchRecentSensorAddresses();
+        renderSensorTable();
+      } else {
+        document.getElementById("authError").textContent = "Incorrect password.";
+      }
+    };
+
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       sel.innerHTML = '';
@@ -165,14 +175,16 @@
       currentTruck = DEFAULT_TRUCKS[0];
       refreshTruckSelect(); renderSensorTable();
     };
-
-    // --- Continue in part 2 ---
-    // --- Sensors Table: ONLY sensors seen in last 3min shown ---
+    // --- Render sensor table: show only sensors that are present (polled in last 3 min) ---
     function renderSensorTable() {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
+      if (!recentSensorAddresses.length) {
+        tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No live sensors detected in last 3 minutes.</td></tr>`;
+        return;
+      }
       const sensors = mapData[currentTruck] || {};
-      // Only show sensors present in last 3min
+      // Only show sensors present now; use mapping for name/offset if available
       recentSensorAddresses.forEach((addr, idx) => {
         const obj = sensors[addr] || {};
         const tr = document.createElement("tr");
@@ -186,15 +198,15 @@
       });
     }
 
-    // --- Add Sensor Row via Dropdown ---
+    // --- Add Sensor Row via Dropdown (only from active addresses) ---
     document.getElementById("addSensorBtn").onclick = async function() {
       await fetchRecentSensorAddresses();
-      const sensors = {};
-      Object.keys(mapData[currentTruck] || {}).forEach(a => sensors[a.toUpperCase()] = true);
-      // Only offer addresses seen in last 3min and not mapped already
-      const unused = recentSensorAddresses.filter(addr => !sensors[addr]);
+      const sensors = mapData[currentTruck] || {};
+      const sensorsUpper = Object.keys(sensors).reduce((o, a) => { o[a.toUpperCase()] = true; return o; }, {});
+      // Only offer addresses not already mapped
+      const unused = recentSensorAddresses.filter(addr => !sensorsUpper[addr]);
       if (unused.length === 0) {
-        alert("No unused sensors available for this truck.\nA new sensor must send data first.");
+        alert("No unused sensors available for this truck (only those active in last 3 min).");
         return;
       }
       const modal = document.getElementById("addrDropdownModal");
@@ -220,16 +232,13 @@
       };
     };
 
-    // --- Delete Sensor Row ---
+    // --- Delete Sensor Row (remove mapping for present sensor only) ---
     document.getElementById("sensorTable").addEventListener("click", function(e) {
       if (e.target.classList.contains("delSensorBtn")) {
         const row = e.target.closest("tr");
-        const addr = row.querySelector(".sensorAddr").value.trim();
-        // Only delete if it's present in recent list (otherwise hidden anyway)
-        if (recentSensorAddresses.includes(addr)) {
-          delete mapData[currentTruck][addr];
-          renderSensorTable();
-        }
+        const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
+        if (mapData[currentTruck]) delete mapData[currentTruck][addr];
+        renderSensorTable();
       }
     });
 
@@ -238,8 +247,8 @@
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-        let addr = tr.querySelector(".sensorAddr").value.trim();
-        if (!/^[0-9A-F]{16}$/i.test(addr)) return;
+        let addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
+        if (!/^[0-9A-F]{16}$/.test(addr)) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
         sensors[addr] = { label, offset };
@@ -255,10 +264,7 @@
         let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            value: 0,
-            context: mapData
-          })
+          body: JSON.stringify({ value: 0, context: mapData })
         });
         if (!res.ok) throw new Error("Failed to save");
         document.getElementById("statusMsg").textContent = "Saved to Ubidots!";
@@ -272,7 +278,7 @@
     // --- Fetch Existing Mapping from Ubidots context field ---
     async function fetchConfig() {
       document.getElementById("statusMsg").textContent = "Loading...";
-      await fetchActiveTrucks();
+      // Fetch truck list (if you want to load from devices API, can add here)
       try {
         let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
         if (!res.ok) throw new Error("Not found");
@@ -282,14 +288,20 @@
       } catch (e) {
         mapData = {};
       }
+      // Default: first truck, or skycafe-12 if none
+      const allTrucks = Object.keys(mapData).length ? Object.keys(mapData) : ['skycafe-12'];
+      currentTruck = allTrucks[0];
       refreshTruckSelect();
       await fetchRecentSensorAddresses();
       renderSensorTable();
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // --- Initialize ---
-    window.onload = fetchConfig;
+    // Only load config after unlock!
+    // window.onload = fetchConfig; // Remove auto-load
+
+    // When you unlock, fetchConfig() is triggered inside unlockBtn handler
+
   </script>
 </body>
 </html>
