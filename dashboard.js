@@ -22,12 +22,9 @@
   const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
   let DEVICE = 'skycafe-12';
 
-  // SENSOR_MAP will be populated from Ubidots context
   let SENSOR_MAP = {};
-  let KNOWN_ADDRESSES = [];
-
-  // Dynamic slot labels and colors
   const SENSOR_COLORS = [COLORS.primary, COLORS.secondary, COLORS.accent, "#8b5cf6", "#10b981"];
+  let DALLAS_LIST = [];
 
   // --- Fetch mapping/calibration config from Ubidots context
   async function fetchSensorMapConfig() {
@@ -41,29 +38,30 @@
     }
   }
 
-  // --- Fetch Dallas addresses (16-char hex) for current truck
+  // --- Fetch Dallas addresses (16-char hex, only if polled in last 3 min)
   async function fetchDallasAddresses(dev) {
     try {
       const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const js = await res.json();
-      // Only variables that match the Dallas address pattern
+      const now = Date.now();
       return js.results
+        .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
+        .filter(v => {
+          let t = (v.last_value && v.last_value.timestamp) || 0;
+          return (now - t) < 3 * 60 * 1000;
+        })
         .map(v => v.label)
-        .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
-        .map(lbl => lbl.toUpperCase())
         .sort();
     } catch {
       return [];
     }
   }
 
-  // --- Dynamic SENSORS table for up to 5 sensors (sorted)
   function buildSensorSlots() {
     const mapped = SENSOR_MAP[DEVICE] || {};
-    // Use only present sensors (KNOWN_ADDRESSES)
-    const allAddr = KNOWN_ADDRESSES.slice(0, 5);
+    const allAddr = DALLAS_LIST.slice(0, 5);
     while (allAddr.length < 5) allAddr.push(null);
     return allAddr.map((addr, idx) => {
       if (!addr) return {
@@ -116,7 +114,7 @@
     marker = L.marker([0,0]).addTo(map);
     polyline = L.polyline([], { weight: 3 }).addTo(map);
   }
-  // --- Fetch last N values for any sensor address
+
   async function fetchUbidotsVar(dev, variable, limit = 1) {
     let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}`;
     const token = UBIDOTS_TOKEN;
@@ -130,8 +128,7 @@
       return [];
     }
   }
-
-  // Fetch all records in date range (paging)
+  // --- Fetch all records in date range (paging)
   async function fetchAllUbidotsVar(dev, variable, start = null, end = null) {
     const token = UBIDOTS_TOKEN;
     if (!token) return [];
@@ -149,6 +146,7 @@
     return results;
   }
 
+  // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
@@ -226,57 +224,9 @@
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
 
-  async function csvExport(SENSORS) {
-    const dlBtn = document.getElementById('dlBtn');
-    if (dlBtn) {
-      dlBtn.addEventListener('click', async () => {
-        dlBtn.disabled = true;
-        dlBtn.textContent = "Downloading...";
-        let startRaw = document.getElementById('start')?.value;
-        let endRaw = document.getElementById('end')?.value;
-        let start = null, end = null;
-        if (startRaw) start = new Date(startRaw + 'T00:00:00Z').getTime();
-        if (endRaw) end = new Date(endRaw + 'T23:59:59.999Z').getTime();
-        const rowsBySensor = await Promise.all(
-          SENSORS.map(s =>
-            s.address ? fetchAllUbidotsVar(DEVICE, s.address, start, end) : Promise.resolve([])
-          )
-        );
-        const maxLen = Math.max(...rowsBySensor.map(r => r.length));
-        if (maxLen === 0) {
-          alert("No data available to export for this device.");
-          dlBtn.disabled = false;
-          dlBtn.textContent = "Download";
-          return;
-        }
-        let header = ['Time'].concat(SENSORS.map(s => s.label));
-        let csv = [header.join(',')];
-        for (let i = 0; i < maxLen; i++) {
-          let t = rowsBySensor[0][i]?.created_at || '';
-          let row = [t ? new Date(t).toLocaleString() : ''];
-          for (let s = 0; s < SENSORS.length; s++) {
-            row.push(rowsBySensor[s][i]?.value ?? '');
-          }
-          csv.push(row.join(','));
-        }
-        const blob = new Blob([csv.join('\r\n')], {type: 'text/csv'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${DEVICE}_data_${(new Date).toISOString().slice(0,10)}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        dlBtn.disabled = false;
-        dlBtn.textContent = "Download";
-      });
-    }
-  }
-
+  // --- Device selector and initialization ---
   document.addEventListener('DOMContentLoaded', async () => {
     SENSOR_MAP = await fetchSensorMapConfig();
-    KNOWN_ADDRESSES = await fetchDallasAddresses(DEVICE);
 
     async function getDeviceLastTimestamp(dev) {
       try {
@@ -324,16 +274,15 @@
       localStorage.setItem('selectedDevice', DEVICE);
       document.getElementById('latest').innerHTML = '';
       trail = []; polyline.setLatLngs([]);
-      KNOWN_ADDRESSES = await fetchDallasAddresses(DEVICE);
+      DALLAS_LIST = await fetchDallasAddresses(DEVICE);
       const SENSORS = buildSensorSlots();
       initCharts(SENSORS);
       updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
-      csvExport(SENSORS);
     });
 
+    DALLAS_LIST = await fetchDallasAddresses(DEVICE);
     const SENSORS = buildSensorSlots();
     initCharts(SENSORS);
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
-    csvExport(SENSORS);
   });
 })();
