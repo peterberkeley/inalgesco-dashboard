@@ -82,12 +82,11 @@
     </div>
   </div>
   <script>
-    // CONFIG
+    // CONFIGURATION
     const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
     const PASSWORD = "Skycafe8971";
     const DEVICE = "config";
     const VARIABLE = "sensor_map";
-
     const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values`;
@@ -115,7 +114,7 @@
       }
     }
 
-    // AUTH LOGIC
+    // --- Auth ---
     const lockscreen = document.getElementById("lockscreen");
     const adminPage = document.getElementById("adminPage");
     document.getElementById("unlockBtn").onclick = async function() {
@@ -135,7 +134,7 @@
       }
     };
 
-    // TRUCK SELECTION LOGIC
+    // --- Truck Select & Load ---
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       sel.innerHTML = '';
@@ -173,7 +172,7 @@
       refreshTruckSelect(); renderSensorTable();
     };
 
-    // KNOWN SENSOR ADDRESS LOGIC
+    // --- Fetch known Dallas sensor addresses for current truck from Ubidots ---
     async function fetchKnownAddresses() {
       knownAddresses = [];
       try {
@@ -183,38 +182,34 @@
         const js = await res.json();
         knownAddresses = js.results
           .map(v => v.label)
-          .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
-          .sort();
+          .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl));
       } catch {
         knownAddresses = [];
       }
     }
-
-    // --- CONTINUE IN PART 2/2 ---
-    // --- Only show PRESENT sensors in admin table (not legacy) ---
+    // --- Sensors Table ---
     function renderSensorTable() {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
       const sensors = mapData[currentTruck] || {};
-      // Only show sensors actually present in knownAddresses (i.e., live on truck)
+      // Only show sensors that are currently present (knownAddresses)
       knownAddresses.forEach((addr, idx) => {
-        const obj = sensors[addr] || {}; // Use label/offset if mapped, else blank
+        const obj = sensors[addr] || {}; // mapped details or empty
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td><input type="text" value="${addr}" data-idx="${idx}" class="sensorAddr" style="width:120px" readonly/></td>
           <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px"/></td>
           <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px"/></td>
-          <td>
-            <button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn" ${!obj.label&&!obj.offset ? "disabled" : ""}>x</button>
-          </td>
+          <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn">x</button></td>
         `;
         tbl.appendChild(tr);
       });
     }
 
-    // Add Sensor Button (dropdown of available, unmapped addresses)
+    // --- Add Sensor Row via Dropdown ---
     document.getElementById("addSensorBtn").onclick = async function() {
       await fetchKnownAddresses();
+      // Build sensors mapping, all uppercase
       const sensors = {};
       Object.keys(mapData[currentTruck] || {}).forEach(a => sensors[a] = true);
       // Only offer addresses not already mapped
@@ -223,6 +218,7 @@
         alert("No unused sensors available for this truck.\nA new sensor must send data first.");
         return;
       }
+      // Populate dropdown
       const modal = document.getElementById("addrDropdownModal");
       const sel = document.getElementById("addrDropdown");
       sel.innerHTML = '';
@@ -233,6 +229,7 @@
         sel.appendChild(opt);
       });
       modal.style.display = '';
+      // Modal handlers
       document.getElementById("addrDropdownOk").onclick = function() {
         const addr = sel.value;
         if (!addr) return;
@@ -246,19 +243,17 @@
       };
     };
 
-    // Delete Button (removes label/offset for a live sensor address)
+    // --- Delete Sensor Row (from mapping only; won't show again unless sensor present) ---
     document.getElementById("sensorTable").addEventListener("click", function(e) {
       if (e.target.classList.contains("delSensorBtn")) {
         const row = e.target.closest("tr");
         const addr = row.querySelector(".sensorAddr").value.trim();
-        if (!mapData[currentTruck]) mapData[currentTruck] = {};
-        // Only clear label/offset, not the address itself
-        delete mapData[currentTruck][addr];
+        if (mapData[currentTruck]) delete mapData[currentTruck][addr];
         renderSensorTable();
       }
     });
 
-    // Update mapping on input (live edits for label/offset)
+    // --- Update Mappings Live ---
     document.getElementById("sensorTable").addEventListener("input", function(e) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
@@ -267,17 +262,28 @@
         if (!/^[0-9a-fA-F]{16}$/.test(addr)) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
-        if (label || offset) {
-          sensors[addr] = { label, offset };
-        }
+        sensors[addr] = { label, offset };
       });
       mapData[currentTruck] = sensors;
     });
 
-    // Save to Ubidots context (live sensors only)
+    // --- Save to Ubidots using context field (only present sensors) ---
     document.getElementById("saveBtn").onclick = async function() {
       document.getElementById("saveBtn").disabled = true;
       document.getElementById("statusMsg").textContent = "Saving...";
+      // Purge config of any orphaned sensors
+      Object.keys(mapData).forEach(truck => {
+        if (typeof mapData[truck] !== 'object') return;
+        const sensors = mapData[truck];
+        Object.keys(sensors).forEach(addr => {
+          // Remove if not in knownAddresses for THIS truck
+          if (truck === currentTruck && !knownAddresses.includes(addr)) {
+            delete sensors[addr];
+          }
+        });
+        // Clean up truck with zero sensors
+        if (Object.keys(sensors).length === 0) delete mapData[truck];
+      });
       try {
         let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
           method: "POST",
@@ -294,9 +300,12 @@
       }
       setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
       document.getElementById("saveBtn").disabled = false;
+      // Refresh table (should reflect only live sensors)
+      await fetchKnownAddresses();
+      renderSensorTable();
     };
 
-    // Fetch existing mapping from Ubidots context
+    // --- Fetch Existing Mapping from Ubidots context field ---
     async function fetchConfig() {
       document.getElementById("statusMsg").textContent = "Loading...";
       await fetchActiveTrucks();
@@ -315,8 +324,9 @@
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // Initialize on load
+    // --- Initialize ---
     window.onload = fetchConfig;
+
   </script>
 </body>
 </html>
