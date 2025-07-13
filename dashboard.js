@@ -24,10 +24,10 @@
 
   // SENSOR_MAP will be populated from Ubidots context
   let SENSOR_MAP = {};
+  let KNOWN_ADDRESSES = [];
 
   // Dynamic slot labels and colors
   const SENSOR_COLORS = [COLORS.primary, COLORS.secondary, COLORS.accent, "#8b5cf6", "#10b981"];
-  let DALLAS_LIST = [];  // List of sorted sensor addresses for this truck
 
   // --- Fetch mapping/calibration config from Ubidots context
   async function fetchSensorMapConfig() {
@@ -48,9 +48,11 @@
       const res = await fetch(url);
       if (!res.ok) return [];
       const js = await res.json();
+      // Only variables that match the Dallas address pattern
       return js.results
         .map(v => v.label)
         .filter(lbl => /^[0-9a-fA-F]{16}$/.test(lbl))
+        .map(lbl => lbl.toUpperCase())
         .sort();
     } catch {
       return [];
@@ -60,7 +62,8 @@
   // --- Dynamic SENSORS table for up to 5 sensors (sorted)
   function buildSensorSlots() {
     const mapped = SENSOR_MAP[DEVICE] || {};
-    const allAddr = DALLAS_LIST.slice(0,5);
+    // Use only present sensors (KNOWN_ADDRESSES)
+    const allAddr = KNOWN_ADDRESSES.slice(0, 5);
     while (allAddr.length < 5) allAddr.push(null);
     return allAddr.map((addr, idx) => {
       if (!addr) return {
@@ -113,7 +116,6 @@
     marker = L.marker([0,0]).addTo(map);
     polyline = L.polyline([], { weight: 3 }).addTo(map);
   }
-
   // --- Fetch last N values for any sensor address
   async function fetchUbidotsVar(dev, variable, limit = 1) {
     let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}`;
@@ -129,7 +131,6 @@
     }
   }
 
-  // Continue to part 2...
   // Fetch all records in date range (paging)
   async function fetchAllUbidotsVar(dev, variable, start = null, end = null) {
     const token = UBIDOTS_TOKEN;
@@ -148,7 +149,6 @@
     return results;
   }
 
-  // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
@@ -164,7 +164,6 @@
     }));
   }
 
-  // --- Live Table for dynamic sensor slots
   function drawLive(data, SENSORS) {
     let { ts, iccid, lat, lon, speed, signal, volt, addresses, readings } = data;
     if (!ts) ts = Date.now();
@@ -187,7 +186,6 @@
     }
   }
 
-  // --- Main polling and display logic
   async function poll(SENSORS) {
     const [gpsArr, iccArr] = await Promise.all([
       fetchUbidotsVar(DEVICE,'gps'),
@@ -228,7 +226,6 @@
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
 
-  // --- CSV Export for all dynamic sensors
   async function csvExport(SENSORS) {
     const dlBtn = document.getElementById('dlBtn');
     if (dlBtn) {
@@ -277,9 +274,9 @@
     }
   }
 
-  // --- Device selector and initialization ---
   document.addEventListener('DOMContentLoaded', async () => {
     SENSOR_MAP = await fetchSensorMapConfig();
+    KNOWN_ADDRESSES = await fetchDallasAddresses(DEVICE);
 
     async function getDeviceLastTimestamp(dev) {
       try {
@@ -327,91 +324,16 @@
       localStorage.setItem('selectedDevice', DEVICE);
       document.getElementById('latest').innerHTML = '';
       trail = []; polyline.setLatLngs([]);
-      DALLAS_LIST = await fetchDallasAddresses(DEVICE);
+      KNOWN_ADDRESSES = await fetchDallasAddresses(DEVICE);
       const SENSORS = buildSensorSlots();
       initCharts(SENSORS);
       updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
       csvExport(SENSORS);
-      updateMaintenanceStatus();
-      setupMaintenanceHandlers();
     });
 
-    DALLAS_LIST = await fetchDallasAddresses(DEVICE);
     const SENSORS = buildSensorSlots();
     initCharts(SENSORS);
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
     csvExport(SENSORS);
-
-    // --- Maintenance logic (unchanged) ---
-    function updateMaintenanceStatus() {
-      const filterDays = 30;
-      const serviceDays = 180;
-      const now = new Date();
-      const filterKey = `${DEVICE}-filter`;
-      const serviceKey = `${DEVICE}-service`;
-      let lastFilter = localStorage.getItem(filterKey);
-      let lastService = localStorage.getItem(serviceKey);
-      lastFilter = lastFilter ? new Date(lastFilter) : new Date(now.getTime() - 365 * 86400000);
-      lastService = lastService ? new Date(lastService) : new Date(now.getTime() - 365 * 86400000);
-      const filterUsed = Math.floor((now - lastFilter) / 86400000);
-      const serviceUsed = Math.floor((now - lastService) / 86400000);
-      const filterLeft = filterDays - filterUsed;
-      const serviceLeft = serviceDays - serviceUsed;
-      const filterStatus = document.getElementById('filterStatus');
-      const serviceStatus = document.getElementById('serviceStatus');
-      const resetFilterBtn = document.getElementById('resetFilterBtn');
-      const resetServiceBtn = document.getElementById('resetServiceBtn');
-      if (filterStatus) {
-        if (filterLeft < 0) {
-          filterStatus.innerHTML = `<span style="color:red;font-weight:bold;">Filter change overdue by ${-filterLeft} day(s)!</span>`;
-          resetFilterBtn.style.display = '';
-        } else {
-          filterStatus.innerHTML = `Filter: <b>${filterLeft} day(s) left</b> until next change.`;
-          resetFilterBtn.style.display = filterLeft <= 3 ? '' : 'none';
-        }
-      }
-      if (serviceStatus) {
-        if (serviceLeft < 0) {
-          serviceStatus.innerHTML = `<span style="color:red;font-weight:bold;">Service overdue by ${-serviceLeft} day(s)!</span>`;
-          resetServiceBtn.style.display = '';
-        } else {
-          serviceStatus.innerHTML = `Service: <b>${serviceLeft} day(s) left</b> until next service.`;
-          resetServiceBtn.style.display = serviceLeft <= 7 ? '' : 'none';
-        }
-      }
-    }
-    function setupMaintenanceHandlers() {
-      const resetFilterBtn = document.getElementById('resetFilterBtn');
-      const resetServiceBtn = document.getElementById('resetServiceBtn');
-      if (resetFilterBtn) {
-        resetFilterBtn.onclick = () => {
-          if (confirm("Mark filter change as done today?")) {
-            localStorage.setItem(`${DEVICE}-filter`, new Date().toISOString());
-            updateMaintenanceStatus();
-            setupMaintenanceHandlers();
-          }
-        };
-      }
-      if (resetServiceBtn) {
-        resetServiceBtn.onclick = () => {
-          const code = prompt("Enter service reset code:");
-          if (code === null) return;
-          if (code.trim() === "8971") {
-            localStorage.setItem(`${DEVICE}-service`, new Date().toISOString());
-            updateMaintenanceStatus();
-            setupMaintenanceHandlers();
-            alert("Service reset successful.");
-          } else {
-            alert("Incorrect code. Service was not reset.");
-          }
-        };
-      }
-    }
-    updateMaintenanceStatus();
-    setupMaintenanceHandlers();
-    setInterval(() => {
-      updateMaintenanceStatus();
-      setupMaintenanceHandlers();
-    }, 60 * 60 * 1000);
   });
 })();
