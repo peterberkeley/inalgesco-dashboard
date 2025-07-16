@@ -123,43 +123,54 @@
 
     // --- Fetch mapping and all truck statuses (online/offline) ---
     async function fetchConfigAndTruckStatus() {
-      document.getElementById("statusMsg").textContent = "Loading...";
-      truckStatus = {};
-      allTrucks = [];
-      currentTruck = null;
+  document.getElementById("statusMsg").textContent = "Loading...";
+  truckStatus = {};
+  allTrucks = Array.from({length: TRUCK_COUNT}, (_,i)=>`skycafe-${i+1}`);
+  currentTruck = null;
+  mapData = {};
 
-      // Build full truck list
-      allTrucks = Array.from({length: TRUCK_COUNT}, (_,i)=>`skycafe-${i+1}`);
+  // Fetch mapping config
+  try {
+    let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
+    if (!res.ok) throw new Error("Not found");
+    let js = await res.json();
+    let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
+    mapData = context;
+  } catch (e) { mapData = {}; }
 
-      // Fetch mapping config
-      try {
-        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
-        if (!res.ok) throw new Error("Not found");
-        let js = await res.json();
-        let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
-        mapData = context;
-      } catch (e) {
-        mapData = {};
-      }
-      // Fetch status for each truck/device
-      try {
-        let res = await fetch(DEVICES_URL);
-        if (!res.ok) throw new Error("No devices");
-        let js = await res.json();
-        const now = Date.now();
-        js.results.forEach(dev => {
-          if (dev.label && allTrucks.includes(dev.label)) {
+  // Fetch devices and mark online/offline status by fuzzy matching
+  try {
+    let res = await fetch(DEVICES_URL);
+    if (!res.ok) throw new Error("No devices");
+    let js = await res.json();
+    const now = Date.now();
+    // Lower-case version of allTrucks for matching
+    let truckMap = {};
+    allTrucks.forEach(t => { truckMap[t.toLowerCase()] = t; });
+    js.results.forEach(dev => {
+      if (!dev.label) return;
+      let norm = dev.label.toLowerCase();
+      if (truckMap[norm]) {
+        // Exact match (case-insensitive)
+        const isOnline = (dev.last_activity && (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS));
+        truckStatus[truckMap[norm]] = isOnline ? 'online' : 'offline';
+      } else {
+        // Try matching up to first 9 chars (skycafe-12-extra, etc.)
+        let base = norm.slice(0, 10);
+        for (let t of Object.keys(truckMap)) {
+          if (t.startsWith(base)) {
             const isOnline = (dev.last_activity && (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS));
-            truckStatus[dev.label] = isOnline ? 'online' : 'offline';
+            truckStatus[truckMap[t]] = isOnline ? 'online' : 'offline';
           }
-        });
-      } catch (e) {
-        allTrucks.forEach(truck => { truckStatus[truck] = 'offline'; });
+        }
       }
-      refreshTruckSelect();
-      document.getElementById("statusMsg").textContent = "";
-    }
-
+    });
+  } catch (e) {
+    allTrucks.forEach(truck => { truckStatus[truck] = 'offline'; });
+  }
+  refreshTruckSelect();
+  document.getElementById("statusMsg").textContent = "";
+}
     // --- Populate truck dropdown with all trucks, disabling offline ones ---
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
