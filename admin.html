@@ -175,18 +175,17 @@
         document.getElementById("addTruckBtn").style.display = '';
         document.getElementById("delTruckBtn").style.display = '';
       }
-      allTrucks.forEach(truck => {
-        const opt = document.createElement("option");
-        opt.value = truck;
-        const status = truckStatus[truck] || 'offline';
-        opt.textContent = truck.replace('skycafe-','SkyCafé ');
-        if (status === 'offline') {
-          opt.textContent += ' (Offline)';
-          opt.style.color = '#aaa';
-          opt.style.background = '#f4f4f4';
-        }
-        sel.appendChild(opt);
-      });
+     allTrucks.forEach(truck => {
+  const opt = document.createElement("option");
+  opt.value = truck;
+  const status = truckStatus[truck] || 'offline';
+  opt.textContent = truck.replace('skycafe-','SkyCafé ');
+  if (status === 'offline') {
+    opt.textContent += ' (Offline)';
+    // DO NOT style or disable!
+  }
+  sel.appendChild(opt);
+});
       currentTruck = allTrucks.includes(currentTruck) ? currentTruck : allTrucks[0];
       sel.value = currentTruck;
       fetchRecentSensorAddresses().then(renderSensorTable);
