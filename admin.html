@@ -8,7 +8,6 @@
   <style>
     body { background: #f7fafc; font-family: 'Inter', sans-serif; }
     .container { max-width: 640px; margin: 2rem auto; }
-    .locked { filter: blur(6px) grayscale(0.6); pointer-events: none; }
     input[type="text"], input[type="number"], select { border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; }
     th, td { padding: 5px 8px; }
     .btn { background: #2563eb; color: #fff; border-radius: 5px; padding: 6px 18px; font-weight: 600; }
@@ -48,7 +47,7 @@
         <button id="delTruckBtn" class="btn text-xs px-2 py-1 bg-red-600 hover:bg-red-700">Delete</button>
       </div>
       <div id="noTrucksMsg" class="mb-6 text-red-700 font-semibold" style="display:none;">
-        No active trucks found in the last hour.
+        No trucks found.
       </div>
       <div class="mb-6">
         <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
@@ -94,11 +93,13 @@
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
     const DEVICES_URL = `${UBIDOTS_BASE}/devices?token=${UBIDOTS_TOKEN}`;
+    const TRUCK_COUNT = 24;
     const ACTIVE_WINDOW_MS = 60 * 60 * 1000; // 1 hour for "active" trucks
     const SENSOR_WINDOW_MS = 3 * 60 * 1000; // 3 min for "active" sensors
 
     let mapData = {};
-    let activeTrucks = [];
+    let truckStatus = {}; // {truck: 'online'|'offline'}
+    let allTrucks = [];
     let currentTruck = null;
     let recentSensorAddresses = [];
 
@@ -114,17 +115,22 @@
       if (pass === PASSWORD) {
         lockscreen.style.display = "none";
         adminPage.style.display = "";
-        await fetchConfigAndTrucks();
+        await fetchConfigAndTruckStatus();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
       }
     };
 
-    // --- Fetch mapping and active trucks/devices ---
-    async function fetchConfigAndTrucks() {
+    // --- Fetch mapping and all truck statuses (online/offline) ---
+    async function fetchConfigAndTruckStatus() {
       document.getElementById("statusMsg").textContent = "Loading...";
-      activeTrucks = [];
+      truckStatus = {};
+      allTrucks = [];
       currentTruck = null;
+
+      // Build full truck list
+      allTrucks = Array.from({length: TRUCK_COUNT}, (_,i)=>`skycafe-${i+1}`);
+
       // Fetch mapping config
       try {
         let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
@@ -135,32 +141,31 @@
       } catch (e) {
         mapData = {};
       }
-      // Fetch all devices, filter by last_activity < 1hr
+      // Fetch status for each truck/device
       try {
         let res = await fetch(DEVICES_URL);
         if (!res.ok) throw new Error("No devices");
         let js = await res.json();
         const now = Date.now();
-        activeTrucks = js.results
-          .filter(dev =>
-            dev.label && dev.last_activity &&
-            (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS)
-          )
-          .map(dev => dev.label)
-          .sort((a, b) => a.localeCompare(b));
+        js.results.forEach(dev => {
+          if (dev.label && allTrucks.includes(dev.label)) {
+            const isOnline = (dev.last_activity && (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS));
+            truckStatus[dev.label] = isOnline ? 'online' : 'offline';
+          }
+        });
       } catch (e) {
-        activeTrucks = [];
+        allTrucks.forEach(truck => { truckStatus[truck] = 'offline'; });
       }
       refreshTruckSelect();
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // --- Populate truck dropdown with only active trucks ---
+    // --- Populate truck dropdown with all trucks, disabling offline ones ---
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       const noTrucksMsg = document.getElementById("noTrucksMsg");
       sel.innerHTML = '';
-      if (!activeTrucks.length) {
+      if (!allTrucks.length) {
         noTrucksMsg.style.display = '';
         sel.style.display = 'none';
         document.getElementById("addTruckBtn").style.display = 'none';
@@ -173,14 +178,21 @@
         document.getElementById("addTruckBtn").style.display = '';
         document.getElementById("delTruckBtn").style.display = '';
       }
-      activeTrucks.forEach(truck => {
+      allTrucks.forEach(truck => {
         const opt = document.createElement("option");
         opt.value = truck;
-        opt.textContent = truck;
+        const status = truckStatus[truck] || 'offline';
+        opt.textContent = truck.replace('skycafe-','SkyCafé ');
+        if (status === 'offline') {
+          opt.disabled = true;
+          opt.textContent += ' (Offline)';
+          opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
+        }
         sel.appendChild(opt);
       });
-      // Default: select first truck
-      currentTruck = activeTrucks.includes(currentTruck) ? currentTruck : activeTrucks[0];
+      // Default: select first online truck, else first in list
+      const firstOnline = allTrucks.find(t => truckStatus[t]==='online');
+      currentTruck = allTrucks.includes(currentTruck) ? currentTruck : (firstOnline || allTrucks[0]);
       sel.value = currentTruck;
       fetchRecentSensorAddresses().then(renderSensorTable);
     }
@@ -193,10 +205,10 @@
     document.getElementById("addTruckBtn").onclick = function() {
       const n = prompt("Enter new truck/device name:");
       if (!n) return;
-      // Only add if not already in activeTrucks
-      if (!activeTrucks.includes(n)) {
-        activeTrucks.push(n);
-        activeTrucks.sort();
+      if (!allTrucks.includes(n)) {
+        allTrucks.push(n);
+        allTrucks.sort();
+        truckStatus[n] = 'offline';
       }
       if (!mapData[n]) mapData[n] = {};
       currentTruck = n;
@@ -205,8 +217,8 @@
     document.getElementById("delTruckBtn").onclick = function() {
       if (!confirm("Delete all mappings for this truck?")) return;
       delete mapData[currentTruck];
-      activeTrucks = activeTrucks.filter(t => t !== currentTruck);
-      currentTruck = activeTrucks.length ? activeTrucks[0] : null;
+      allTrucks = allTrucks.filter(t => t !== currentTruck);
+      currentTruck = allTrucks.length ? allTrucks[0] : null;
       refreshTruckSelect();
     };
 
