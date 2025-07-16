@@ -41,11 +41,14 @@
         <b>Save</b> after edits to update Ubidots for all users.<br>
         <span class="text-xs text-gray-500">(Your dashboard will read live from Ubidots.)</span>
       </p>
-      <div class="mb-3 flex flex-row gap-2 items-center">
+      <div class="mb-3 flex flex-row gap-2 items-center" id="truckRow">
         <label for="truckSelect" class="font-medium">Truck:</label>
         <select id="truckSelect" class="p-1 rounded border"></select>
         <button id="addTruckBtn" class="btn text-xs px-2 py-1">+ Add Truck</button>
         <button id="delTruckBtn" class="btn text-xs px-2 py-1 bg-red-600 hover:bg-red-700">Delete</button>
+      </div>
+      <div id="noTrucksMsg" class="mb-6 text-red-700 font-semibold" style="display:none;">
+        No active trucks found in the last hour.
       </div>
       <div class="mb-6">
         <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
@@ -85,37 +88,19 @@
     // --- CONFIG ---
     const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
     const PASSWORD = "Skycafe8971";
-    const DEVICE = "config";
-    const VARIABLE = "sensor_map";
     const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
-    const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values?page_size=1`;
-    const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${DEVICE}/${VARIABLE}/values`;
+    const CONFIG_DEVICE = "config";
+    const CONFIG_VARIABLE = "sensor_map";
+    const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
+    const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
+    const DEVICES_URL = `${UBIDOTS_BASE}/devices?token=${UBIDOTS_TOKEN}`;
+    const ACTIVE_WINDOW_MS = 60 * 60 * 1000; // 1 hour for "active" trucks
+    const SENSOR_WINDOW_MS = 3 * 60 * 1000; // 3 min for "active" sensors
 
-    let DEFAULT_TRUCKS = [];
     let mapData = {};
+    let activeTrucks = [];
     let currentTruck = null;
     let recentSensorAddresses = [];
-
-    // --- Fetch only sensors active in last 3min for selected truck ---
-    async function fetchRecentSensorAddresses() {
-      const minAgo = Date.now() - 3 * 60 * 1000;
-      let result = [];
-      let url = `${UBIDOTS_BASE}/variables/?device=${currentTruck}&token=${UBIDOTS_TOKEN}`;
-      try {
-        let res = await fetch(url);
-        if (!res.ok) { recentSensorAddresses = []; return; }
-        let js = await res.json();
-        result = js.results
-          .filter(v =>
-            /^[0-9a-fA-F]{16}$/.test(v.label) &&
-            v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo
-          )
-          .map(v => v.label.toUpperCase());
-      } catch {
-        result = [];
-      }
-      recentSensorAddresses = result;
-    }
 
     // --- Auth: Lock screen always shown first ---
     const lockscreen = document.getElementById("lockscreen");
@@ -129,55 +114,127 @@
       if (pass === PASSWORD) {
         lockscreen.style.display = "none";
         adminPage.style.display = "";
-        await fetchConfig();
+        await fetchConfigAndTrucks();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
       }
     };
 
+    // --- Fetch mapping and active trucks/devices ---
+    async function fetchConfigAndTrucks() {
+      document.getElementById("statusMsg").textContent = "Loading...";
+      activeTrucks = [];
+      currentTruck = null;
+      // Fetch mapping config
+      try {
+        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
+        if (!res.ok) throw new Error("Not found");
+        let js = await res.json();
+        let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
+        mapData = context;
+      } catch (e) {
+        mapData = {};
+      }
+      // Fetch all devices, filter by last_activity < 1hr
+      try {
+        let res = await fetch(DEVICES_URL);
+        if (!res.ok) throw new Error("No devices");
+        let js = await res.json();
+        const now = Date.now();
+        activeTrucks = js.results
+          .filter(dev =>
+            dev.label && dev.last_activity &&
+            (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS)
+          )
+          .map(dev => dev.label)
+          .sort((a, b) => a.localeCompare(b));
+      } catch (e) {
+        activeTrucks = [];
+      }
+      refreshTruckSelect();
+      document.getElementById("statusMsg").textContent = "";
+    }
+
+    // --- Populate truck dropdown with only active trucks ---
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
+      const noTrucksMsg = document.getElementById("noTrucksMsg");
       sel.innerHTML = '';
-      const allTrucks = Array.from(new Set(
-        Object.keys(mapData).concat(DEFAULT_TRUCKS)
-      ));
-      allTrucks.forEach(truck => {
+      if (!activeTrucks.length) {
+        noTrucksMsg.style.display = '';
+        sel.style.display = 'none';
+        document.getElementById("addTruckBtn").style.display = 'none';
+        document.getElementById("delTruckBtn").style.display = 'none';
+        renderSensorTable();
+        return;
+      } else {
+        noTrucksMsg.style.display = 'none';
+        sel.style.display = '';
+        document.getElementById("addTruckBtn").style.display = '';
+        document.getElementById("delTruckBtn").style.display = '';
+      }
+      activeTrucks.forEach(truck => {
         const opt = document.createElement("option");
         opt.value = truck;
         opt.textContent = truck;
-        if (truck === currentTruck) opt.selected = true;
         sel.appendChild(opt);
       });
-      if (!allTrucks.includes(currentTruck)) {
-        currentTruck = allTrucks[0];
-        sel.value = currentTruck;
-      }
+      // Default: select first truck
+      currentTruck = activeTrucks.includes(currentTruck) ? currentTruck : activeTrucks[0];
+      sel.value = currentTruck;
+      fetchRecentSensorAddresses().then(renderSensorTable);
     }
-    document.getElementById("truckSelect").onchange = async function(e) {
+
+    document.getElementById("truckSelect").onchange = function(e) {
       currentTruck = e.target.value;
-      await fetchRecentSensorAddresses();
-      renderSensorTable();
+      fetchRecentSensorAddresses().then(renderSensorTable);
     };
+
     document.getElementById("addTruckBtn").onclick = function() {
       const n = prompt("Enter new truck/device name:");
       if (!n) return;
+      // Only add if not already in activeTrucks
+      if (!activeTrucks.includes(n)) {
+        activeTrucks.push(n);
+        activeTrucks.sort();
+      }
       if (!mapData[n]) mapData[n] = {};
       currentTruck = n;
-      refreshTruckSelect(); renderSensorTable();
+      refreshTruckSelect();
     };
     document.getElementById("delTruckBtn").onclick = function() {
       if (!confirm("Delete all mappings for this truck?")) return;
       delete mapData[currentTruck];
-      currentTruck = Object.keys(mapData)[0] || '';
-      refreshTruckSelect(); renderSensorTable();
+      activeTrucks = activeTrucks.filter(t => t !== currentTruck);
+      currentTruck = activeTrucks.length ? activeTrucks[0] : null;
+      refreshTruckSelect();
     };
+
+    // --- Fetch sensors active in last 3 min for selected truck ---
+    async function fetchRecentSensorAddresses() {
+      recentSensorAddresses = [];
+      if (!currentTruck) return;
+      const minAgo = Date.now() - SENSOR_WINDOW_MS;
+      let url = `${UBIDOTS_BASE}/variables/?device=${currentTruck}&token=${UBIDOTS_TOKEN}`;
+      try {
+        let res = await fetch(url);
+        if (!res.ok) { return; }
+        let js = await res.json();
+        recentSensorAddresses = js.results
+          .filter(v =>
+            /^[0-9a-fA-F]{16}$/.test(v.label) &&
+            v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo
+          )
+          .map(v => v.label.toUpperCase());
+      } catch { recentSensorAddresses = []; }
+    }
 
     // --- Render sensor table: show only sensors that are present (polled in last 3 min) ---
     function renderSensorTable() {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      if (!recentSensorAddresses.length) {
-        tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No live sensors detected in last 3 minutes.</td></tr>`;
+      if (!currentTruck || !recentSensorAddresses.length) {
+        tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No live sensors detected in last 3 minutes for this truck.</td></tr>`;
         return;
       }
       const sensors = mapData[currentTruck] || {};
@@ -194,7 +251,7 @@
       });
     }
 
-    // --- Add Sensor Row via Dropdown (only from active addresses) ---
+    // --- Add Sensor Row via Dropdown (only from active addresses not already mapped) ---
     document.getElementById("addSensorBtn").onclick = async function() {
       await fetchRecentSensorAddresses();
       const sensors = mapData[currentTruck] || {};
@@ -269,27 +326,7 @@
       setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
       document.getElementById("saveBtn").disabled = false;
     };
-
-    // --- Fetch Existing Mapping from Ubidots context field ---
-    async function fetchConfig() {
-      document.getElementById("statusMsg").textContent = "Loading...";
-      try {
-        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
-        if (!res.ok) throw new Error("Not found");
-        let js = await res.json();
-        let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
-        mapData = context;
-      } catch (e) {
-        mapData = {};
-      }
-      const allTrucks = Object.keys(mapData).length ? Object.keys(mapData) : ['skycafe-12'];
-      currentTruck = allTrucks[0];
-      refreshTruckSelect();
-      await fetchRecentSensorAddresses();
-      renderSensorTable();
-      document.getElementById("statusMsg").textContent = "";
-    }
-    // Only load config after unlock!
+    // No auto-load, config is loaded on unlock!
   </script>
 </body>
 </html>
