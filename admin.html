@@ -94,16 +94,15 @@
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
     const DEVICES_URL = `${UBIDOTS_BASE}/devices?token=${UBIDOTS_TOKEN}`;
     const TRUCK_COUNT = 24;
-    const ACTIVE_WINDOW_MS = 60 * 60 * 1000; // 1 hour for "active" trucks
-    const SENSOR_WINDOW_MS = 3 * 60 * 1000; // 3 min for "active" sensors
+    const ACTIVE_WINDOW_MS = 60 * 60 * 1000;
+    const SENSOR_WINDOW_MS = 3 * 60 * 1000;
 
     let mapData = {};
-    let truckStatus = {}; // {truck: 'online'|'offline'}
+    let truckStatus = {};
     let allTrucks = [];
     let currentTruck = null;
     let recentSensorAddresses = [];
 
-    // --- Auth: Lock screen always shown first ---
     const lockscreen = document.getElementById("lockscreen");
     const adminPage = document.getElementById("adminPage");
     document.getElementById("unlockBtn").onclick = async function() {
@@ -113,6 +112,7 @@
         return;
       }
       if (pass === PASSWORD) {
+        document.getElementById("authError").textContent = "";
         lockscreen.style.display = "none";
         adminPage.style.display = "";
         await fetchConfigAndTruckStatus();
@@ -121,91 +121,76 @@
       }
     };
 
-    // --- Fetch mapping and all truck statuses (online/offline) ---
     async function fetchConfigAndTruckStatus() {
-  document.getElementById("statusMsg").textContent = "Loading...";
-  truckStatus = {};
-  allTrucks = Array.from({length: TRUCK_COUNT}, (_,i)=>`skycafe-${i+1}`);
-  currentTruck = null;
-  mapData = {};
+      document.getElementById("statusMsg").textContent = "Loading...";
+      truckStatus = {};
+      allTrucks = Array.from({length: TRUCK_COUNT}, (_,i)=>`skycafe-${i+1}`);
+      currentTruck = null;
+      mapData = {};
 
-  // Fetch mapping config
-  try {
-    let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
-    if (!res.ok) throw new Error("Not found");
-    let js = await res.json();
-    let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
-    mapData = context;
-  } catch (e) { mapData = {}; }
+      try {
+        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
+        if (!res.ok) throw new Error("Not found");
+        let js = await res.json();
+        let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
+        mapData = context;
+      } catch (e) { mapData = {}; }
 
-  // Fetch devices and mark online/offline status by fuzzy matching
-  try {
-    let res = await fetch(DEVICES_URL);
-    if (!res.ok) throw new Error("No devices");
-    let js = await res.json();
-    const now = Date.now();
-    // Lower-case version of allTrucks for matching
-    let truckMap = {};
-    allTrucks.forEach(t => { truckMap[t.toLowerCase()] = t; });
-    js.results.forEach(dev => {
-      if (!dev.label) return;
-      let norm = dev.label.toLowerCase();
-      if (truckMap[norm]) {
-        // Exact match (case-insensitive)
-        const isOnline = (dev.last_activity && (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS));
-        truckStatus[truckMap[norm]] = isOnline ? 'online' : 'offline';
-      } else {
-        // Try matching up to first 9 chars (skycafe-12-extra, etc.)
-        let base = norm.slice(0, 10);
-        for (let t of Object.keys(truckMap)) {
-          if (t.startsWith(base)) {
+      try {
+        let res = await fetch(DEVICES_URL);
+        if (!res.ok) throw new Error("No devices");
+        let js = await res.json();
+        const now = Date.now();
+        let truckMap = {};
+        allTrucks.forEach(t => { truckMap[t.toLowerCase()] = t; });
+        js.results.forEach(dev => {
+          if (!dev.label) return;
+          let norm = dev.label.toLowerCase();
+          if (truckMap[norm]) {
             const isOnline = (dev.last_activity && (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS));
-            truckStatus[truckMap[t]] = isOnline ? 'online' : 'offline';
+            truckStatus[truckMap[norm]] = isOnline ? 'online' : 'offline';
           }
-        }
+        });
+      } catch (e) {
+        allTrucks.forEach(truck => { truckStatus[truck] = 'offline'; });
       }
-    });
-  } catch (e) {
-    allTrucks.forEach(truck => { truckStatus[truck] = 'offline'; });
-  }
-  refreshTruckSelect();
-  document.getElementById("statusMsg").textContent = "";
-}
-    // --- Populate truck dropdown with all trucks, disabling offline ones ---
-    ffunction refreshTruckSelect() {
-  const sel = document.getElementById("truckSelect");
-  const noTrucksMsg = document.getElementById("noTrucksMsg");
-  sel.innerHTML = '';
-  if (!allTrucks.length) {
-    noTrucksMsg.style.display = '';
-    sel.style.display = 'none';
-    document.getElementById("addTruckBtn").style.display = 'none';
-    document.getElementById("delTruckBtn").style.display = 'none';
-    renderSensorTable();
-    return;
-  } else {
-    noTrucksMsg.style.display = 'none';
-    sel.style.display = '';
-    document.getElementById("addTruckBtn").style.display = '';
-    document.getElementById("delTruckBtn").style.display = '';
-  }
-  allTrucks.forEach(truck => {
-    const opt = document.createElement("option");
-    opt.value = truck;
-    const status = truckStatus[truck] || 'offline';
-    opt.textContent = truck.replace('skycafe-','SkyCafé ');
-    if (status === 'offline') {
-      opt.textContent += ' (Offline)';
-      opt.style.color = '#aaa';
-      opt.style.background = '#f4f4f4';
+      refreshTruckSelect();
+      document.getElementById("statusMsg").textContent = "";
     }
-    sel.appendChild(opt);
-  });
-  // Default: select previous or first
-  currentTruck = allTrucks.includes(currentTruck) ? currentTruck : allTrucks[0];
-  sel.value = currentTruck;
-  fetchRecentSensorAddresses().then(renderSensorTable);
-}
+
+    function refreshTruckSelect() {
+      const sel = document.getElementById("truckSelect");
+      const noTrucksMsg = document.getElementById("noTrucksMsg");
+      sel.innerHTML = '';
+      if (!allTrucks.length) {
+        noTrucksMsg.style.display = '';
+        sel.style.display = 'none';
+        document.getElementById("addTruckBtn").style.display = 'none';
+        document.getElementById("delTruckBtn").style.display = 'none';
+        renderSensorTable();
+        return;
+      } else {
+        noTrucksMsg.style.display = 'none';
+        sel.style.display = '';
+        document.getElementById("addTruckBtn").style.display = '';
+        document.getElementById("delTruckBtn").style.display = '';
+      }
+      allTrucks.forEach(truck => {
+        const opt = document.createElement("option");
+        opt.value = truck;
+        const status = truckStatus[truck] || 'offline';
+        opt.textContent = truck.replace('skycafe-','SkyCafé ');
+        if (status === 'offline') {
+          opt.textContent += ' (Offline)';
+          opt.style.color = '#aaa';
+          opt.style.background = '#f4f4f4';
+        }
+        sel.appendChild(opt);
+      });
+      currentTruck = allTrucks.includes(currentTruck) ? currentTruck : allTrucks[0];
+      sel.value = currentTruck;
+      fetchRecentSensorAddresses().then(renderSensorTable);
+    }
 
     document.getElementById("truckSelect").onchange = function(e) {
       currentTruck = e.target.value;
@@ -232,7 +217,6 @@
       refreshTruckSelect();
     };
 
-    // --- Fetch sensors active in last 3 min for selected truck ---
     async function fetchRecentSensorAddresses() {
       recentSensorAddresses = [];
       if (!currentTruck) return;
@@ -251,7 +235,6 @@
       } catch { recentSensorAddresses = []; }
     }
 
-    // --- Render sensor table: show only sensors that are present (polled in last 3 min) ---
     function renderSensorTable() {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
@@ -273,7 +256,6 @@
       });
     }
 
-    // --- Add Sensor Row via Dropdown (only from active addresses not already mapped) ---
     document.getElementById("addSensorBtn").onclick = async function() {
       await fetchRecentSensorAddresses();
       const sensors = mapData[currentTruck] || {};
@@ -306,7 +288,6 @@
       };
     };
 
-    // --- Delete Sensor Row (remove mapping for present sensor only) ---
     document.getElementById("sensorTable").addEventListener("click", function(e) {
       if (e.target.classList.contains("delSensorBtn")) {
         const row = e.target.closest("tr");
@@ -316,7 +297,6 @@
       }
     });
 
-    // --- Update Mappings Live ---
     document.getElementById("sensorTable").addEventListener("input", function(e) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
@@ -330,7 +310,6 @@
       mapData[currentTruck] = sensors;
     });
 
-    // --- Save to Ubidots using context field ---
     document.getElementById("saveBtn").onclick = async function() {
       document.getElementById("saveBtn").disabled = true;
       document.getElementById("statusMsg").textContent = "Saving...";
@@ -348,7 +327,6 @@
       setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
       document.getElementById("saveBtn").disabled = false;
     };
-    // No auto-load, config is loaded on unlock!
   </script>
 </body>
 </html>
