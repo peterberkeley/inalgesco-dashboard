@@ -102,9 +102,8 @@
     let allTrucks = [];
     let currentTruck = null;
     let recentSensorAddresses = [];
-    let fetchSensorTableID = 0; // race-proof
+    let fetchSensorTableID = 0;
 
-    // --- Auth: Lock screen always shown first ---
     document.getElementById("unlockBtn").onclick = async function() {
       const pass = document.getElementById("adminPass").value;
       if (pass.length < 8) {
@@ -158,6 +157,7 @@
       document.getElementById("statusMsg").textContent = "";
     }
 
+    // Dropdown logic: match main dashboard—offline = disabled, greyed out by browser
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       const noTrucksMsg = document.getElementById("noTrucksMsg");
@@ -167,7 +167,7 @@
         sel.style.display = 'none';
         document.getElementById("addTruckBtn").style.display = 'none';
         document.getElementById("delTruckBtn").style.display = 'none';
-        renderSensorTable([]); // clear table
+        renderSensorTable([]);
         return;
       } else {
         noTrucksMsg.style.display = 'none';
@@ -175,6 +175,7 @@
         document.getElementById("addTruckBtn").style.display = '';
         document.getElementById("delTruckBtn").style.display = '';
       }
+      let firstOnlineTruck = null;
       allTrucks.forEach(truck => {
         const opt = document.createElement("option");
         opt.value = truck;
@@ -182,11 +183,13 @@
         opt.textContent = truck.replace('skycafe-','SkyCafé ');
         if (status === 'offline') {
           opt.textContent += ' (Offline)';
+          opt.disabled = true; // exact main dashboard logic
+        } else if (!firstOnlineTruck) {
+          firstOnlineTruck = truck;
         }
         sel.appendChild(opt);
       });
       // Default to first online truck if any
-      let firstOnlineTruck = allTrucks.find(t => truckStatus[t] === 'online');
       currentTruck = firstOnlineTruck || allTrucks[0];
       sel.value = currentTruck;
       handleTruckChange();
@@ -198,7 +201,6 @@
     };
 
     function handleTruckChange() {
-      // Clear table immediately, then fetch sensors for the selected truck
       renderSensorTable([]);
       fetchLiveSensorsForTruck(currentTruck);
     }
