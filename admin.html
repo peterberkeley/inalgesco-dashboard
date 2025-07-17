@@ -92,17 +92,38 @@
     const CONFIG_VARIABLE = "sensor_map";
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
-    const DEVICES_URL = `${UBIDOTS_BASE}/devices?token=${UBIDOTS_TOKEN}`;
-    const TRUCK_COUNT = 24;
+    const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
     const ACTIVE_WINDOW_MS = 60 * 60 * 1000;
     const SENSOR_WINDOW_MS = 3 * 60 * 1000;
 
     let mapData = {};
-    let truckStatus = {};
-    let allTrucks = [];
-    let currentTruck = null;
+    let deviceStatus = {};
+    let DEVICE = null; // Current truck
     let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
+
+    // EXACT getDeviceLastTimestamp as in main dashboard
+    async function getDeviceLastTimestamp(dev) {
+      try {
+        const url = `${UBIDOTS_BASE}/devices/${dev}/`;
+        const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
+        if (!res.ok) return 0;
+        const js = await res.json();
+        return new Date(js.last_activity).getTime() || 0;
+      } catch {
+        return 0;
+      }
+    }
+
+    // Main dashboard's deviceStatus builder
+    async function buildDeviceStatus() {
+      deviceStatus = {};
+      const now = Date.now();
+      await Promise.all(DEVICES.map(async dev => {
+        let lastTs = await getDeviceLastTimestamp(dev);
+        deviceStatus[dev] = (now - lastTs < ACTIVE_WINDOW_MS) ? 'online' : 'offline';
+      }));
+    }
 
     document.getElementById("unlockBtn").onclick = async function() {
       const pass = document.getElementById("adminPass").value;
@@ -114,19 +135,15 @@
         document.getElementById("authError").textContent = "";
         document.getElementById("lockscreen").style.display = "none";
         document.getElementById("adminPage").style.display = "";
-        await fetchConfigAndTruckStatus();
+        await fetchConfigAndDeviceStatus();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
       }
     };
 
-    async function fetchConfigAndTruckStatus() {
+    async function fetchConfigAndDeviceStatus() {
       document.getElementById("statusMsg").textContent = "Loading...";
-      truckStatus = {};
-      allTrucks = Array.from({length: TRUCK_COUNT}, (_,i)=>`skycafe-${i+1}`);
-      currentTruck = null;
       mapData = {};
-
       try {
         let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
         if (!res.ok) throw new Error("Not found");
@@ -134,35 +151,16 @@
         let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
         mapData = context;
       } catch (e) { mapData = {}; }
-
-      try {
-        let res = await fetch(DEVICES_URL);
-        if (!res.ok) throw new Error("No devices");
-        let js = await res.json();
-        const now = Date.now();
-        let truckMap = {};
-        allTrucks.forEach(t => { truckMap[t.toLowerCase()] = t; });
-        js.results.forEach(dev => {
-          if (!dev.label) return;
-          let norm = dev.label.toLowerCase();
-          if (truckMap[norm]) {
-            const isOnline = (dev.last_activity && (now - new Date(dev.last_activity).getTime() < ACTIVE_WINDOW_MS));
-            truckStatus[truckMap[norm]] = isOnline ? 'online' : 'offline';
-          }
-        });
-      } catch (e) {
-        allTrucks.forEach(truck => { truckStatus[truck] = 'offline'; });
-      }
+      await buildDeviceStatus();
       refreshTruckSelect();
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // Dropdown logic: match main dashboard—offline = disabled, greyed out by browser
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       const noTrucksMsg = document.getElementById("noTrucksMsg");
       sel.innerHTML = '';
-      if (!allTrucks.length) {
+      if (!DEVICES.length) {
         noTrucksMsg.style.display = '';
         sel.style.display = 'none';
         document.getElementById("addTruckBtn").style.display = 'none';
@@ -175,42 +173,41 @@
         document.getElementById("addTruckBtn").style.display = '';
         document.getElementById("delTruckBtn").style.display = '';
       }
-      let firstOnlineTruck = null;
-      allTrucks.forEach(truck => {
-        const opt = document.createElement("option");
-        opt.value = truck;
-        const status = truckStatus[truck] || 'offline';
-        opt.textContent = truck.replace('skycafe-','SkyCafé ');
-        if (status === 'offline') {
+      let firstOnline = null;
+      DEVICES.forEach(dev => {
+        const opt = document.createElement('option');
+        opt.value = dev;
+        opt.textContent = dev.replace('skycafe-','SkyCafé ');
+        if (deviceStatus[dev] === 'offline') {
+          opt.disabled = true;
           opt.textContent += ' (Offline)';
-          opt.disabled = true; // exact main dashboard logic
-        } else if (!firstOnlineTruck) {
-          firstOnlineTruck = truck;
+        } else if (!firstOnline) {
+          firstOnline = dev;
         }
         sel.appendChild(opt);
       });
-      // Default to first online truck if any
-      currentTruck = firstOnlineTruck || allTrucks[0];
-      sel.value = currentTruck;
+      // Set current device to first online if any, else first in list
+      DEVICE = firstOnline || DEVICES[0];
+      sel.value = DEVICE;
       handleTruckChange();
     }
 
     document.getElementById("truckSelect").onchange = function(e) {
-      currentTruck = e.target.value;
+      DEVICE = e.target.value;
       handleTruckChange();
     };
 
     function handleTruckChange() {
       renderSensorTable([]);
-      fetchLiveSensorsForTruck(currentTruck);
+      fetchLiveSensorsForTruck(DEVICE);
     }
 
-    async function fetchLiveSensorsForTruck(truck) {
+    async function fetchLiveSensorsForTruck(dev) {
       let myID = ++fetchSensorTableID;
       let addresses = [];
-      if (truck) {
+      if (dev) {
         const minAgo = Date.now() - SENSOR_WINDOW_MS;
-        let url = `${UBIDOTS_BASE}/variables/?device=${truck}&token=${UBIDOTS_TOKEN}`;
+        let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         try {
           let res = await fetch(url);
           if (res.ok) {
@@ -233,11 +230,11 @@
     function renderSensorTable(addresses) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      if (!currentTruck || !addresses || !addresses.length) {
+      if (!DEVICE || !addresses || !addresses.length) {
         tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No live sensors detected in last 3 minutes for this truck.</td></tr>`;
         return;
       }
-      const sensors = mapData[currentTruck] || {};
+      const sensors = mapData[DEVICE] || {};
       addresses.forEach((addr, idx) => {
         const obj = sensors[addr] || {};
         const tr = document.createElement("tr");
@@ -252,8 +249,8 @@
     }
 
     document.getElementById("addSensorBtn").onclick = async function() {
-      await fetchLiveSensorsForTruck(currentTruck);
-      const sensors = mapData[currentTruck] || {};
+      await fetchLiveSensorsForTruck(DEVICE);
+      const sensors = mapData[DEVICE] || {};
       const sensorsUpper = Object.keys(sensors).reduce((o, a) => { o[a.toUpperCase()] = true; return o; }, {});
       const unused = recentSensorAddresses.filter(addr => !sensorsUpper[addr]);
       if (unused.length === 0) {
@@ -273,8 +270,8 @@
       document.getElementById("addrDropdownOk").onclick = function() {
         const addr = sel.value;
         if (!addr) return;
-        if (!mapData[currentTruck]) mapData[currentTruck] = {};
-        mapData[currentTruck][addr] = { label: "", offset: 0 };
+        if (!mapData[DEVICE]) mapData[DEVICE] = {};
+        mapData[DEVICE][addr] = { label: "", offset: 0 };
         modal.style.display = 'none';
         renderSensorTable(recentSensorAddresses);
       };
@@ -287,7 +284,7 @@
       if (e.target.classList.contains("delSensorBtn")) {
         const row = e.target.closest("tr");
         const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
-        if (mapData[currentTruck]) delete mapData[currentTruck][addr];
+        if (mapData[DEVICE]) delete mapData[DEVICE][addr];
         renderSensorTable(recentSensorAddresses);
       }
     });
@@ -302,7 +299,7 @@
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
         sensors[addr] = { label, offset };
       });
-      mapData[currentTruck] = sensors;
+      mapData[DEVICE] = sensors;
     });
 
     document.getElementById("saveBtn").onclick = async function() {
