@@ -102,9 +102,9 @@
     let allTrucks = [];
     let currentTruck = null;
     let recentSensorAddresses = [];
+    let fetchSensorTableID = 0; // race-proof
 
-    const lockscreen = document.getElementById("lockscreen");
-    const adminPage = document.getElementById("adminPage");
+    // --- Auth: Lock screen always shown first ---
     document.getElementById("unlockBtn").onclick = async function() {
       const pass = document.getElementById("adminPass").value;
       if (pass.length < 8) {
@@ -113,8 +113,8 @@
       }
       if (pass === PASSWORD) {
         document.getElementById("authError").textContent = "";
-        lockscreen.style.display = "none";
-        adminPage.style.display = "";
+        document.getElementById("lockscreen").style.display = "none";
+        document.getElementById("adminPage").style.display = "";
         await fetchConfigAndTruckStatus();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
@@ -158,7 +158,6 @@
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // Dropdown logic: all trucks selectable, "(Offline)" label for offline
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       const noTrucksMsg = document.getElementById("noTrucksMsg");
@@ -168,7 +167,7 @@
         sel.style.display = 'none';
         document.getElementById("addTruckBtn").style.display = 'none';
         document.getElementById("delTruckBtn").style.display = 'none';
-        renderSensorTable();
+        renderSensorTable([]); // clear table
         return;
       } else {
         noTrucksMsg.style.display = 'none';
@@ -183,67 +182,61 @@
         opt.textContent = truck.replace('skycafe-','SkyCafé ');
         if (status === 'offline') {
           opt.textContent += ' (Offline)';
-          // No inline styling or disabling
         }
         sel.appendChild(opt);
       });
-      currentTruck = allTrucks.includes(currentTruck) ? currentTruck : allTrucks[0];
+      // Default to first online truck if any
+      let firstOnlineTruck = allTrucks.find(t => truckStatus[t] === 'online');
+      currentTruck = firstOnlineTruck || allTrucks[0];
       sel.value = currentTruck;
-      fetchRecentSensorAddresses().then(renderSensorTable);
+      handleTruckChange();
     }
 
     document.getElementById("truckSelect").onchange = function(e) {
       currentTruck = e.target.value;
-      fetchRecentSensorAddresses().then(renderSensorTable);
+      handleTruckChange();
     };
 
-    document.getElementById("addTruckBtn").onclick = function() {
-      const n = prompt("Enter new truck/device name:");
-      if (!n) return;
-      if (!allTrucks.includes(n)) {
-        allTrucks.push(n);
-        allTrucks.sort();
-        truckStatus[n] = 'offline';
-      }
-      if (!mapData[n]) mapData[n] = {};
-      currentTruck = n;
-      refreshTruckSelect();
-    };
-    document.getElementById("delTruckBtn").onclick = function() {
-      if (!confirm("Delete all mappings for this truck?")) return;
-      delete mapData[currentTruck];
-      allTrucks = allTrucks.filter(t => t !== currentTruck);
-      currentTruck = allTrucks.length ? allTrucks[0] : null;
-      refreshTruckSelect();
-    };
-
-    async function fetchRecentSensorAddresses() {
-      recentSensorAddresses = [];
-      if (!currentTruck) return;
-      const minAgo = Date.now() - SENSOR_WINDOW_MS;
-      let url = `${UBIDOTS_BASE}/variables/?device=${currentTruck}&token=${UBIDOTS_TOKEN}`;
-      try {
-        let res = await fetch(url);
-        if (!res.ok) { return; }
-        let js = await res.json();
-        recentSensorAddresses = js.results
-          .filter(v =>
-            /^[0-9a-fA-F]{16}$/.test(v.label) &&
-            v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo
-          )
-          .map(v => v.label.toUpperCase());
-      } catch { recentSensorAddresses = []; }
+    function handleTruckChange() {
+      // Clear table immediately, then fetch sensors for the selected truck
+      renderSensorTable([]);
+      fetchLiveSensorsForTruck(currentTruck);
     }
 
-    function renderSensorTable() {
+    async function fetchLiveSensorsForTruck(truck) {
+      let myID = ++fetchSensorTableID;
+      let addresses = [];
+      if (truck) {
+        const minAgo = Date.now() - SENSOR_WINDOW_MS;
+        let url = `${UBIDOTS_BASE}/variables/?device=${truck}&token=${UBIDOTS_TOKEN}`;
+        try {
+          let res = await fetch(url);
+          if (res.ok) {
+            let js = await res.json();
+            addresses = js.results
+              .filter(v =>
+                /^[0-9a-fA-F]{16}$/.test(v.label) &&
+                v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo
+              )
+              .map(v => v.label.toUpperCase());
+          }
+        } catch {}
+      }
+      if (myID === fetchSensorTableID) {
+        recentSensorAddresses = addresses;
+        renderSensorTable(recentSensorAddresses);
+      }
+    }
+
+    function renderSensorTable(addresses) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      if (!currentTruck || !recentSensorAddresses.length) {
+      if (!currentTruck || !addresses || !addresses.length) {
         tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No live sensors detected in last 3 minutes for this truck.</td></tr>`;
         return;
       }
       const sensors = mapData[currentTruck] || {};
-      recentSensorAddresses.forEach((addr, idx) => {
+      addresses.forEach((addr, idx) => {
         const obj = sensors[addr] || {};
         const tr = document.createElement("tr");
         tr.innerHTML = `
@@ -257,7 +250,7 @@
     }
 
     document.getElementById("addSensorBtn").onclick = async function() {
-      await fetchRecentSensorAddresses();
+      await fetchLiveSensorsForTruck(currentTruck);
       const sensors = mapData[currentTruck] || {};
       const sensorsUpper = Object.keys(sensors).reduce((o, a) => { o[a.toUpperCase()] = true; return o; }, {});
       const unused = recentSensorAddresses.filter(addr => !sensorsUpper[addr]);
@@ -281,7 +274,7 @@
         if (!mapData[currentTruck]) mapData[currentTruck] = {};
         mapData[currentTruck][addr] = { label: "", offset: 0 };
         modal.style.display = 'none';
-        renderSensorTable();
+        renderSensorTable(recentSensorAddresses);
       };
       document.getElementById("addrDropdownCancel").onclick = function() {
         modal.style.display = 'none';
@@ -293,7 +286,7 @@
         const row = e.target.closest("tr");
         const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
         if (mapData[currentTruck]) delete mapData[currentTruck][addr];
-        renderSensorTable();
+        renderSensorTable(recentSensorAddresses);
       }
     });
 
