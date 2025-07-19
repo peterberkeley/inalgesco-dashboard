@@ -107,7 +107,7 @@
     let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
 
-    // NEW: List any label that is a 16-char address or common variable names
+    // List any label that is a 16-char address or common variable names
     const importantVars = [
       "temp", "speed", "volt", "signal", "heartbeat", "gps", "lat", "lon", "iccid", "online"
     ];
@@ -125,7 +125,6 @@
           if (res.ok) {
             const js = await res.json();
             for (let v of js.results) {
-              // Accept sensor address or any important core variable
               if (
                 (
                   /^[0-9a-fA-F]{16}$/.test(v.label) ||
@@ -177,11 +176,16 @@
       document.getElementById("statusMsg").textContent = "";
     }
 
+    // ---- DROPDOWN: Only show LIVE trucks (just like main dashboard) ----
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       const noTrucksMsg = document.getElementById("noTrucksMsg");
       sel.innerHTML = '';
-      if (!DEVICES.length) {
+
+      // Only show live trucks
+      let trucksToShow = DEVICES.filter(dev => deviceStatus[dev] === 'online');
+
+      if (!trucksToShow.length) {
         noTrucksMsg.style.display = '';
         sel.style.display = 'none';
         document.getElementById("addTruckBtn").style.display = 'none';
@@ -194,20 +198,19 @@
         document.getElementById("addTruckBtn").style.display = '';
         document.getElementById("delTruckBtn").style.display = '';
       }
+
       let firstOnline = null;
-      DEVICES.forEach(dev => {
+      trucksToShow.forEach(dev => {
         const opt = document.createElement('option');
         opt.value = dev;
         opt.textContent = dev.replace('skycafe-','SkyCafé ');
-        if (deviceStatus[dev] === 'offline') {
-          opt.disabled = true;
-          opt.textContent += ' (Offline)';
-        } else if (!firstOnline) {
+        if (!firstOnline) {
           firstOnline = dev;
         }
         sel.appendChild(opt);
       });
-      DEVICE = firstOnline || DEVICES[0];
+
+      DEVICE = firstOnline || trucksToShow[0];
       sel.value = DEVICE;
       handleTruckChange();
     }
@@ -361,3 +364,5 @@
       document.getElementById("saveBtn").disabled = false;
     };
   </script>
+</body>
+</html>
