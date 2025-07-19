@@ -107,7 +107,7 @@
     let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
 
-    // List any label that is a 16-char address or common variable names
+    // List any label that is a 16-char address or core variable names
     const importantVars = [
       "temp", "speed", "volt", "signal", "heartbeat", "gps", "lat", "lon", "iccid", "online"
     ];
@@ -176,7 +176,7 @@
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // ---- DROPDOWN: Only show LIVE trucks (just like main dashboard) ----
+    // ---- DROPDOWN: Only show LIVE trucks (exact main dashboard logic) ----
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       const noTrucksMsg = document.getElementById("noTrucksMsg");
