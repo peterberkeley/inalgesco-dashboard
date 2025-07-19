@@ -90,7 +90,6 @@
     </div>
   </div>
   <script>
-    // --- CONFIG ---
     const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
     const PASSWORD = "Skycafe8971";
     const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
@@ -99,37 +98,32 @@
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
     const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
-    const SENSOR_WINDOW_MS = 60 * 1000; // 60 seconds
 
     let mapData = {};
-    let liveTrucks = [];
-    let DEVICE = null; // Current truck
+    let deviceStatus = {};
+    let DEVICE = null;
     let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
 
-    async function getLiveTrucks() {
-      liveTrucks = [];
+    async function getDeviceLastTimestamp(dev) {
+      try {
+        const url = `${UBIDOTS_BASE}/devices/${dev}/`;
+        const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
+        if (!res.ok) return 0;
+        const js = await res.json();
+        return new Date(js.last_activity).getTime() || 0;
+      } catch {
+        return 0;
+      }
+    }
+
+    async function buildDeviceStatus() {
+      deviceStatus = {};
       const now = Date.now();
+      const offlineCutoff = 60 * 60 * 1000; // 1 hour
       await Promise.all(DEVICES.map(async dev => {
-        try {
-          const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const js = await res.json();
-            for (let v of js.results) {
-              if (
-                /^[0-9a-fA-F]{16}$/.test(v.label) &&
-                v.last_value &&
-                v.last_value.timestamp &&
-                v.last_value.timestamp > (now - SENSOR_WINDOW_MS) &&
-                v.last_value.value !== 122.0
-              ) {
-                liveTrucks.push(dev);
-                break;
-              }
-            }
-          }
-        } catch {}
+        let lastTs = await getDeviceLastTimestamp(dev);
+        deviceStatus[dev] = (now - lastTs < offlineCutoff) ? 'online' : 'offline';
       }));
     }
 
@@ -143,13 +137,13 @@
         document.getElementById("authError").textContent = "";
         document.getElementById("lockscreen").style.display = "none";
         document.getElementById("adminPage").style.display = "";
-        await fetchConfigAndLiveTrucks();
+        await fetchConfigAndDeviceStatus();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
       }
     };
 
-    async function fetchConfigAndLiveTrucks() {
+    async function fetchConfigAndDeviceStatus() {
       document.getElementById("statusMsg").textContent = "Loading...";
       mapData = {};
       try {
@@ -159,7 +153,7 @@
         let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
         mapData = context;
       } catch (e) { mapData = {}; }
-      await getLiveTrucks();
+      await buildDeviceStatus();
       refreshTruckSelect();
       document.getElementById("statusMsg").textContent = "";
     }
@@ -174,9 +168,10 @@
         const opt = document.createElement('option');
         opt.value = dev;
         opt.textContent = dev.replace('skycafe-','SkyCafé ');
-        if (!liveTrucks.includes(dev)) {
+        if (deviceStatus[dev] === 'offline') {
           opt.disabled = true;
           opt.textContent += ' (Offline)';
+          opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
         } else if (!firstOnline) {
           firstOnline = dev;
         }
@@ -208,15 +203,15 @@
     };
 
     function handleTruckChange() {
-      renderSensorTable([], true);
+      renderSensorTable([], deviceStatus[DEVICE] !== 'online');
       fetchAndRenderSensorTableForTruck(DEVICE);
     }
 
     async function fetchAndRenderSensorTableForTruck(dev) {
       let myID = ++fetchSensorTableID;
       let liveAddrs = [];
-      if (liveTrucks.includes(dev)) {
-        const minAgo = Date.now() - SENSOR_WINDOW_MS;
+      if (deviceStatus[dev] === 'online') {
+        const minAgo = Date.now() - 3 * 60 * 1000;
         let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         try {
           let res = await fetch(url);
@@ -233,7 +228,7 @@
         } catch {}
       }
       if (myID === fetchSensorTableID) {
-        renderSensorTable(liveAddrs, !liveTrucks.includes(dev));
+        renderSensorTable(liveAddrs, deviceStatus[dev] !== 'online');
       }
     }
 
