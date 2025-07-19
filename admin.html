@@ -23,6 +23,12 @@
       background: #fff; border-radius: 1rem; padding: 2rem 2rem 1.5rem 2rem; min-width: 320px;
       box-shadow: 0 10px 32px rgba(0,0,0,0.13);
     }
+    .greyed input, .greyed button, .greyed select {
+      background: #e5e7eb !important;
+      color: #9ca3af !important;
+      pointer-events: none;
+      border-color: #d1d5db !important;
+    }
   </style>
 </head>
 <body>
@@ -195,59 +201,85 @@
     };
 
     function handleTruckChange() {
-      renderSensorTable([]);
-      fetchLiveSensorsForTruck(DEVICE);
+      renderSensorTable([], true);
+      fetchAndRenderSensorTableForTruck(DEVICE);
     }
 
-    async function fetchLiveSensorsForTruck(dev) {
+    async function fetchAndRenderSensorTableForTruck(dev) {
       let myID = ++fetchSensorTableID;
-      let addresses = [];
-      if (dev) {
+      const isOnline = deviceStatus[dev] === 'online';
+      let liveAddrs = [];
+      if (isOnline) {
         const minAgo = Date.now() - SENSOR_WINDOW_MS;
         let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         try {
           let res = await fetch(url);
           if (res.ok) {
             let js = await res.json();
-            addresses = js.results
+            liveAddrs = js.results
               .filter(v =>
                 /^[0-9a-fA-F]{16}$/.test(v.label) &&
                 v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo &&
-                v.last_value.value !== 122.0 // <-- Exclude "disconnected" sensors
+                v.last_value.value !== 122.0 // Exclude default value
               )
               .map(v => v.label.toUpperCase());
           }
         } catch {}
       }
       if (myID === fetchSensorTableID) {
-        recentSensorAddresses = addresses;
-        renderSensorTable(recentSensorAddresses);
+        renderSensorTable(liveAddrs, !isOnline);
       }
     }
 
-    function renderSensorTable(addresses) {
+    function renderSensorTable(liveAddresses, isOffline) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      if (!DEVICE || !addresses || !addresses.length) {
-        tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No live sensors detected in last 3 minutes for this truck.</td></tr>`;
+      const sensors = mapData[DEVICE] || {};
+      const mappedAddrs = Object.keys(sensors);
+      let toShow = [];
+      if (isOffline) {
+        // Only mapped sensors for offline trucks, all greyed out
+        toShow = mappedAddrs.map(addr => ({ addr, state: 'greyed' }));
+      } else {
+        // Online: show all mapped sensors (greyed if not live), plus unmapped live sensors (editable)
+        let liveSet = new Set(liveAddresses || []);
+        // All mapped, with state depending on whether currently live
+        toShow = mappedAddrs.map(addr => ({
+          addr,
+          state: liveSet.has(addr) ? 'editable' : 'greyed'
+        }));
+        // Add unmapped live sensors (editable)
+        (liveAddresses || []).forEach(addr => {
+          if (!mappedAddrs.includes(addr)) {
+            toShow.push({ addr, state: 'editable' });
+          }
+        });
+      }
+
+      if (!DEVICE || !toShow.length) {
+        tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No sensors mapped or detected for this truck.</td></tr>`;
+        document.getElementById("addSensorBtn").style.display = isOffline ? 'none' : '';
         return;
       }
-      const sensors = mapData[DEVICE] || {};
-      addresses.forEach((addr, idx) => {
-        const obj = sensors[addr] || {};
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><input type="text" value="${addr}" data-idx="${idx}" class="sensorAddr" style="width:120px" readonly/></td>
-          <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px"/></td>
-          <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px"/></td>
-          <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn">x</button></td>
+
+      toShow.forEach((entry, idx) => {
+        const obj = sensors[entry.addr] || {};
+        const disabled = entry.state === 'greyed' ? "disabled" : "";
+        const trClass = entry.state === 'greyed' ? 'greyed' : '';
+        tbl.innerHTML += `
+          <tr class="${trClass}">
+            <td><input type="text" value="${entry.addr}" data-idx="${idx}" class="sensorAddr" style="width:120px" readonly ${disabled}/></td>
+            <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px" ${disabled}/></td>
+            <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px" ${disabled}/></td>
+            <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn" ${disabled}>x</button></td>
+          </tr>
         `;
-        tbl.appendChild(tr);
       });
+      document.getElementById("addSensorBtn").style.display = isOffline ? 'none' : '';
     }
 
     document.getElementById("addSensorBtn").onclick = async function() {
-      await fetchLiveSensorsForTruck(DEVICE);
+      await fetchAndRenderSensorTableForTruck(DEVICE);
       const sensors = mapData[DEVICE] || {};
       const sensorsUpper = Object.keys(sensors).reduce((o, a) => { o[a.toUpperCase()] = true; return o; }, {});
       const unused = recentSensorAddresses.filter(addr => !sensorsUpper[addr]);
@@ -271,7 +303,7 @@
         if (!mapData[DEVICE]) mapData[DEVICE] = {};
         mapData[DEVICE][addr] = { label: "", offset: 0 };
         modal.style.display = 'none';
-        renderSensorTable(recentSensorAddresses);
+        fetchAndRenderSensorTableForTruck(DEVICE);
       };
       document.getElementById("addrDropdownCancel").onclick = function() {
         modal.style.display = 'none';
@@ -283,7 +315,7 @@
         const row = e.target.closest("tr");
         const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
         if (mapData[DEVICE]) delete mapData[DEVICE][addr];
-        renderSensorTable(recentSensorAddresses);
+        fetchAndRenderSensorTableForTruck(DEVICE);
       }
     });
 
