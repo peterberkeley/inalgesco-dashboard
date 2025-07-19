@@ -99,49 +99,38 @@
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
     const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
-    const SENSOR_WINDOW_MS = 3 * 60 * 1000;
+    const SENSOR_WINDOW_MS = 60 * 1000; // 60 seconds
 
     let mapData = {};
-    let deviceStatus = {};
+    let liveTrucks = [];
     let DEVICE = null; // Current truck
     let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
 
-    // List any label that is a 16-char address or core variable names
-    const importantVars = [
-      "temp", "speed", "volt", "signal", "heartbeat", "gps", "lat", "lon", "iccid", "online"
-    ];
-
-    async function buildDeviceStatus() {
-      deviceStatus = {};
+    async function getLiveTrucks() {
+      // This function matches dashboard: only trucks with a recent live Dallas sensor
+      liveTrucks = [];
       const now = Date.now();
-      const onlineWindow = 60 * 1000; // 60 seconds = 1 minute
-
       await Promise.all(DEVICES.map(async dev => {
-        let isLive = false;
         try {
-          const varUrl = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
-          const res = await fetch(varUrl);
+          const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
+          const res = await fetch(url);
           if (res.ok) {
             const js = await res.json();
             for (let v of js.results) {
               if (
-                (
-                  /^[0-9a-fA-F]{16}$/.test(v.label) ||
-                  importantVars.includes(v.label)
-                ) &&
+                /^[0-9a-fA-F]{16}$/.test(v.label) &&
                 v.last_value &&
                 v.last_value.timestamp &&
-                v.last_value.timestamp > (now - onlineWindow) &&
-                v.last_value.value !== 122.0 // Exclude error value for sensors, safe for other vars
+                v.last_value.timestamp > (now - SENSOR_WINDOW_MS) &&
+                v.last_value.value !== 122.0
               ) {
-                isLive = true;
+                liveTrucks.push(dev);
                 break;
               }
             }
           }
         } catch {}
-        deviceStatus[dev] = isLive ? 'online' : 'offline';
       }));
     }
 
@@ -155,13 +144,13 @@
         document.getElementById("authError").textContent = "";
         document.getElementById("lockscreen").style.display = "none";
         document.getElementById("adminPage").style.display = "";
-        await fetchConfigAndDeviceStatus();
+        await fetchConfigAndLiveTrucks();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
       }
     };
 
-    async function fetchConfigAndDeviceStatus() {
+    async function fetchConfigAndLiveTrucks() {
       document.getElementById("statusMsg").textContent = "Loading...";
       mapData = {};
       try {
@@ -171,21 +160,17 @@
         let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
         mapData = context;
       } catch (e) { mapData = {}; }
-      await buildDeviceStatus();
+      await getLiveTrucks();
       refreshTruckSelect();
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // ---- DROPDOWN: Only show LIVE trucks (exact main dashboard logic) ----
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
       const noTrucksMsg = document.getElementById("noTrucksMsg");
       sel.innerHTML = '';
 
-      // Only show live trucks
-      let trucksToShow = DEVICES.filter(dev => deviceStatus[dev] === 'online');
-
-      if (!trucksToShow.length) {
+      if (!liveTrucks.length) {
         noTrucksMsg.style.display = '';
         sel.style.display = 'none';
         document.getElementById("addTruckBtn").style.display = 'none';
@@ -200,17 +185,15 @@
       }
 
       let firstOnline = null;
-      trucksToShow.forEach(dev => {
+      liveTrucks.forEach(dev => {
         const opt = document.createElement('option');
         opt.value = dev;
         opt.textContent = dev.replace('skycafe-','SkyCafé ');
-        if (!firstOnline) {
-          firstOnline = dev;
-        }
+        if (!firstOnline) firstOnline = dev;
         sel.appendChild(opt);
       });
 
-      DEVICE = firstOnline || trucksToShow[0];
+      DEVICE = firstOnline || liveTrucks[0];
       sel.value = DEVICE;
       handleTruckChange();
     }
@@ -227,9 +210,8 @@
 
     async function fetchAndRenderSensorTableForTruck(dev) {
       let myID = ++fetchSensorTableID;
-      const isOnline = deviceStatus[dev] === 'online';
       let liveAddrs = [];
-      if (isOnline) {
+      if (liveTrucks.includes(dev)) {
         const minAgo = Date.now() - SENSOR_WINDOW_MS;
         let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         try {
@@ -247,7 +229,7 @@
         } catch {}
       }
       if (myID === fetchSensorTableID) {
-        renderSensorTable(liveAddrs, !isOnline);
+        renderSensorTable(liveAddrs, !liveTrucks.includes(dev));
       }
     }
 
