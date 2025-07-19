@@ -99,7 +99,6 @@
     const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
     const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
-    const ACTIVE_WINDOW_MS = 60 * 60 * 1000;
     const SENSOR_WINDOW_MS = 3 * 60 * 1000;
 
     let mapData = {};
@@ -108,40 +107,34 @@
     let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
 
-    // --------------- BULLETPROOF ONLINE TRUCK DETECTION ---------------
+    // NEW: List any label that is a 16-char address or common variable names
+    const importantVars = [
+      "temp", "speed", "volt", "signal", "heartbeat", "gps", "lat", "lon", "iccid", "online"
+    ];
+
     async function buildDeviceStatus() {
       deviceStatus = {};
       const now = Date.now();
-      const offlineCutoff = 60 * 60 * 1000;  // 1 hour
-      const sensorWindow = 5 * 60 * 1000;    // 5 min
+      const onlineWindow = 60 * 1000; // 60 seconds = 1 minute
 
       await Promise.all(DEVICES.map(async dev => {
         let isLive = false;
-        let lastTs = 0;
-
-        // 1. Get last_activity for the device
-        try {
-          const url = `${UBIDOTS_BASE}/devices/${dev}/`;
-          const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
-          if (res.ok) {
-            const js = await res.json();
-            lastTs = new Date(js.last_activity).getTime() || 0;
-          }
-        } catch {}
-
-        // 2. Query all variables for the device to see if *any* are "recent & valid"
         try {
           const varUrl = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
           const res = await fetch(varUrl);
           if (res.ok) {
             const js = await res.json();
             for (let v of js.results) {
+              // Accept sensor address or any important core variable
               if (
-                /^[0-9a-fA-F]{16}$/.test(v.label) &&
+                (
+                  /^[0-9a-fA-F]{16}$/.test(v.label) ||
+                  importantVars.includes(v.label)
+                ) &&
                 v.last_value &&
                 v.last_value.timestamp &&
-                v.last_value.timestamp > (now - sensorWindow) &&
-                v.last_value.value !== 122.0
+                v.last_value.timestamp > (now - onlineWindow) &&
+                v.last_value.value !== 122.0 // Exclude error value for sensors, safe for other vars
               ) {
                 isLive = true;
                 break;
@@ -149,9 +142,7 @@
             }
           }
         } catch {}
-
-        // 3. "Truly online" = both last_activity is recent AND isLive
-        deviceStatus[dev] = ((now - lastTs < offlineCutoff) && isLive) ? 'online' : 'offline';
+        deviceStatus[dev] = isLive ? 'online' : 'offline';
       }));
     }
 
@@ -246,7 +237,7 @@
               .filter(v =>
                 /^[0-9a-fA-F]{16}$/.test(v.label) &&
                 v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo &&
-                v.last_value.value !== 122.0 // Exclude default value
+                v.last_value.value !== 122.0
               )
               .map(v => v.label.toUpperCase());
           }
@@ -370,5 +361,3 @@
       document.getElementById("saveBtn").disabled = false;
     };
   </script>
-</body>
-</html>
