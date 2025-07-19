@@ -108,24 +108,50 @@
     let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
 
-    async function getDeviceLastTimestamp(dev) {
-      try {
-        const url = `${UBIDOTS_BASE}/devices/${dev}/`;
-        const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
-        if (!res.ok) return 0;
-        const js = await res.json();
-        return new Date(js.last_activity).getTime() || 0;
-      } catch {
-        return 0;
-      }
-    }
-
+    // --------------- BULLETPROOF ONLINE TRUCK DETECTION ---------------
     async function buildDeviceStatus() {
       deviceStatus = {};
       const now = Date.now();
+      const offlineCutoff = 60 * 60 * 1000;  // 1 hour
+      const sensorWindow = 5 * 60 * 1000;    // 5 min
+
       await Promise.all(DEVICES.map(async dev => {
-        let lastTs = await getDeviceLastTimestamp(dev);
-        deviceStatus[dev] = (now - lastTs < ACTIVE_WINDOW_MS) ? 'online' : 'offline';
+        let isLive = false;
+        let lastTs = 0;
+
+        // 1. Get last_activity for the device
+        try {
+          const url = `${UBIDOTS_BASE}/devices/${dev}/`;
+          const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
+          if (res.ok) {
+            const js = await res.json();
+            lastTs = new Date(js.last_activity).getTime() || 0;
+          }
+        } catch {}
+
+        // 2. Query all variables for the device to see if *any* are "recent & valid"
+        try {
+          const varUrl = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
+          const res = await fetch(varUrl);
+          if (res.ok) {
+            const js = await res.json();
+            for (let v of js.results) {
+              if (
+                /^[0-9a-fA-F]{16}$/.test(v.label) &&
+                v.last_value &&
+                v.last_value.timestamp &&
+                v.last_value.timestamp > (now - sensorWindow) &&
+                v.last_value.value !== 122.0
+              ) {
+                isLive = true;
+                break;
+              }
+            }
+          }
+        } catch {}
+
+        // 3. "Truly online" = both last_activity is recent AND isLive
+        deviceStatus[dev] = ((now - lastTs < offlineCutoff) && isLive) ? 'online' : 'offline';
       }));
     }
 
@@ -238,30 +264,24 @@
       const mappedAddrs = Object.keys(sensors);
       let toShow = [];
       if (isOffline) {
-        // Only mapped sensors for offline trucks, all greyed out
         toShow = mappedAddrs.map(addr => ({ addr, state: 'greyed' }));
       } else {
-        // Online: show all mapped sensors (greyed if not live), plus unmapped live sensors (editable)
         let liveSet = new Set(liveAddresses || []);
-        // All mapped, with state depending on whether currently live
         toShow = mappedAddrs.map(addr => ({
           addr,
           state: liveSet.has(addr) ? 'editable' : 'greyed'
         }));
-        // Add unmapped live sensors (editable)
         (liveAddresses || []).forEach(addr => {
           if (!mappedAddrs.includes(addr)) {
             toShow.push({ addr, state: 'editable' });
           }
         });
       }
-
       if (!DEVICE || !toShow.length) {
         tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No sensors mapped or detected for this truck.</td></tr>`;
         document.getElementById("addSensorBtn").style.display = isOffline ? 'none' : '';
         return;
       }
-
       toShow.forEach((entry, idx) => {
         const obj = sensors[entry.addr] || {};
         const disabled = entry.state === 'greyed' ? "disabled" : "";
