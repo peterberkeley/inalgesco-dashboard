@@ -108,7 +108,6 @@
     let fetchSensorTableID = 0;
 
     async function getLiveTrucks() {
-      // This function matches dashboard: only trucks with a recent live Dallas sensor
       liveTrucks = [];
       const now = Date.now();
       await Promise.all(DEVICES.map(async dev => {
@@ -170,7 +169,22 @@
       const noTrucksMsg = document.getElementById("noTrucksMsg");
       sel.innerHTML = '';
 
-      if (!liveTrucks.length) {
+      let firstOnline = null;
+      DEVICES.forEach(dev => {
+        const opt = document.createElement('option');
+        opt.value = dev;
+        opt.textContent = dev.replace('skycafe-','SkyCafé ');
+        if (!liveTrucks.includes(dev)) {
+          opt.disabled = true;
+          opt.textContent += ' (Offline)';
+        } else if (!firstOnline) {
+          firstOnline = dev;
+        }
+        sel.appendChild(opt);
+      });
+
+      if (!firstOnline) {
+        // No online trucks at all
         noTrucksMsg.style.display = '';
         sel.style.display = 'none';
         document.getElementById("addTruckBtn").style.display = 'none';
@@ -182,20 +196,10 @@
         sel.style.display = '';
         document.getElementById("addTruckBtn").style.display = '';
         document.getElementById("delTruckBtn").style.display = '';
+        DEVICE = firstOnline;
+        sel.value = DEVICE;
+        handleTruckChange();
       }
-
-      let firstOnline = null;
-      liveTrucks.forEach(dev => {
-        const opt = document.createElement('option');
-        opt.value = dev;
-        opt.textContent = dev.replace('skycafe-','SkyCafé ');
-        if (!firstOnline) firstOnline = dev;
-        sel.appendChild(opt);
-      });
-
-      DEVICE = firstOnline || liveTrucks[0];
-      sel.value = DEVICE;
-      handleTruckChange();
     }
 
     document.getElementById("truckSelect").onchange = function(e) {
