@@ -207,23 +207,47 @@
       fetchAndRenderSensorTableForTruck(DEVICE);
     }
 
+    // ---- PATCHED: Only "live" if TWO records in 1 min ----
     async function fetchAndRenderSensorTableForTruck(dev) {
       let myID = ++fetchSensorTableID;
       let liveAddrs = [];
+      recentSensorAddresses = [];
       if (deviceStatus[dev] === 'online') {
-        const minAgo = Date.now() - 3 * 60 * 1000;
         let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         try {
           let res = await fetch(url);
           if (res.ok) {
             let js = await res.json();
-            liveAddrs = js.results
-              .filter(v =>
-                /^[0-9a-fA-F]{16}$/.test(v.label) &&
-                v.last_value && v.last_value.timestamp && v.last_value.timestamp > minAgo &&
-                v.last_value.value !== 122.0
-              )
+            // Only care about sensor variables (16-char hex label)
+            let addrsVars = js.results.filter(v =>
+              /^[0-9a-fA-F]{16}$/.test(v.label)
+            );
+            // For "Add Sensor" modal, list all recent addresses
+            const now = Date.now();
+            recentSensorAddresses = addrsVars
+              .filter(v => v.last_value && v.last_value.timestamp && now - v.last_value.timestamp < 3 * 60 * 1000)
               .map(v => v.label.toUpperCase());
+            // For liveness, require 2 records <1min apart (and both recent)
+            const liveChecks = addrsVars.map(async v => {
+              let addr = v.label.toUpperCase();
+              let id = v.id;
+              // Only check those with recent activity
+              if (!(v.last_value && v.last_value.timestamp && now - v.last_value.timestamp < 3 * 60 * 1000)) return null;
+              let valsUrl = `${UBIDOTS_BASE}/variables/${id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
+              let valsRes = await fetch(valsUrl);
+              if (!valsRes.ok) return null;
+              let valsJs = await valsRes.json();
+              let vals = valsJs.results || [];
+              if (vals.length < 2) return null;
+              let t0 = vals[0].timestamp, t1 = vals[1].timestamp;
+              // Both values within 1 minute and latest within 3 min
+              if (Math.abs(t0 - t1) < 60 * 1000 && now - t0 < 3 * 60 * 1000) {
+                return addr;
+              }
+              return null;
+            });
+            let addrs = await Promise.all(liveChecks);
+            liveAddrs = addrs.filter(Boolean);
           }
         } catch {}
       }
@@ -231,6 +255,7 @@
         renderSensorTable(liveAddrs, deviceStatus[dev] !== 'online');
       }
     }
+    // ---- END PATCH ----
 
     function renderSensorTable(liveAddresses, isOffline) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
