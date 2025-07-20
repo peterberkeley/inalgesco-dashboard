@@ -1,4 +1,5 @@
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async () => {
+  // [0] THEME COLORS
   function getCSS(varName, fallback = '') {
     return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
   }
