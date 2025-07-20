@@ -129,48 +129,27 @@
     }
   }
 
-  // --- LIVENESS CHECK: Require TWO readings within 1 minute for any sensor address
-  async function isTruckLive(dev) {
-    try {
-      let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
-      let res = await fetch(url);
-      if (!res.ok) return false;
-      let js = await res.json();
-      let now = Date.now();
-      // Only consider sensor addresses (Dallas): 16 hex chars, recently active
-      let sensors = js.results.filter(v =>
-        /^[0-9a-fA-F]{16}$/.test(v.label) &&
-        v.last_value && v.last_value.timestamp &&
-        now - v.last_value.timestamp < 3 * 60 * 1000
-      );
-      // For each sensor, fetch last 2 records and test timing
-      for (let v of sensors) {
-        let valsUrl = `${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
-        let valsRes = await fetch(valsUrl);
-        if (!valsRes.ok) continue;
-        let valsJs = await valsRes.json();
-        let vals = valsJs.results || [];
-        if (vals.length < 2) continue;
-        let t0 = vals[0].timestamp, t1 = vals[1].timestamp;
-        if (Math.abs(t0 - t1) < 60 * 1000 && now - t0 < 3 * 60 * 1000) {
-          // Found at least one address with two records in 1 minute
-          return true;
-        }
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }
-
   // --- Device selector and initialization ---
   document.addEventListener('DOMContentLoaded', async () => {
     SENSOR_MAP = await fetchSensorMapConfig();
 
-    // Check which trucks are "live"
+    // [NEW LIVENESS CHECK: any variable in last 60s = live]
     let deviceStatus = {};
+    const now = Date.now();
+
     await Promise.all(DEVICES.map(async dev => {
-      deviceStatus[dev] = await isTruckLive(dev) ? 'online' : 'offline';
+      // Get all variables for this device
+      try {
+        const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
+        const res = await fetch(url);
+        if (!res.ok) { deviceStatus[dev] = 'offline'; return; }
+        const js = await res.json();
+        // Find any variable updated in last 60s
+        let isLive = (js.results || []).some(v => v.last_value && v.last_value.timestamp && (now - v.last_value.timestamp < 60 * 1000));
+        deviceStatus[dev] = isLive ? 'online' : 'offline';
+      } catch {
+        deviceStatus[dev] = 'offline';
+      }
     }));
 
     const deviceSelect = document.getElementById('deviceSelect');
@@ -188,7 +167,8 @@
       if (deviceStatus[dev] === 'offline') {
         opt.disabled = true;
         opt.text += ' (Offline)';
-        opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
+        opt.style.color = '#aaa';
+        opt.style.background = '#f4f4f4';
       }
       deviceSelect.appendChild(opt);
     });
@@ -210,6 +190,7 @@
     initCharts(SENSORS);
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
   });
+
   // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
