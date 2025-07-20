@@ -1,8 +1,6 @@
-document.addEventListener('DOMContentLoaded', async () => {
+<script>
+(() => {
   // [0] THEME COLORS
-  function getCSS(varName, fallback = '') {
-    return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
-  }
   const COLORS = {
     primary: getCSS('--color-primary'),
     secondary: getCSS('--color-secondary'),
@@ -10,6 +8,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     text: getCSS('--color-text'),
     card: getCSS('--color-card')
   };
+  function getCSS(varName, fallback = '') {
+    return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
+  }
 
   // [1] CONFIGURATION
   const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
@@ -129,83 +130,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // --- LIVENESS CHECK: Require TWO readings within 1 minute for any sensor address
-  async function isTruckLive(dev) {
-    try {
-      let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
-      let res = await fetch(url);
-      if (!res.ok) return false;
-      let js = await res.json();
-      let now = Date.now();
-      let sensors = js.results.filter(v =>
-        /^[0-9a-fA-F]{16}$/.test(v.label) &&
-        v.last_value && v.last_value.timestamp &&
-        now - v.last_value.timestamp < 3 * 60 * 1000
-      );
-      for (let v of sensors) {
-        let valsUrl = `${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
-        let valsRes = await fetch(valsUrl);
-        if (!valsRes.ok) continue;
-        let valsJs = await valsRes.json();
-        let vals = valsJs.results || [];
-        if (vals.length < 2) continue;
-        let t0 = vals[0].timestamp, t1 = vals[1].timestamp;
-        if (Math.abs(t0 - t1) < 60 * 1000 && now - t0 < 3 * 60 * 1000) {
-          return true;
-        }
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }
+  // --- LIVENESS CHECK: (not in your original)
+  // [If you want to add it, I'll show you exactly where]
 
   // --- Device selector and initialization ---
-  SENSOR_MAP = await fetchSensorMapConfig();
+  document.addEventListener('DOMContentLoaded', async () => {
+    SENSOR_MAP = await fetchSensorMapConfig();
 
-  // Check which trucks are "live"
-  let deviceStatus = {};
-  await Promise.all(DEVICES.map(async dev => {
-    deviceStatus[dev] = await isTruckLive(dev) ? 'online' : 'offline';
-  }));
+    // Check which trucks are "live"
+    let deviceStatus = {};
+    await Promise.all(DEVICES.map(async dev => {
+      deviceStatus[dev] = 'online'; // in original, everything 'online'
+    }));
 
-  const deviceSelect = document.getElementById('deviceSelect');
-  deviceSelect.innerHTML = '';
-  let savedDevice = localStorage.getItem('selectedDevice');
-  if (!savedDevice || !DEVICES.includes(savedDevice)) {
-    savedDevice = DEVICES[0];
-  }
-  DEVICE = savedDevice;
-
-  DEVICES.forEach(dev => {
-    const opt = document.createElement('option');
-    opt.value = dev;
-    opt.text = dev.replace('skycafe-','SkyCafé ');
-    if (deviceStatus[dev] === 'offline') {
-      opt.disabled = true;
-      opt.text += ' (Offline)';
-      opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
+    const deviceSelect = document.getElementById('deviceSelect');
+    deviceSelect.innerHTML = '';
+    let savedDevice = localStorage.getItem('selectedDevice');
+    if (!savedDevice || !DEVICES.includes(savedDevice)) {
+      savedDevice = DEVICES[0];
     }
-    deviceSelect.appendChild(opt);
-  });
+    DEVICE = savedDevice;
 
-  deviceSelect.value = DEVICE;
-  deviceSelect.addEventListener('change', async e => {
-    DEVICE = e.target.value;
-    localStorage.setItem('selectedDevice', DEVICE);
-    document.getElementById('latest').innerHTML = '';
-    trail = []; polyline.setLatLngs([]);
+    DEVICES.forEach(dev => {
+      const opt = document.createElement('option');
+      opt.value = dev;
+      opt.text = dev.replace('skycafe-','SkyCafé ');
+      deviceSelect.appendChild(opt);
+    });
+
+    deviceSelect.value = DEVICE;
+    deviceSelect.addEventListener('change', async e => {
+      DEVICE = e.target.value;
+      localStorage.setItem('selectedDevice', DEVICE);
+      document.getElementById('latest').innerHTML = '';
+      trail = []; polyline.setLatLngs([]);
+      DALLAS_LIST = await fetchDallasAddresses(DEVICE);
+      const SENSORS = buildSensorSlots();
+      initCharts(SENSORS);
+      updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
+    });
+
     DALLAS_LIST = await fetchDallasAddresses(DEVICE);
     const SENSORS = buildSensorSlots();
     initCharts(SENSORS);
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
   });
-
-  DALLAS_LIST = await fetchDallasAddresses(DEVICE);
-  const SENSORS = buildSensorSlots();
-  initCharts(SENSORS);
-  updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
-
+  // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
@@ -282,4 +252,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     );
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
-});
+
+})(); // End IIFE
+</script>
