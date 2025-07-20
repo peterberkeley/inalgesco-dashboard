@@ -137,15 +137,21 @@
     let deviceStatus = {};
     const now = Date.now();
 
-    // Sequentially check liveness for all devices (slower, but robust)
+    // Sequentially check liveness for all devices (slower, but robust and safe)
     for (let dev of DEVICES) {
       try {
         const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         const res = await fetch(url);
         if (!res.ok) { deviceStatus[dev] = 'offline'; continue; }
         const js = await res.json();
-        let isLive = (js.results || []).some(v => v.last_value && v.last_value.timestamp && (now - v.last_value.timestamp < 60 * 1000));
-        deviceStatus[dev] = isLive ? 'online' : 'offline';
+        let foundLive = false;
+        (js.results || []).forEach(v => {
+          if (v.last_value && v.last_value.timestamp) {
+            let diff = now - v.last_value.timestamp;
+            if (diff < 60 * 1000) foundLive = true;
+          }
+        });
+        deviceStatus[dev] = foundLive ? 'online' : 'offline';
       } catch {
         deviceStatus[dev] = 'offline';
       }
@@ -160,7 +166,7 @@
     }
     DEVICE = savedDevice;
 
-    // DEBUG: Show actual status
+    // Show actual status in console
     console.log('deviceStatus:', deviceStatus);
 
     DEVICES.forEach(dev => {
