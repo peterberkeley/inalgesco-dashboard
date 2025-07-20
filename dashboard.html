@@ -23,18 +23,23 @@
     .chart-box h2 { font-size:1.12rem; color:var(--color-primary); font-weight:600; margin-bottom:8px;}
     #charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     #map { width:100%; height: 240px; border-radius:1.2rem; margin:18px 0 10px 0; }
-    #deviceSelect { margin-bottom: 1.2rem; padding: 0.35rem 1.2rem; border-radius: 8px; background: #e5e7eb; font-weight: 600;}
+    #deviceSelect { min-width: 160px; margin-bottom: 1.2rem; padding: 0.35rem 1.2rem; border-radius: 8px; background: #e5e7eb; font-weight: 600;}
+    #deviceSelect:disabled, #deviceSelect option[disabled] { color:#aaa !important; background:#f4f4f4 !important;}
     th { font-weight: 500; color:#334155;}
     td { color:#334155;}
     #latest th { width:170px;}
     .greyed { color:#aaa; background:#f4f4f4 !important;}
+    @media (max-width: 800px) {
+      .container { max-width: 99vw; padding: 0.5rem;}
+      #charts { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
     <div class="flex flex-row justify-between items-center mb-6">
       <span class="header">SkyCafé Sensor Dashboard</span>
-      <select id="deviceSelect"></select>
+      <select id="deviceSelect" class="min-w-[160px]"></select>
     </div>
     <div class="flex flex-col md:flex-row gap-8">
       <div class="flex-1">
@@ -47,7 +52,7 @@
     </div>
     <div class="mt-4 text-xs text-gray-500">Questions? <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></div>
   </div>
-  <!-- IMPORTANT: Only link to dashboard.js here -->
+  <!-- Loads all dashboard JavaScript logic -->
   <script src="dashboard.js"></script>
 </body>
 </html>
