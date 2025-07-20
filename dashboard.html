@@ -1,56 +1,65 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SkyCafé Sensor Dashboard</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    :root {
-      --color-primary: #2563eb;
-      --color-secondary: #0ea5e9;
-      --color-accent: #10b981;
-      --color-text: #334155;
-      --color-card: #f1f5f9;
-    }
-    body { background: #f7fafc; font-family: 'Inter', sans-serif; }
-    .container { max-width: 1000px; margin: 2rem auto; }
-    .header { font-size: 1.7rem; font-weight: bold; color: var(--color-primary);}
-    .chart-box { background: #fff; border-radius: 1.2rem; box-shadow: 0 2px 16px rgba(0,0,0,0.08); padding: 1.2rem; margin: 1rem 0; min-width:250px; width:100%; height:220px; }
-    .chart-box h2 { font-size:1.12rem; color:var(--color-primary); font-weight:600; margin-bottom:8px;}
-    #charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-    #map { width:100%; height: 240px; border-radius:1.2rem; margin:18px 0 10px 0; }
-    #deviceSelect { min-width: 160px; margin-bottom: 1.2rem; padding: 0.35rem 1.2rem; border-radius: 8px; background: #e5e7eb; font-weight: 600;}
-    #deviceSelect option[disabled], #deviceSelect option[disabled]:checked {
-      color: #aaa !important;
-      background: #f4f4f4 !important;
-    }
-    th { font-weight: 500; color:#334155;}
-    td { color:#334155;}
-    #latest th { width:170px;}
-    .greyed { color:#aaa; background:#f4f4f4 !important;}
-    @media (max-width: 800px) {
-      .container { max-width: 99vw; padding: 0.5rem;}
-      #charts { grid-template-columns: 1fr; }
-    }
-  </style>
+  <title>Truck Dropdown Test</title>
 </head>
 <body>
-  <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
-    <div class="flex flex-row justify-between items-center mb-6">
-      <span class="header">SkyCafé Sensor Dashboard</span>
-      <select id="deviceSelect" class="min-w-[160px]"></select>
-    </div>
-    <div>
-      <table id="latest" class="mb-4 w-full"></table>
-      <div id="charts"></div>
-      <div id="map" class="mt-8"></div>
-    </div>
-    <div class="mt-4 text-xs text-gray-500">Questions? <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></div>
-  </div>
-  <script src="dashboard.js"></script>
+  <label for="deviceSelect"><b>Select Truck:</b></label>
+  <select id="deviceSelect"></select>
+  <div id="log" style="white-space:pre; font-family:monospace; margin-top:2em"></div>
+  <script>
+    const DEVICES = Array.from({length: 24}, (_, i) => `skycafe-${i+1}`);
+    const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
+    const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
+
+    async function checkLiveness(dev) {
+      try {
+        const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
+        const res = await fetch(url);
+        if (!res.ok) return {status: 'offline', reason: 'HTTP ' + res.status};
+        const js = await res.json();
+        const now = Date.now();
+        for (const v of js.results || []) {
+          if (v.last_value && v.last_value.timestamp) {
+            const diff = now - v.last_value.timestamp;
+            if (diff < 60000) {
+              return {status: 'online', label: v.label, diff};
+            }
+          }
+        }
+        return {status: 'offline', reason: 'no variable within 60s'};
+      } catch (e) {
+        return {status: 'offline', reason: e.message};
+      }
+    }
+
+    async function fillDropdown() {
+      const deviceStatus = {};
+      const logLines = [];
+      for (const dev of DEVICES) {
+        const info = await checkLiveness(dev);
+        deviceStatus[dev] = info.status;
+        logLines.push(
+          `${dev}: ${info.status}${info.status === 'online' ? ` (last var=${info.label}, diff=${info.diff}ms)` : ` (${info.reason})`}`
+        );
+      }
+      const sel = document.getElementById('deviceSelect');
+      sel.innerHTML = '';
+      for (const dev of DEVICES) {
+        const opt = document.createElement('option');
+        opt.value = dev;
+        opt.text = dev.replace('skycafe-','SkyCafé ');
+        if (deviceStatus[dev] === 'offline') {
+          opt.disabled = true;
+          opt.text += ' (Offline)';
+        }
+        sel.appendChild(opt);
+      }
+      document.getElementById('log').textContent = logLines.join('\n');
+    }
+
+    fillDropdown();
+  </script>
 </body>
 </html>
