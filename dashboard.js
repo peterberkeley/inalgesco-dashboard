@@ -1,4 +1,4 @@
-(() => {
+document.addEventListener('DOMContentLoaded', () => {
   // [0] THEME COLORS
   const COLORS = {
     primary: getCSS('--color-primary'),
@@ -288,4 +288,4 @@
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
 
-})(); // End IIFE
+});
