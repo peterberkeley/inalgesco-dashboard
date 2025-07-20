@@ -12,8 +12,9 @@
   }
 
   // [1] CONFIGURATION
+  const UBIDOTS_PROXY = "https://corsproxy.io/?";
+  const UBIDOTS_BASE = UBIDOTS_PROXY + "https://industrial.api.ubidots.com/api/v1.6";
   const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
-  const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
   const CONFIG_DEVICE = "config";
   const CONFIG_VARIABLE = "sensor_map";
   const CONFIG_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN}`;
