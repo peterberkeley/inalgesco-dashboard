@@ -1,53 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SkyCafé Sensor Dashboard</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    :root {
-      --color-primary: #2563eb;
-      --color-secondary: #0ea5e9;
-      --color-accent: #10b981;
-      --color-text: #334155;
-      --color-card: #f1f5f9;
-    }
-    body { background: #f7fafc; font-family: 'Inter', sans-serif; }
-    .container { max-width: 1000px; margin: 2rem auto; }
-    .header { font-size: 1.7rem; font-weight: bold; color: var(--color-primary);}
-    .chart-box { background: #fff; border-radius: 1.2rem; box-shadow: 0 2px 16px rgba(0,0,0,0.08); padding: 1.2rem; margin: 1rem 0; min-width:250px; width:100%; height:220px; }
-    .chart-box h2 { font-size:1.12rem; color:var(--color-primary); font-weight:600; margin-bottom:8px;}
-    #charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-    #map { width:100%; height: 240px; border-radius:1.2rem; margin:18px 0 10px 0; }
-    #deviceSelect { margin-bottom: 1.2rem; padding: 0.35rem 1.2rem; border-radius: 8px; background: #e5e7eb; font-weight: 600;}
-    th { font-weight: 500; color:#334155;}
-    td { color:#334155;}
-    #latest th { width:170px;}
-    .greyed { color:#aaa; background:#f4f4f4 !important;}
-  </style>
-</head>
-<body>
-  <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
-    <div class="flex flex-row justify-between items-center mb-6">
-      <span class="header">SkyCafé Sensor Dashboard</span>
-      <select id="deviceSelect"></select>
-    </div>
-    <div class="flex flex-col md:flex-row gap-8">
-      <div class="flex-1">
-        <table id="latest" class="mb-4 w-full"></table>
-        <div id="charts"></div>
-      </div>
-      <div class="flex-1 md:max-w-sm">
-        <div id="map"></div>
-      </div>
-    </div>
-    <div class="mt-4 text-xs text-gray-500">Questions? <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></div>
-  </div>
-  <script>
 (() => {
   // [0] THEME COLORS
   const COLORS = {
@@ -339,6 +289,3 @@
   }
 
 })(); // End IIFE
-  </script>
-</body>
-</html>
