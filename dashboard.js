@@ -1,5 +1,7 @@
-document.addEventListener('DOMContentLoaded', async () => {
-  // [0] THEME COLORS
+document.addEventListener('DOMContentLoaded', async function() {
+  function getCSS(varName, fallback = '') {
+    return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
+  }
   const COLORS = {
     primary: getCSS('--color-primary'),
     secondary: getCSS('--color-secondary'),
@@ -7,9 +9,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     text: getCSS('--color-text'),
     card: getCSS('--color-card')
   };
-  function getCSS(varName, fallback = '') {
-    return (getComputedStyle(document.documentElement).getPropertyValue(varName) || '').trim() || fallback;
-  }
 
   // [1] CONFIGURATION
   const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
@@ -137,13 +136,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!res.ok) return false;
       let js = await res.json();
       let now = Date.now();
-      // Only consider sensor addresses (Dallas): 16 hex chars, recently active
       let sensors = js.results.filter(v =>
         /^[0-9a-fA-F]{16}$/.test(v.label) &&
         v.last_value && v.last_value.timestamp &&
         now - v.last_value.timestamp < 3 * 60 * 1000
       );
-      // For each sensor, fetch last 2 records and test timing
       for (let v of sensors) {
         let valsUrl = `${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
         let valsRes = await fetch(valsUrl);
@@ -153,7 +150,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (vals.length < 2) continue;
         let t0 = vals[0].timestamp, t1 = vals[1].timestamp;
         if (Math.abs(t0 - t1) < 60 * 1000 && now - t0 < 3 * 60 * 1000) {
-          // Found at least one address with two records in 1 minute
           return true;
         }
       }
@@ -209,7 +205,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   initCharts(SENSORS);
   updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
 
-  // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
@@ -286,5 +281,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     );
     setTimeout(()=>poll(SENSORS), POLL_MS);
   }
-
 });
