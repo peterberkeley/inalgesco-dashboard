@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // [0] THEME COLORS
   const COLORS = {
     primary: getCSS('--color-primary'),
@@ -164,52 +164,51 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Device selector and initialization ---
-  document.addEventListener('DOMContentLoaded', async () => {
-    SENSOR_MAP = await fetchSensorMapConfig();
+  SENSOR_MAP = await fetchSensorMapConfig();
 
-    // Check which trucks are "live"
-    let deviceStatus = {};
-    await Promise.all(DEVICES.map(async dev => {
-      deviceStatus[dev] = await isTruckLive(dev) ? 'online' : 'offline';
-    }));
+  // Check which trucks are "live"
+  let deviceStatus = {};
+  await Promise.all(DEVICES.map(async dev => {
+    deviceStatus[dev] = await isTruckLive(dev) ? 'online' : 'offline';
+  }));
 
-    const deviceSelect = document.getElementById('deviceSelect');
-    deviceSelect.innerHTML = '';
-    let savedDevice = localStorage.getItem('selectedDevice');
-    if (!savedDevice || !DEVICES.includes(savedDevice)) {
-      savedDevice = DEVICES[0];
+  const deviceSelect = document.getElementById('deviceSelect');
+  deviceSelect.innerHTML = '';
+  let savedDevice = localStorage.getItem('selectedDevice');
+  if (!savedDevice || !DEVICES.includes(savedDevice)) {
+    savedDevice = DEVICES[0];
+  }
+  DEVICE = savedDevice;
+
+  DEVICES.forEach(dev => {
+    const opt = document.createElement('option');
+    opt.value = dev;
+    opt.text = dev.replace('skycafe-','SkyCafé ');
+    if (deviceStatus[dev] === 'offline') {
+      opt.disabled = true;
+      opt.text += ' (Offline)';
+      opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
     }
-    DEVICE = savedDevice;
+    deviceSelect.appendChild(opt);
+  });
 
-    DEVICES.forEach(dev => {
-      const opt = document.createElement('option');
-      opt.value = dev;
-      opt.text = dev.replace('skycafe-','SkyCafé ');
-      if (deviceStatus[dev] === 'offline') {
-        opt.disabled = true;
-        opt.text += ' (Offline)';
-        opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
-      }
-      deviceSelect.appendChild(opt);
-    });
-
-    deviceSelect.value = DEVICE;
-    deviceSelect.addEventListener('change', async e => {
-      DEVICE = e.target.value;
-      localStorage.setItem('selectedDevice', DEVICE);
-      document.getElementById('latest').innerHTML = '';
-      trail = []; polyline.setLatLngs([]);
-      DALLAS_LIST = await fetchDallasAddresses(DEVICE);
-      const SENSORS = buildSensorSlots();
-      initCharts(SENSORS);
-      updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
-    });
-
+  deviceSelect.value = DEVICE;
+  deviceSelect.addEventListener('change', async e => {
+    DEVICE = e.target.value;
+    localStorage.setItem('selectedDevice', DEVICE);
+    document.getElementById('latest').innerHTML = '';
+    trail = []; polyline.setLatLngs([]);
     DALLAS_LIST = await fetchDallasAddresses(DEVICE);
     const SENSORS = buildSensorSlots();
     initCharts(SENSORS);
     updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
   });
+
+  DALLAS_LIST = await fetchDallasAddresses(DEVICE);
+  const SENSORS = buildSensorSlots();
+  initCharts(SENSORS);
+  updateCharts(SENSORS).then(() => { initMap(); poll(SENSORS); });
+
   // --- Update charts for dynamic sensor addresses
   async function updateCharts(SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
