@@ -138,13 +138,13 @@
     let deviceStatus = {};
     const now = Date.now();
 
+    // Wait for all devices to be checked before building dropdown
     await Promise.all(DEVICES.map(async dev => {
       try {
         const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         const res = await fetch(url);
         if (!res.ok) { deviceStatus[dev] = 'offline'; return; }
         const js = await res.json();
-        // If ANY variable was updated in the last 60 seconds, consider live
         let isLive = (js.results || []).some(v => v.last_value && v.last_value.timestamp && (now - v.last_value.timestamp < 60 * 1000));
         deviceStatus[dev] = isLive ? 'online' : 'offline';
       } catch {
@@ -152,6 +152,7 @@
       }
     }));
 
+    // --- Now populate the dropdown ---
     const deviceSelect = document.getElementById('deviceSelect');
     deviceSelect.innerHTML = '';
     let savedDevice = localStorage.getItem('selectedDevice');
@@ -159,6 +160,9 @@
       savedDevice = DEVICES[0];
     }
     DEVICE = savedDevice;
+
+    // DEBUG: Show actual status
+    console.log('deviceStatus:', deviceStatus);
 
     DEVICES.forEach(dev => {
       const opt = document.createElement('option');
