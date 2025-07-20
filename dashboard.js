@@ -135,9 +135,8 @@
     SENSOR_MAP = await fetchSensorMapConfig();
 
     let deviceStatus = {};
-    const now = Date.now();
 
-    // Sequentially check liveness for all devices (slower, but robust and safe)
+    // Robust: check liveness for all devices one by one
     for (let dev of DEVICES) {
       try {
         const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
@@ -147,13 +146,17 @@
         let foundLive = false;
         (js.results || []).forEach(v => {
           if (v.last_value && v.last_value.timestamp) {
+            let now = Date.now(); // always current for each variable
             let diff = now - v.last_value.timestamp;
+            // Debug log for each variable/timestamp:
+            console.log(`${dev} var ${v.label}: ts=${v.last_value.timestamp} now=${now} diff=${diff}ms`);
             if (diff < 60 * 1000) foundLive = true;
           }
         });
         deviceStatus[dev] = foundLive ? 'online' : 'offline';
-      } catch {
+      } catch (e) {
         deviceStatus[dev] = 'offline';
+        console.log(`Error for ${dev}:`, e);
       }
     }
 
