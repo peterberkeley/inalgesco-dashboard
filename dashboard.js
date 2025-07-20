@@ -133,18 +133,17 @@
   document.addEventListener('DOMContentLoaded', async () => {
     SENSOR_MAP = await fetchSensorMapConfig();
 
-    // [NEW LIVENESS CHECK: any variable in last 60s = live]
+    // [LIVENESS: any variable updated in last 60s = live]
     let deviceStatus = {};
     const now = Date.now();
 
     await Promise.all(DEVICES.map(async dev => {
-      // Get all variables for this device
       try {
         const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         const res = await fetch(url);
         if (!res.ok) { deviceStatus[dev] = 'offline'; return; }
         const js = await res.json();
-        // Find any variable updated in last 60s
+        // If ANY variable was updated in the last 60 seconds, consider live
         let isLive = (js.results || []).some(v => v.last_value && v.last_value.timestamp && (now - v.last_value.timestamp < 60 * 1000));
         deviceStatus[dev] = isLive ? 'online' : 'offline';
       } catch {
@@ -167,8 +166,6 @@
       if (deviceStatus[dev] === 'offline') {
         opt.disabled = true;
         opt.text += ' (Offline)';
-        opt.style.color = '#aaa';
-        opt.style.background = '#f4f4f4';
       }
       deviceSelect.appendChild(opt);
     });
