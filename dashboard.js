@@ -1,4 +1,53 @@
-<script>
+yet again no difference...here is the orginal code... review and find out why we are having issues <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SkyCafé Sensor Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --color-primary: #2563eb;
+      --color-secondary: #0ea5e9;
+      --color-accent: #10b981;
+      --color-text: #334155;
+      --color-card: #f1f5f9;
+    }
+    body { background: #f7fafc; font-family: 'Inter', sans-serif; }
+    .container { max-width: 1000px; margin: 2rem auto; }
+    .header { font-size: 1.7rem; font-weight: bold; color: var(--color-primary);}
+    .chart-box { background: #fff; border-radius: 1.2rem; box-shadow: 0 2px 16px rgba(0,0,0,0.08); padding: 1.2rem; margin: 1rem 0; min-width:250px; width:100%; height:220px; }
+    .chart-box h2 { font-size:1.12rem; color:var(--color-primary); font-weight:600; margin-bottom:8px;}
+    #charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    #map { width:100%; height: 240px; border-radius:1.2rem; margin:18px 0 10px 0; }
+    #deviceSelect { margin-bottom: 1.2rem; padding: 0.35rem 1.2rem; border-radius: 8px; background: #e5e7eb; font-weight: 600;}
+    th { font-weight: 500; color:#334155;}
+    td { color:#334155;}
+    #latest th { width:170px;}
+    .greyed { color:#aaa; background:#f4f4f4 !important;}
+  </style>
+</head>
+<body>
+  <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
+    <div class="flex flex-row justify-between items-center mb-6">
+      <span class="header">SkyCafé Sensor Dashboard</span>
+      <select id="deviceSelect"></select>
+    </div>
+    <div class="flex flex-col md:flex-row gap-8">
+      <div class="flex-1">
+        <table id="latest" class="mb-4 w-full"></table>
+        <div id="charts"></div>
+      </div>
+      <div class="flex-1 md:max-w-sm">
+        <div id="map"></div>
+      </div>
+    </div>
+    <div class="mt-4 text-xs text-gray-500">Questions? <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></div>
+  </div>
+  <script>
 (() => {
   // [0] THEME COLORS
   const COLORS = {
@@ -17,10 +66,10 @@
   const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
   const CONFIG_DEVICE = "config";
   const CONFIG_VARIABLE = "sensor_map";
-  const CONFIG_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN}`;
+  const CONFIG_URL = ${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN};
 
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
-  const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
+  const DEVICES = Array.from({ length: 24 }, (_, i) => skycafe-${i+1});
   let DEVICE = 'skycafe-12';
 
   let SENSOR_MAP = {};
@@ -42,7 +91,7 @@
   // --- Fetch Dallas addresses (16-char hex, only if polled in last 3 min)
   async function fetchDallasAddresses(dev) {
     try {
-      const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
+      const url = ${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN};
       const res = await fetch(url);
       if (!res.ok) return [];
       const js = await res.json();
@@ -66,7 +115,7 @@
     while (allAddr.length < 5) allAddr.push(null);
     return allAddr.map((addr, idx) => {
       if (!addr) return {
-        id: `empty${idx}`,
+        id: empty${idx},
         label: '',
         col: SENSOR_COLORS[idx],
         chart: null,
@@ -97,7 +146,7 @@
     SENSORS.forEach(s => {
       s.chart = null;
       const card = document.createElement('div'); card.className = 'chart-box';
-      card.innerHTML = `<h2>${s.label || ''}</h2><canvas></canvas>`;
+      card.innerHTML = <h2>${s.label || ''}</h2><canvas></canvas>;
       ctr.appendChild(card);
       const ctx = card.querySelector('canvas').getContext('2d');
       s.chart = new Chart(ctx, {
@@ -117,7 +166,7 @@
   }
 
   async function fetchUbidotsVar(dev, variable, limit = 1) {
-    let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}`;
+    let url = ${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit};
     const token = UBIDOTS_TOKEN;
     if (!token) return [];
     try {
@@ -130,8 +179,39 @@
     }
   }
 
-  // --- LIVENESS CHECK: (not in your original)
-  // [If you want to add it, I'll show you exactly where]
+  // --- LIVENESS CHECK: Require TWO readings within 1 minute for any sensor address
+  async function isTruckLive(dev) {
+    try {
+      let url = ${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN};
+      let res = await fetch(url);
+      if (!res.ok) return false;
+      let js = await res.json();
+      let now = Date.now();
+      // Only consider sensor addresses (Dallas): 16 hex chars, recently active
+      let sensors = js.results.filter(v =>
+        /^[0-9a-fA-F]{16}$/.test(v.label) &&
+        v.last_value && v.last_value.timestamp &&
+        now - v.last_value.timestamp < 3 * 60 * 1000
+      );
+      // For each sensor, fetch last 2 records and test timing
+      for (let v of sensors) {
+        let valsUrl = ${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN};
+        let valsRes = await fetch(valsUrl);
+        if (!valsRes.ok) continue;
+        let valsJs = await valsRes.json();
+        let vals = valsJs.results || [];
+        if (vals.length < 2) continue;
+        let t0 = vals[0].timestamp, t1 = vals[1].timestamp;
+        if (Math.abs(t0 - t1) < 60 * 1000 && now - t0 < 3 * 60 * 1000) {
+          // Found at least one address with two records in 1 minute
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
 
   // --- Device selector and initialization ---
   document.addEventListener('DOMContentLoaded', async () => {
@@ -140,7 +220,7 @@
     // Check which trucks are "live"
     let deviceStatus = {};
     await Promise.all(DEVICES.map(async dev => {
-      deviceStatus[dev] = 'online'; // in original, everything 'online'
+      deviceStatus[dev] = await isTruckLive(dev) ? 'online' : 'offline';
     }));
 
     const deviceSelect = document.getElementById('deviceSelect');
@@ -155,6 +235,11 @@
       const opt = document.createElement('option');
       opt.value = dev;
       opt.text = dev.replace('skycafe-','SkyCafé ');
+      if (deviceStatus[dev] === 'offline') {
+        opt.disabled = true;
+        opt.text += ' (Offline)';
+        opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
+      }
       deviceSelect.appendChild(opt);
     });
 
@@ -204,7 +289,7 @@
       ['Speed (km/h)', fmt(speed,1)], ['RSSI (dBm)', fmt(signal,0)],
       ['Volt (mV)', fmt(volt,2)]
     ].concat(sensorRows);
-    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    document.getElementById('latest').innerHTML = rows.map(r => <tr><th>${r[0]}</th><td>${r[1]}</td></tr>).join('');
     if (isFinite(lat) && isFinite(lon)) {
       marker.setLatLng([lat,lon]);
       trail.push([lat,lon]); if (trail.length > TRAIL) trail.shift();
@@ -254,4 +339,6 @@
   }
 
 })(); // End IIFE
-</script>
+  </script>
+</body>
+</html>
