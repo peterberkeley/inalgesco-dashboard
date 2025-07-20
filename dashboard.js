@@ -18,7 +18,7 @@
 
   // ===[SETTINGS AND CONSTANTS]===
   const DEVICES = Object.keys(TOKENS);
-  const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
+  const UBIDOTS_BASE = "https://corsproxy.io/?https://industrial.api.ubidots.com/api/v1.6";
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
