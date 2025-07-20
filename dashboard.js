@@ -1,5 +1,5 @@
 (() => {
-  // ===[TOKENS PER DEVICE]===
+  // --- Per-device tokens
   const TOKENS = {
     "skycafe-1":  "BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8",
     "skycafe-2":  "BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P",
@@ -15,19 +15,18 @@
     "skycafe-12": "BBUS-4flIrJ1FKcQUHh0c0z7HQrg458lSZ4"
   };
   const CONFIG_TOKEN = "BBUS-aHFXFTCqEcKLRdCzp3zq3U2xirToQB";
-
-  // ===[SETTINGS AND CONSTANTS]===
   const DEVICES = Object.keys(TOKENS);
+
+  // Use CORS proxy for ALL API requests
   const UBIDOTS_BASE = "https://corsproxy.io/?https://industrial.api.ubidots.com/api/v1.6";
+
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
-  // ===[UI THEME]===
-  function getCSS(varName, fallback = "") {
-    return (getComputedStyle(document.documentElement).getPropertyValue(varName) || "").trim() || fallback;
-  }
+  // Format value
+  const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
 
-  // ===[FETCH CONFIGURATION MAP (per device)]===
+  // Fetch config mapping
   async function fetchSensorMapConfig() {
     const CONFIG_URL = `${UBIDOTS_BASE}/devices/config/sensor_map/values?page_size=1&token=${CONFIG_TOKEN}`;
     try {
@@ -40,7 +39,7 @@
     }
   }
 
-  // ===[FETCH ADDRESSES FOR TRUCK]===
+  // Fetch Dallas addresses (live sensors)
   async function fetchDallasAddresses(dev) {
     try {
       const token = TOKENS[dev];
@@ -62,7 +61,7 @@
     }
   }
 
-  // ===[SENSOR SLOT BUILDER]===
+  // Build sensor slots for charts
   function buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP) {
     const mapped = SENSOR_MAP[DEVICE] || {};
     const allAddr = DALLAS_LIST.slice(0, 5);
@@ -91,7 +90,7 @@
     });
   }
 
-  // ===[CHECK IF TRUCK IS LIVE (any var in last 60s)]===
+  // Check liveness for dropdown
   async function checkLiveness(dev) {
     const token = TOKENS[dev];
     const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${token}`;
@@ -112,7 +111,7 @@
     }
   }
 
-  // ===[FETCH UBIDOTS VARIABLE]===
+  // Fetch variable data for charts, tables
   async function fetchUbidotsVar(dev, variable, limit = 1) {
     const token = TOKENS[dev];
     let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}`;
@@ -126,10 +125,7 @@
     }
   }
 
-  // ===[FORMAT VALUE]===
-  const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
-
-  // ===[CHART INITIALIZER]===
+  // Initialize charts
   function initCharts(SENSORS) {
     const ctr = document.getElementById("charts");
     ctr.innerHTML = "";
@@ -148,7 +144,7 @@
     });
   }
 
-  // ===[MAP INITIALIZER]===
+  // Initialize map
   let map, marker, polyline, trail = [];
   function initMap() {
     map = L.map("map").setView([0, 0], 2);
@@ -157,7 +153,7 @@
     polyline = L.polyline([], { weight: 3 }).addTo(map);
   }
 
-  // ===[CHART UPDATER]===
+  // Update charts
   async function updateCharts(DEVICE, SENSORS) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
@@ -173,7 +169,7 @@
     }));
   }
 
-  // ===[DRAW LIVE DATA]===
+  // Draw table/map with latest data
   function drawLive(data, SENSORS) {
     let { ts, iccid, lat, lon, speed, signal, volt, addresses, readings } = data;
     if (!ts) ts = Date.now();
@@ -196,7 +192,7 @@
     }
   }
 
-  // ===[PERIODIC POLLING AND UPDATE]===
+  // Periodic poll for live data and redraw
   async function poll(DEVICE, SENSORS) {
     const [gpsArr, iccArr] = await Promise.all([
       fetchUbidotsVar(DEVICE, "gps"),
@@ -237,13 +233,13 @@
     setTimeout(() => poll(DEVICE, SENSORS), POLL_MS);
   }
 
-  // ===[POPULATE THE DROPDOWN AND SETUP DASHBOARD]===
+  // MAIN INIT
   document.addEventListener("DOMContentLoaded", async () => {
-    // Basic HTML for dashboard (you can keep your own layout)
+    // Basic HTML for dashboard (you can style as you like)
     document.body.innerHTML = `
       <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
         <div class="flex flex-row justify-between items-center mb-6">
-          <span class="header">SkyCafé Sensor Dashboard</span>
+          <span class="header" style="font-size:1.7em;font-weight:bold;color:#2563eb;">SkyCafé Sensor Dashboard</span>
           <select id="deviceSelect"></select>
         </div>
         <div class="flex flex-col md:flex-row gap-8">
@@ -259,7 +255,7 @@
       </div>
     `;
 
-    // --- LIVENESS CHECK: Fill dropdown with online/offline
+    // Fill dropdown with per-truck liveness
     const deviceSelect = document.getElementById("deviceSelect");
     deviceSelect.innerHTML = "";
     let deviceStatus = {};
@@ -277,11 +273,11 @@
       deviceSelect.appendChild(opt);
     });
 
-    // --- Select first online truck by default
+    // Select first online truck by default
     let DEVICE = DEVICES.find(d => deviceStatus[d] === "online") || DEVICES[0];
     deviceSelect.value = DEVICE;
 
-    // --- Setup map and polling
+    // Setup map and polling
     let SENSOR_MAP = await fetchSensorMapConfig();
     let DALLAS_LIST = await fetchDallasAddresses(DEVICE);
     let SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP);
