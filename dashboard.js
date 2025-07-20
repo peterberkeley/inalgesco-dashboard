@@ -1,4 +1,4 @@
-yet again no difference...here is the orginal code... review and find out why we are having issues <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -66,10 +66,10 @@ yet again no difference...here is the orginal code... review and find out why we
   const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
   const CONFIG_DEVICE = "config";
   const CONFIG_VARIABLE = "sensor_map";
-  const CONFIG_URL = ${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN};
+  const CONFIG_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1&token=${UBIDOTS_TOKEN}`;
 
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
-  const DEVICES = Array.from({ length: 24 }, (_, i) => skycafe-${i+1});
+  const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
   let DEVICE = 'skycafe-12';
 
   let SENSOR_MAP = {};
@@ -91,7 +91,7 @@ yet again no difference...here is the orginal code... review and find out why we
   // --- Fetch Dallas addresses (16-char hex, only if polled in last 3 min)
   async function fetchDallasAddresses(dev) {
     try {
-      const url = ${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN};
+      const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const js = await res.json();
@@ -115,7 +115,7 @@ yet again no difference...here is the orginal code... review and find out why we
     while (allAddr.length < 5) allAddr.push(null);
     return allAddr.map((addr, idx) => {
       if (!addr) return {
-        id: empty${idx},
+        id: `empty${idx}`,
         label: '',
         col: SENSOR_COLORS[idx],
         chart: null,
@@ -146,7 +146,7 @@ yet again no difference...here is the orginal code... review and find out why we
     SENSORS.forEach(s => {
       s.chart = null;
       const card = document.createElement('div'); card.className = 'chart-box';
-      card.innerHTML = <h2>${s.label || ''}</h2><canvas></canvas>;
+      card.innerHTML = `<h2>${s.label || ''}</h2><canvas></canvas>`;
       ctr.appendChild(card);
       const ctx = card.querySelector('canvas').getContext('2d');
       s.chart = new Chart(ctx, {
@@ -166,7 +166,7 @@ yet again no difference...here is the orginal code... review and find out why we
   }
 
   async function fetchUbidotsVar(dev, variable, limit = 1) {
-    let url = ${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit};
+    let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}`;
     const token = UBIDOTS_TOKEN;
     if (!token) return [];
     try {
@@ -182,7 +182,7 @@ yet again no difference...here is the orginal code... review and find out why we
   // --- LIVENESS CHECK: Require TWO readings within 1 minute for any sensor address
   async function isTruckLive(dev) {
     try {
-      let url = ${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN};
+      let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
       let res = await fetch(url);
       if (!res.ok) return false;
       let js = await res.json();
@@ -195,7 +195,7 @@ yet again no difference...here is the orginal code... review and find out why we
       );
       // For each sensor, fetch last 2 records and test timing
       for (let v of sensors) {
-        let valsUrl = ${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN};
+        let valsUrl = `${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
         let valsRes = await fetch(valsUrl);
         if (!valsRes.ok) continue;
         let valsJs = await valsRes.json();
@@ -289,7 +289,7 @@ yet again no difference...here is the orginal code... review and find out why we
       ['Speed (km/h)', fmt(speed,1)], ['RSSI (dBm)', fmt(signal,0)],
       ['Volt (mV)', fmt(volt,2)]
     ].concat(sensorRows);
-    document.getElementById('latest').innerHTML = rows.map(r => <tr><th>${r[0]}</th><td>${r[1]}</td></tr>).join('');
+    document.getElementById('latest').innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
     if (isFinite(lat) && isFinite(lon)) {
       marker.setLatLng([lat,lon]);
       trail.push([lat,lon]); if (trail.length > TRAIL) trail.shift();
