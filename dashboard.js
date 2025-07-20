@@ -134,23 +134,22 @@
   document.addEventListener('DOMContentLoaded', async () => {
     SENSOR_MAP = await fetchSensorMapConfig();
 
-    // [LIVENESS: any variable updated in last 60s = live]
     let deviceStatus = {};
     const now = Date.now();
 
-    // Wait for all devices to be checked before building dropdown
-    await Promise.all(DEVICES.map(async dev => {
+    // Sequentially check liveness for all devices (slower, but robust)
+    for (let dev of DEVICES) {
       try {
         const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         const res = await fetch(url);
-        if (!res.ok) { deviceStatus[dev] = 'offline'; return; }
+        if (!res.ok) { deviceStatus[dev] = 'offline'; continue; }
         const js = await res.json();
         let isLive = (js.results || []).some(v => v.last_value && v.last_value.timestamp && (now - v.last_value.timestamp < 60 * 1000));
         deviceStatus[dev] = isLive ? 'online' : 'offline';
       } catch {
         deviceStatus[dev] = 'offline';
       }
-    }));
+    }
 
     // --- Now populate the dropdown ---
     const deviceSelect = document.getElementById('deviceSelect');
