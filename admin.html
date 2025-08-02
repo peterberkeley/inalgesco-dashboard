@@ -14,15 +14,6 @@
     .btn:hover { background: #0ea5e9; }
     .error { color: #b91c1c; font-weight: 600; }
     .success { color: #059669; font-weight: 600; }
-    .dropdown-modal {
-      position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.2); z-index: 10000;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .dropdown-modal-box {
-      background: #fff; border-radius: 1rem; padding: 2rem 2rem 1.5rem 2rem; min-width: 320px;
-      box-shadow: 0 10px 32px rgba(0,0,0,0.13);
-    }
     .greyed input, .greyed button, .greyed select {
       background: #e5e7eb !important;
       color: #9ca3af !important;
@@ -52,14 +43,12 @@
         <button id="addTruckBtn" class="btn text-xs px-2 py-1">+ Add Truck</button>
         <button id="delTruckBtn" class="btn text-xs px-2 py-1 bg-red-600 hover:bg-red-700">Delete</button>
       </div>
-      <div id="noTrucksMsg" class="mb-6 text-red-700 font-semibold" style="display:none;">
-        No trucks found.
-      </div>
       <div class="mb-6">
         <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
           <thead>
             <tr class="bg-blue-200">
-              <th class="w-2/12">Sensor Address</th>
+              <th class="w-1/12">#</th>
+              <th class="w-3/12">Sensor Address</th>
               <th class="w-4/12">Label</th>
               <th class="w-2/12">Calibration Offset (°)</th>
               <th class="w-1/12"></th>
@@ -67,7 +56,6 @@
           </thead>
           <tbody></tbody>
         </table>
-        <button id="addSensorBtn" class="btn mt-3">+ Add Sensor</button>
       </div>
       <div class="flex flex-row gap-4 items-center mt-2">
         <button id="saveBtn" class="btn">Save to Ubidots</button>
@@ -75,17 +63,6 @@
       </div>
       <div class="mt-6 text-xs text-gray-400">
         <p>For help: <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></p>
-      </div>
-    </div>
-    <!-- Modal for Address Dropdown -->
-    <div id="addrDropdownModal" class="dropdown-modal" style="display:none;">
-      <div class="dropdown-modal-box">
-        <div class="mb-3 font-medium">Select sensor address to add:</div>
-        <select id="addrDropdown" class="w-full mb-4"></select>
-        <div class="flex flex-row gap-2">
-          <button id="addrDropdownOk" class="btn">OK</button>
-          <button id="addrDropdownCancel" class="btn bg-gray-400 hover:bg-gray-600">Cancel</button>
-        </div>
       </div>
     </div>
   </div>
@@ -102,7 +79,6 @@
     let mapData = {};
     let deviceStatus = {};
     let DEVICE = null;
-    let recentSensorAddresses = [];
     let fetchSensorTableID = 0;
 
     async function getDeviceLastTimestamp(dev) {
@@ -160,41 +136,21 @@
 
     function refreshTruckSelect() {
       const sel = document.getElementById("truckSelect");
-      const noTrucksMsg = document.getElementById("noTrucksMsg");
       sel.innerHTML = '';
-
-      let firstOnline = null;
       DEVICES.forEach(dev => {
         const opt = document.createElement('option');
         opt.value = dev;
         opt.textContent = dev.replace('skycafe-','SkyCafé ');
-        if (deviceStatus[dev] === 'offline') {
-          opt.disabled = true;
-          opt.textContent += ' (Offline)';
-          opt.style.color = '#aaa'; opt.style.background = '#f4f4f4';
-        } else if (!firstOnline) {
-          firstOnline = dev;
+        if (deviceStatus[dev] === 'online') {
+          opt.style.fontWeight = '700';
+        } else {
+          opt.style.color = '#aaa';
         }
         sel.appendChild(opt);
       });
-
-      if (!firstOnline) {
-        // No online trucks at all
-        noTrucksMsg.style.display = '';
-        sel.style.display = 'none';
-        document.getElementById("addTruckBtn").style.display = 'none';
-        document.getElementById("delTruckBtn").style.display = 'none';
-        renderSensorTable([]);
-        return;
-      } else {
-        noTrucksMsg.style.display = 'none';
-        sel.style.display = '';
-        document.getElementById("addTruckBtn").style.display = '';
-        document.getElementById("delTruckBtn").style.display = '';
-        DEVICE = firstOnline;
-        sel.value = DEVICE;
-        handleTruckChange();
-      }
+      DEVICE = DEVICES.find(d => deviceStatus[d] === 'online') || DEVICES[0];
+      sel.value = DEVICE;
+      handleTruckChange();
     }
 
     document.getElementById("truckSelect").onchange = function(e) {
@@ -207,40 +163,27 @@
       fetchAndRenderSensorTableForTruck(DEVICE);
     }
 
-    // ---- PATCHED: Only "live" if TWO records in 1 min ----
     async function fetchAndRenderSensorTableForTruck(dev) {
       let myID = ++fetchSensorTableID;
       let liveAddrs = [];
-      recentSensorAddresses = [];
       if (deviceStatus[dev] === 'online') {
         let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
         try {
           let res = await fetch(url);
           if (res.ok) {
             let js = await res.json();
-            // Only care about sensor variables (16-char hex label)
-            let addrsVars = js.results.filter(v =>
-              /^[0-9a-fA-F]{16}$/.test(v.label)
-            );
-            // For "Add Sensor" modal, list all recent addresses
+            let addrsVars = js.results.filter(v => /^[0-9a-fA-F]{16}$/.test(v.label));
             const now = Date.now();
-            recentSensorAddresses = addrsVars
-              .filter(v => v.last_value && v.last_value.timestamp && now - v.last_value.timestamp < 3 * 60 * 1000)
-              .map(v => v.label.toUpperCase());
-            // For liveness, require 2 records <1min apart (and both recent)
             const liveChecks = addrsVars.map(async v => {
               let addr = v.label.toUpperCase();
-              let id = v.id;
-              // Only check those with recent activity
               if (!(v.last_value && v.last_value.timestamp && now - v.last_value.timestamp < 3 * 60 * 1000)) return null;
-              let valsUrl = `${UBIDOTS_BASE}/variables/${id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
+              let valsUrl = `${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
               let valsRes = await fetch(valsUrl);
               if (!valsRes.ok) return null;
               let valsJs = await valsRes.json();
               let vals = valsJs.results || [];
               if (vals.length < 2) return null;
               let t0 = vals[0].timestamp, t1 = vals[1].timestamp;
-              // Both values within 1 minute and latest within 3 min
               if (Math.abs(t0 - t1) < 60 * 1000 && now - t0 < 3 * 60 * 1000) {
                 return addr;
               }
@@ -255,80 +198,31 @@
         renderSensorTable(liveAddrs, deviceStatus[dev] !== 'online');
       }
     }
-    // ---- END PATCH ----
 
     function renderSensorTable(liveAddresses, isOffline) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
       const sensors = mapData[DEVICE] || {};
-      const mappedAddrs = Object.keys(sensors);
-      let toShow = [];
-      if (isOffline) {
-        toShow = mappedAddrs.map(addr => ({ addr, state: 'greyed' }));
-      } else {
-        let liveSet = new Set(liveAddresses || []);
-        toShow = mappedAddrs.map(addr => ({
-          addr,
-          state: liveSet.has(addr) ? 'editable' : 'greyed'
-        }));
-        (liveAddresses || []).forEach(addr => {
-          if (!mappedAddrs.includes(addr)) {
-            toShow.push({ addr, state: 'editable' });
-          }
-        });
-      }
-      if (!DEVICE || !toShow.length) {
-        tbl.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No sensors mapped or detected for this truck.</td></tr>`;
-        document.getElementById("addSensorBtn").style.display = isOffline ? 'none' : '';
+      const addresses = [...new Set([...Object.keys(sensors), ...(liveAddresses || [])])].slice(0,5);
+      if (!DEVICE || !addresses.length) {
+        tbl.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500">No sensors mapped or detected for this truck.</td></tr>`;
         return;
       }
-      toShow.forEach((entry, idx) => {
-        const obj = sensors[entry.addr] || {};
-        const disabled = entry.state === 'greyed' ? "disabled" : "";
-        const trClass = entry.state === 'greyed' ? 'greyed' : '';
+      addresses.forEach((addr, idx) => {
+        const obj = sensors[addr] || {};
+        const state = (isOffline || !(liveAddresses || []).includes(addr)) ? 'greyed' : 'editable';
+        const disabled = state === 'greyed' ? 'disabled' : '';
+        const trClass = state === 'greyed' ? 'greyed' : '';
         tbl.innerHTML += `
           <tr class="${trClass}">
-            <td><input type="text" value="${entry.addr}" data-idx="${idx}" class="sensorAddr" style="width:120px" readonly ${disabled}/></td>
-            <td><input type="text" value="${obj.label||''}" data-idx="${idx}" class="sensorLabel" style="width:170px" ${disabled}/></td>
-            <td><input type="number" value="${obj.offset||0}" step="0.1" class="sensorCal" data-idx="${idx}" style="width:60px" ${disabled}/></td>
-            <td><button class="btn text-xs px-1 py-0 bg-red-500 hover:bg-red-700 delSensorBtn" ${disabled}>x</button></td>
-          </tr>
-        `;
+            <td>Sensor ${idx + 1}</td>
+            <td><input type="text" value="${addr}" class="sensorAddr" readonly ${disabled}/></td>
+            <td><input type="text" value="${obj.label || ''}" class="sensorLabel" ${disabled}/></td>
+            <td><input type="number" value="${obj.offset || 0}" step="0.1" class="sensorCal" ${disabled}/></td>
+            <td><button class="btn text-xs px-1 py-0 bg-red-500 delSensorBtn" ${disabled}>x</button></td>
+          </tr>`;
       });
-      document.getElementById("addSensorBtn").style.display = isOffline ? 'none' : '';
     }
-
-    document.getElementById("addSensorBtn").onclick = async function() {
-      await fetchAndRenderSensorTableForTruck(DEVICE);
-      const sensors = mapData[DEVICE] || {};
-      const sensorsUpper = Object.keys(sensors).reduce((o, a) => { o[a.toUpperCase()] = true; return o; }, {});
-      const unused = recentSensorAddresses.filter(addr => !sensorsUpper[addr]);
-      if (unused.length === 0) {
-        alert("No unused sensors available for this truck (only those active in last 3 min).");
-        return;
-      }
-      const modal = document.getElementById("addrDropdownModal");
-      const sel = document.getElementById("addrDropdown");
-      sel.innerHTML = '';
-      unused.forEach(addr => {
-        const opt = document.createElement("option");
-        opt.value = addr;
-        opt.textContent = addr;
-        sel.appendChild(opt);
-      });
-      modal.style.display = '';
-      document.getElementById("addrDropdownOk").onclick = function() {
-        const addr = sel.value;
-        if (!addr) return;
-        if (!mapData[DEVICE]) mapData[DEVICE] = {};
-        mapData[DEVICE][addr] = { label: "", offset: 0 };
-        modal.style.display = 'none';
-        fetchAndRenderSensorTableForTruck(DEVICE);
-      };
-      document.getElementById("addrDropdownCancel").onclick = function() {
-        modal.style.display = 'none';
-      };
-    };
 
     document.getElementById("sensorTable").addEventListener("click", function(e) {
       if (e.target.classList.contains("delSensorBtn")) {
