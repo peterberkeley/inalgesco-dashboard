@@ -1,32 +1,38 @@
 (() => {
-  // --- Per-device tokens
+  // --- Per-device tokens (for MQTT publishing, not needed for read-only REST GETs) ---
   const TOKENS = {
     "skycafe-1":  "BBUS-tSkfHbTV8ZNb25hhASDhaOA84JeHq8",
     "skycafe-2":  "BBUS-PoaNQXG2hMOTfNzAjLEhbQeSW0HE2P",
-    "skycafe-3":  "BBUS-iA1d3odtdyBl1Li3aTxeffacaYzbTW",
-    "skycafe-4":  "BBUS-02xhIPOIpmMrGv5OwS2XX5La6Nn7ma",
-    "skycafe-5":  "BBUS-FV7oZN9Xc45nxYevSaopBl7k5PEulk",
-    "skycafe-6":  "BBUS-seXBbsBXsrBMy36xrszv69tOJK9q33",
-    "skycafe-7":  "BBUS-7iuQhKnTINTKKJE1mkFryTZmZNYAmU",
-    "skycafe-8":  "BBUS-KgQ7uvh3QgFNeRj6EGQTvTKH91Y0hv",
-    "skycafe-9":  "BBUS-OCoYOgeBSeIOOlExVxm59W1dqVYB7p",
-    "skycafe-10": "BBUS-hUwkXc9JKvaNq5cl8H3sMRPR0AZvj2",
-    "skycafe-11": "BBUS-1AFBfwaDmRrpWPUDuKfMWxVjdpeG7O",
-    "skycafe-12": "BBUS-4flIrJ1FKcQUHh0c0z7HQrg458lSZ4"
+    // ... Add up to skycafe-24 here ...
+    "skycafe-24": "BBUS-REPLACE_ME_FOR_24"
   };
-  const CONFIG_TOKEN = "BBUS-aHFXFTCqEcKLRdCzp3zq3U2xirToQB";
-  const DEVICES = Object.keys(TOKENS);
 
-  // Use CORS proxy for ALL API requests
+  // --- Account-level REST API token for listing devices & basic read-only access ---
+  const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK"; // Replace with your real account token!
+  const CONFIG_TOKEN = "BBUS-aHFXFTCqEcKLRdCzp3zq3U2xirToQB";
+
+  // Use CORS proxy for browser fetches
   const UBIDOTS_BASE = "https://corsproxy.io/?https://industrial.api.ubidots.com/api/v1.6";
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
-
   const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
 
-  // LIVENESS: only "signal", "gps", or "iccid" within 60s counts as online!
-  async function checkLiveness(dev) {
-    const token = TOKENS[dev];
+  // --- 1. Fetch ALL device labels ever seen in your Ubidots account ---
+  async function fetchDeviceList() {
+    const url = `${UBIDOTS_BASE}/devices/?token=${UBIDOTS_ACCOUNT_TOKEN}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const js = await res.json();
+      // Only include those that start with 'skycafe-' (optional: remove if you want ALL devices)
+      return (js.results || []).map(d => d.label).filter(label => label.startsWith("skycafe-"));
+    } catch {
+      return [];
+    }
+  }
+
+  // --- 2. Check if a device is "live" (seen within 60s) ---
+  async function checkLiveness(dev, token) {
     const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${token}`;
     try {
       const res = await fetch(url);
@@ -60,9 +66,8 @@
     }
   }
 
-  async function fetchDallasAddresses(dev) {
+  async function fetchDallasAddresses(dev, token) {
     try {
-      const token = TOKENS[dev];
       const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${token}`;
       const res = await fetch(url);
       if (!res.ok) return [];
@@ -109,8 +114,7 @@
     });
   }
 
-  async function fetchUbidotsVar(dev, variable, limit = 1) {
-    const token = TOKENS[dev];
+  async function fetchUbidotsVar(dev, variable, token, limit = 1) {
     let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}`;
     try {
       const res = await fetch(url, { headers: { "X-Auth-Token": token } });
@@ -148,10 +152,10 @@
     polyline = L.polyline([], { weight: 3 }).addTo(map);
   }
 
-  async function updateCharts(DEVICE, SENSORS) {
+  async function updateCharts(DEVICE, SENSORS, token) {
     await Promise.all(SENSORS.map(async (s, idx) => {
       if (!s.address) return;
-      const rows = await fetchUbidotsVar(DEVICE, s.address, HIST);
+      const rows = await fetchUbidotsVar(DEVICE, s.address, token, HIST);
       if (!rows.length) return;
       s.chart.data.labels = rows.map(r => new Date(r.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }));
       s.chart.data.datasets[0].data = rows.map(r => {
@@ -185,10 +189,10 @@
     }
   }
 
-  async function poll(DEVICE, SENSORS) {
+  async function poll(DEVICE, SENSORS, token) {
     const [gpsArr, iccArr] = await Promise.all([
-      fetchUbidotsVar(DEVICE, "gps"),
-      fetchUbidotsVar(DEVICE, "iccid")
+      fetchUbidotsVar(DEVICE, "gps", token),
+      fetchUbidotsVar(DEVICE, "iccid", token)
     ]);
     let ts = null, lat = null, lon = null, speed = null;
     if (gpsArr[0]?.created_at) ts = gpsArr[0].created_at;
@@ -202,14 +206,14 @@
 
     let readings = {};
     await Promise.all(SENSORS.filter(s => s.address).map(async s => {
-      const vals = await fetchUbidotsVar(DEVICE, s.address, 1);
+      const vals = await fetchUbidotsVar(DEVICE, s.address, token, 1);
       if (vals.length && vals[0].value != null) readings[s.address] = parseFloat(vals[0].value);
     }));
 
     let [signalArr, voltArr, speedArr] = await Promise.all([
-      fetchUbidotsVar(DEVICE, "signal", 1),
-      fetchUbidotsVar(DEVICE, "volt", 1),
-      fetchUbidotsVar(DEVICE, "speed", 1)
+      fetchUbidotsVar(DEVICE, "signal", token, 1),
+      fetchUbidotsVar(DEVICE, "volt", token, 1),
+      fetchUbidotsVar(DEVICE, "speed", token, 1)
     ]);
     let signalVal = signalArr[0]?.value || null;
     let voltVal = voltArr[0]?.value || null;
@@ -222,18 +226,26 @@
       },
       SENSORS
     );
-    setTimeout(() => poll(DEVICE, SENSORS), POLL_MS);
+    setTimeout(() => poll(DEVICE, SENSORS, token), POLL_MS);
   }
 
-  // --- POPULATE DROPDOWN AND START DASHBOARD
+  // --- POPULATE DROPDOWN AND START DASHBOARD ---
   document.addEventListener("DOMContentLoaded", async () => {
     const deviceSelect = document.getElementById("deviceSelect");
     deviceSelect.innerHTML = "";
+    // 1. Fetch all trucks/devices from Ubidots (with 'skycafe-' prefix)
+    let allDevices = await fetchDeviceList();
+
+    // 2. Figure out which are live/offline
     let deviceStatus = {};
-    for (const dev of DEVICES) {
-      deviceStatus[dev] = await checkLiveness(dev) ? "online" : "offline";
+    for (const dev of allDevices) {
+      // Try per-device token, else fall back to account token
+      const token = TOKENS[dev] || UBIDOTS_ACCOUNT_TOKEN;
+      deviceStatus[dev] = await checkLiveness(dev, token) ? "online" : "offline";
     }
-    DEVICES.forEach(dev => {
+
+    // 3. Build dropdown
+    allDevices.forEach(dev => {
       const opt = document.createElement("option");
       opt.value = dev;
       opt.text = dev.replace("skycafe-", "SkyCafé ");
@@ -244,26 +256,30 @@
       deviceSelect.appendChild(opt);
     });
 
-    // Select first online truck
-    let DEVICE = DEVICES.find(d => deviceStatus[d] === "online") || DEVICES[0];
+    // 4. Select first online device
+    let DEVICE = allDevices.find(d => deviceStatus[d] === "online") || allDevices[0];
     deviceSelect.value = DEVICE;
 
-    // Setup everything else
+    // 5. Get token for this device
+    let thisToken = TOKENS[DEVICE] || UBIDOTS_ACCOUNT_TOKEN;
+
+    // 6. Setup dashboard
     let SENSOR_MAP = await fetchSensorMapConfig();
-    let DALLAS_LIST = await fetchDallasAddresses(DEVICE);
+    let DALLAS_LIST = await fetchDallasAddresses(DEVICE, thisToken);
     let SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP);
     initCharts(SENSORS);
-    updateCharts(DEVICE, SENSORS).then(() => { initMap(); poll(DEVICE, SENSORS); });
+    updateCharts(DEVICE, SENSORS, thisToken).then(() => { initMap(); poll(DEVICE, SENSORS, thisToken); });
 
     deviceSelect.addEventListener("change", async e => {
       DEVICE = e.target.value;
+      thisToken = TOKENS[DEVICE] || UBIDOTS_ACCOUNT_TOKEN;
       document.getElementById("latest").innerHTML = "";
       trail = [];
       if (polyline) polyline.setLatLngs([]);
-      DALLAS_LIST = await fetchDallasAddresses(DEVICE);
+      DALLAS_LIST = await fetchDallasAddresses(DEVICE, thisToken);
       SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP);
       initCharts(SENSORS);
-      updateCharts(DEVICE, SENSORS).then(() => { initMap(); poll(DEVICE, SENSORS); });
+      updateCharts(DEVICE, SENSORS, thisToken).then(() => { initMap(); poll(DEVICE, SENSORS, thisToken); });
     });
   });
 })();
