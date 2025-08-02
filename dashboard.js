@@ -1,3 +1,88 @@
+// How often (ms) to refresh the config and update the dropdown
+const REFRESH_INTERVAL = 60000; // 60 seconds
+
+// Fetch config's sensor_map and build the dropdown
+async function updateDropdownFromConfig() {
+  // EDIT THIS: Use your real Ubidots account token for the config device!
+  const CONFIG_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
+  const CONFIG_URL = `https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?page_size=1&token=${CONFIG_TOKEN}`;
+
+  try {
+    const res = await fetch(CONFIG_URL);
+    if (!res.ok) throw new Error("Config fetch failed");
+    const js = await res.json();
+    const sensorMap = (js.results && js.results[0] && js.results[0].context) ? js.results[0].context : {};
+
+    buildDeviceDropdownFromConfig(sensorMap);
+
+  } catch (err) {
+    console.error("Failed to fetch sensor map config:", err);
+    // Optionally show a warning in the UI
+  }
+}
+
+// Build dropdown, showing online/offline using last_seen
+function buildDeviceDropdownFromConfig(sensorMap) {
+  const deviceSelect = document.getElementById("deviceSelect");
+  deviceSelect.innerHTML = "";
+  const now = Math.floor(Date.now() / 1000);
+
+  Object.entries(sensorMap).forEach(([dev, obj]) => {
+    const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
+    const lastSeen = obj.last_seen || 0;
+    const isOnline = (now - lastSeen < 60); // 60 seconds for online
+
+    const opt = document.createElement("option");
+    opt.value = dev;
+
+    // Add a colored "dot" to status
+    const dot = isOnline
+      ? "🟢"
+      : "⚪️"; // Green for online, white for offline
+
+    opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
+
+    // Optional: Disable offline devices so they can't be selected:
+    // if (!isOnline) opt.disabled = true;
+
+    deviceSelect.appendChild(opt);
+  });
+
+  // Optionally trigger an initial change event or select the first online
+  if (deviceSelect.options.length > 0) {
+    // Select first online device, else first in list
+    let foundOnline = false;
+    for (let i = 0; i < deviceSelect.options.length; i++) {
+      if (deviceSelect.options[i].text.includes("Online")) {
+        deviceSelect.selectedIndex = i;
+        foundOnline = true;
+        break;
+      }
+    }
+    if (!foundOnline) deviceSelect.selectedIndex = 0;
+    // Optionally trigger your data load logic here
+    // onDeviceChange();
+  }
+}
+
+// On page load, build the dropdown and start interval
+document.addEventListener("DOMContentLoaded", () => {
+  updateDropdownFromConfig();
+  setInterval(updateDropdownFromConfig, REFRESH_INTERVAL);
+
+  // Hook up your deviceSelect change event here
+  document.getElementById("deviceSelect").addEventListener("change", function() {
+    const selectedDev = this.value;
+    // Load and display data for selectedDev as usual
+    // onDeviceChange(selectedDev);
+    // (You'd want to re-use your usual per-device chart/map/etc logic)
+    console.log("Device selected:", selectedDev);
+  });
+});
+
+// NOTE: The rest of your dashboard.js (charts, map, etc) should still work.
+// Just be sure that after the user selects a device, you use `deviceSelect.value`
+// for fetching/displaying device data as needed.
 (() => {
   // --- Per-device tokens (for MQTT publishing, not needed for read-only REST GETs) ---
   const TOKENS = {
