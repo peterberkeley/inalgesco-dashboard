@@ -8,7 +8,7 @@
   };
 
   // --- Account-level REST API token for listing devices & basic read-only access ---
-  const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK"; // Replace with your real account token!
+  const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
   const CONFIG_TOKEN = "BBUS-aHFXFTCqEcKLRdCzp3zq3U2xirToQB";
 
   // Use CORS proxy for browser fetches
@@ -22,11 +22,15 @@
     const url = `${UBIDOTS_BASE}/devices/?token=${UBIDOTS_ACCOUNT_TOKEN}`;
     try {
       const res = await fetch(url);
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.log("Failed to fetch devices", res.status);
+        return [];
+      }
       const js = await res.json();
       // Only include those that start with 'skycafe-' (optional: remove if you want ALL devices)
       return (js.results || []).map(d => d.label).filter(label => label.startsWith("skycafe-"));
-    } catch {
+    } catch (err) {
+      console.log("Device fetch error:", err);
       return [];
     }
   }
@@ -233,38 +237,43 @@
   document.addEventListener("DOMContentLoaded", async () => {
     const deviceSelect = document.getElementById("deviceSelect");
     deviceSelect.innerHTML = "";
+
     // 1. Fetch all trucks/devices from Ubidots (with 'skycafe-' prefix)
     let allDevices = await fetchDeviceList();
 
-    // 2. Figure out which are live/offline
+    // 2. Fetch all mapped trucks from config
+    let SENSOR_MAP = await fetchSensorMapConfig();
+    let mappedDevices = Object.keys(SENSOR_MAP).filter(label => label.startsWith("skycafe-"));
+
+    // 3. Merge & deduplicate: all in Ubidots devices OR in mapping config
+    let mergedDevices = Array.from(new Set([...allDevices, ...mappedDevices]));
+
+    // 4. Figure out which are live/offline
     let deviceStatus = {};
-    for (const dev of allDevices) {
-      // Try per-device token, else fall back to account token
+    for (const dev of mergedDevices) {
       const token = TOKENS[dev] || UBIDOTS_ACCOUNT_TOKEN;
       deviceStatus[dev] = await checkLiveness(dev, token) ? "online" : "offline";
     }
 
-    // 3. Build dropdown
-    allDevices.forEach(dev => {
+    // 5. Build dropdown — offline trucks are selectable and marked "(Offline)"
+    mergedDevices.forEach(dev => {
       const opt = document.createElement("option");
       opt.value = dev;
       opt.text = dev.replace("skycafe-", "SkyCafé ");
       if (deviceStatus[dev] === "offline") {
-        opt.disabled = true;
         opt.text += " (Offline)";
       }
       deviceSelect.appendChild(opt);
     });
 
-    // 4. Select first online device
-    let DEVICE = allDevices.find(d => deviceStatus[d] === "online") || allDevices[0];
+    // 6. Select first online device (or first if none online)
+    let DEVICE = mergedDevices.find(d => deviceStatus[d] === "online") || mergedDevices[0];
     deviceSelect.value = DEVICE;
 
-    // 5. Get token for this device
+    // 7. Get token for this device
     let thisToken = TOKENS[DEVICE] || UBIDOTS_ACCOUNT_TOKEN;
 
-    // 6. Setup dashboard
-    let SENSOR_MAP = await fetchSensorMapConfig();
+    // 8. Setup dashboard
     let DALLAS_LIST = await fetchDallasAddresses(DEVICE, thisToken);
     let SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP);
     initCharts(SENSORS);
