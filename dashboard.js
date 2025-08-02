@@ -1,12 +1,12 @@
 // ========== Configuration ==========
-const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK"; // For per-device fetches
-const CONFIG_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK"; // For sensor_map fetches
+const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
+const CONFIG_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
-const REFRESH_INTERVAL = 60000; // ms
-const HIST = 50; // points for charts
+const REFRESH_INTERVAL = 60000;
+const HIST = 50;
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
-let SENSORS = []; // Array for chart slots
+let SENSORS = [];
 
 // ========== Dropdown population from config ==========
 async function fetchSensorMapConfig() {
@@ -29,14 +29,13 @@ function buildDeviceDropdownFromConfig(sensorMap) {
   Object.entries(sensorMap).forEach(([dev, obj]) => {
     const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
     const lastSeen = obj.last_seen || 0;
-    const isOnline = (now - lastSeen < 60); // 60 seconds for online
+    const isOnline = (now - lastSeen < 60);
     const dot = isOnline ? "🟢" : "⚪️";
     const opt = document.createElement("option");
     opt.value = dev;
     opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
     deviceSelect.appendChild(opt);
   });
-  // Select first online if present
   let foundOnline = false;
   for (let i = 0; i < deviceSelect.options.length; i++) {
     if (deviceSelect.options[i].text.includes("Online")) {
@@ -52,7 +51,6 @@ function buildDeviceDropdownFromConfig(sensorMap) {
 const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
 
 async function fetchDallasAddresses(dev) {
-  // List Dallas sensor addresses for a device
   const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
   try {
     const res = await fetch(url);
@@ -153,96 +151,4 @@ function drawLive(data, SENSORS) {
   );
   const rows = [
     ["Local Time", ts ? new Date(ts).toLocaleString() : "–"],
-    ["ICCID", iccid || "–"],
-    ["Lat", fmt(lat, 6)], ["Lon", fmt(lon, 6)],
-    ["Speed (km/h)", fmt(speed, 1)], ["RSSI (dBm)", fmt(signal, 0)],
-    ["Volt (mV)", fmt(volt, 2)]
-  ].concat(sensorRows);
-  document.getElementById("latest").innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
-  if (isFinite(lat) && isFinite(lon)) {
-    marker.setLatLng([lat, lon]);
-    trail.push([lat, lon]); if (trail.length > 50) trail.shift();
-    polyline.setLatLngs(trail);
-    map.setView([lat, lon], Math.max(map.getZoom(), 13));
-  }
-}
-
-async function poll(DEVICE, SENSORS) {
-  const [gpsArr, iccArr] = await Promise.all([
-    fetchUbidotsVar(DEVICE, "gps"),
-    fetchUbidotsVar(DEVICE, "iccid")
-  ]);
-  let ts = null, lat = null, lon = null, speed = null;
-  if (gpsArr[0]?.created_at) ts = gpsArr[0].created_at;
-  if (gpsArr[0]?.context) {
-    lat = gpsArr[0].context.lat;
-    lon = gpsArr[0].context.lng;
-    speed = gpsArr[0].context.speed;
-  }
-  if (!ts) ts = iccArr[0]?.created_at || Date.now();
-  const iccidVal = iccArr[0]?.value || null;
-
-  let readings = {};
-  await Promise.all(SENSORS.filter(s => s.address).map(async s => {
-    const vals = await fetchUbidotsVar(DEVICE, s.address, 1);
-    if (vals.length && vals[0].value != null) readings[s.address] = parseFloat(vals[0].value);
-  }));
-
-  let [signalArr, voltArr, speedArr] = await Promise.all([
-    fetchUbidotsVar(DEVICE, "signal", 1),
-    fetchUbidotsVar(DEVICE, "volt", 1),
-    fetchUbidotsVar(DEVICE, "speed", 1)
-  ]);
-  let signalVal = signalArr[0]?.value || null;
-  let voltVal = voltArr[0]?.value || null;
-  let speedVal = speedArr[0]?.value || null;
-
-  drawLive(
-    {
-      ts, iccid: iccidVal, lat, lon, speed: speedVal,
-      signal: signalVal, volt: voltVal, addresses: SENSORS.map(s => s.address), readings
-    },
-    SENSORS
-  );
-}
-
-// ========== Map init ==========
-let map, marker, polyline, trail = [];
-function initMap() {
-  map = L.map("map").setView([0, 0], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
-  marker = L.marker([0, 0]).addTo(map);
-  polyline = L.polyline([], { weight: 3 }).addTo(map);
-}
-
-// ========== Main ==========
-
-async function updateAll() {
-  // 1. Fetch sensor map config, update dropdown
-  const sensorMap = await fetchSensorMapConfig();
-  buildDeviceDropdownFromConfig(sensorMap);
-
-  // 2. Get selected device
-  const deviceSelect = document.getElementById("deviceSelect");
-  const DEVICE = deviceSelect.value;
-
-  // 3. Fetch Dallas addresses & build sensor slots
-  const DALLAS_LIST = await fetchDallasAddresses(DEVICE);
-  SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, sensorMap);
-
-  // 4. Draw charts, update map, show latest box
-  initCharts(SENSORS);
-  await updateCharts(DEVICE, SENSORS);
-  if (!map) initMap();
-  poll(DEVICE, SENSORS);
-}
-
-// On change, reload everything for the new device
-document.addEventListener("DOMContentLoaded", () => {
-  updateAll();
-  setInterval(updateAll, REFRESH_INTERVAL);
-
-  document.getElementById("deviceSelect").addEventListener("change", async function() {
-    await updateAll();
-  });
-});
+    ["ICCID]()
