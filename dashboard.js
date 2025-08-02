@@ -12,7 +12,7 @@
   const CONFIG_TOKEN = "BBUS-aHFXFTCqEcKLRdCzp3zq3U2xirToQB";
 
   // Use CORS proxy for browser fetches
-  const UBIDOTS_BASE = "https://corsproxy.io/?https://industrial.api.ubidots.com/api/v1.6";
+ const UBIDOTS_BASE = "https://api.allorigins.win/raw?url=https://industrial.api.ubidots.com/api/v1.6";
   const POLL_MS = 10000, HIST = 50, TRAIL = 50;
   const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
   const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
