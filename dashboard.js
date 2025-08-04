@@ -161,6 +161,33 @@ async function fetchUbidotsVar(dev, variable, limit = 1) {
     return [];
   }
 }
+      const varList = await varRes.json();
+      variableCache[dev] = {};
+      varList.results.forEach(v => {
+        variableCache[dev][v.label] = v.id;
+      });
+    }
+
+    const varId = variableCache[dev][variable];
+    if (!varId) {
+      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
+      return [];
+    }
+
+    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if (!valRes.ok) {
+      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
+      return [];
+    }
+    const js = await valRes.json();
+    return js.results || [];
+  } catch (err) {
+    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
+    return [];
+  }
+}
       }
       const varList = await varRes.json();
       variableCache[dev] = {};
