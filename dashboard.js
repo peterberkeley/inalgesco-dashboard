@@ -1,16 +1,18 @@
 // ========== Configuration ==========
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
-const UBIDOTS_BASE = "https://industrial.ubidots.com/api/v1.6";
-const REFRESH_INTERVAL = 30000;
+const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
+const REFRESH_INTERVAL = 60000;
 const HIST = 50;
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
 let SENSORS = [];
 
-// ========== Fetch devices from Ubidots and mark online/offline ==========
+// ========== Fetch devices from Ubidots API v2 ==========
 async function fetchSensorMapConfig() {
   try {
-    const res = await fetch(`${UBIDOTS_BASE}/devices/?token=${UBIDOTS_ACCOUNT_TOKEN}`);
+    const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
     if (!res.ok) throw new Error("Failed to fetch devices");
 
     const js = await res.json();
@@ -20,7 +22,7 @@ async function fetchSensorMapConfig() {
       .forEach(dev => {
         const name = dev.name;
         const label = dev.label || name.replace("skycafe-", "SkyCafé ");
-        const lastSeen = new Date(dev.last_activity).getTime();
+        const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
         context[name] = {
           label,
           last_seen: Math.floor(lastSeen / 1000)
@@ -62,16 +64,18 @@ function buildDeviceDropdownFromConfig(sensorMap) {
 const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
 
 async function fetchDallasAddresses(dev) {
-  const url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+  const url = `${UBIDOTS_BASE}/variables/?device=${dev}`;
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
     if (!res.ok) return [];
     const js = await res.json();
     const now = Date.now();
     return js.results
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
       .filter(v => {
-        let t = (v.last_value && v.last_value.timestamp) || 0;
+        let t = (v.lastValue && v.lastValue.timestamp) || 0;
         return (now - t) < 3 * 60 * 1000;
       })
       .map(v => v.label)
@@ -110,9 +114,11 @@ function buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP) {
 }
 
 async function fetchUbidotsVar(dev, variable, limit = 1) {
-  let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+  let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values/?page_size=${limit}`;
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
     if (!res.ok) return [];
     const js = await res.json();
     return js.results || [];
@@ -144,7 +150,7 @@ async function updateCharts(DEVICE, SENSORS) {
     if (!s.address) return;
     const rows = await fetchUbidotsVar(DEVICE, s.address, HIST);
     if (!rows.length) return;
-    s.chart.data.labels = rows.map(r => new Date(r.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }));
+    s.chart.data.labels = rows.map(r => new Date(r.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }));
     s.chart.data.datasets[0].data = rows.map(r => {
       let val = parseFloat(r.value);
       if (typeof s.calibration === "number") val += s.calibration;
@@ -182,13 +188,13 @@ async function poll(DEVICE, SENSORS) {
     fetchUbidotsVar(DEVICE, "iccid")
   ]);
   let ts = null, lat = null, lon = null, speed = null;
-  if (gpsArr[0]?.created_at) ts = gpsArr[0].created_at;
+  if (gpsArr[0]?.timestamp) ts = gpsArr[0].timestamp;
   if (gpsArr[0]?.context) {
     lat = gpsArr[0].context.lat;
     lon = gpsArr[0].context.lng;
     speed = gpsArr[0].context.speed;
   }
-  if (!ts) ts = iccArr[0]?.created_at || Date.now();
+  if (!ts) ts = iccArr[0]?.timestamp || Date.now();
   const iccidVal = iccArr[0]?.value || null;
 
   let readings = {};
