@@ -99,7 +99,9 @@
       }
     };
 
-    // ===== DEVICE DROPDOWN (Copied from dashboard.js, buildDeviceDropdownFromConfig) =====
+    // ===== DROPDOWN LOGIC (IDENTICAL COPY) =====
+
+    // === [Copied directly from dashboard.js] ===
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -158,6 +160,7 @@
       }
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
+    // === [End copy] ===
 
     // ===== UTILS =====
     const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
