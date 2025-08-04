@@ -161,7 +161,7 @@
 
     // ===== FETCH DALLAS ADDRESSES (MUST USE DEVICE ID) =====
     async function fetchDallasAddresses(deviceID) {
-      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
+     const url = `${UBIDOTS_BASE}/variables/?device=${deviceID}`;
       try {
         const res = await fetch(url, {
           headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
