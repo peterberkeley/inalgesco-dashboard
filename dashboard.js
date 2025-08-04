@@ -315,7 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 async function fetchCsvRows(deviceID, varLabel, start, end) {
-  // Make sure variableCache is up to date
+  // Ensure variableCache is up to date (uses v2.0 for lookup)
   if (!variableCache[deviceID]) {
     const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
@@ -329,13 +329,17 @@ async function fetchCsvRows(deviceID, varLabel, start, end) {
     console.log("[CSV] Variable not found for address:", varLabel);
     return [];
   }
-  let url = `${UBIDOTS_BASE}/variables/${varId}/values/?page_size=1000`;
+  // *** Use v1.6 for values fetch ***
+  let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1000`;
   if (start) url += `&start=${start}`;
   if (end) url += `&end=${end}`;
   const res = await fetch(url, {
     headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.log("[CSV] Failed to fetch values for", varLabel, "status:", res.status);
+    return [];
+  }
   const js = await res.json();
   return js.results || [];
 }
@@ -351,12 +355,12 @@ document.getElementById("dlBtn").onclick = async function() {
     const endDate = document.getElementById("end").value;
     const sensorMap = await fetchSensorMapConfig();
     const deviceID = sensorMap[deviceLabel]?.id;
-    const DALLAS_LIST = await fetchDallasAddresses(deviceID); // Always by ID now!
+    const DALLAS_LIST = await fetchDallasAddresses(deviceID);
 
     // Use admin-mapped labels (if present)
     let adminMapForDev = sensorMapConfig[deviceLabel] || {};
     const addresses = DALLAS_LIST.slice(0, 5);
-    console.log("[CSV] Export using addresses:", addresses);
+    console.log("[CSV] Downloading for device", deviceLabel, "ID", deviceID, "addresses", addresses);
 
     // Date conversion
     let startMs = startDate ? new Date(startDate).getTime() : null;
@@ -409,5 +413,6 @@ document.getElementById("dlBtn").onclick = async function() {
     console.error(err);
   }
 };
+
 
 
