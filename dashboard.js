@@ -325,15 +325,21 @@ async function fetchCsvRows(deviceID, varLabel, start, end) {
     varList.results.forEach(v => variableCache[deviceID][v.label] = v.id);
   }
   const varId = variableCache[deviceID][varLabel];
+  console.log("[CSV] Lookup for", varLabel, "VarID:", varId);
   if (!varId) return [];
   let url = `${UBIDOTS_BASE}/variables/${varId}/values/?page_size=1000`;
   if (start) url += `&start=${start}`;
   if (end) url += `&end=${end}`;
+  console.log("[CSV] Fetching:", url);
   const res = await fetch(url, {
     headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.log("[CSV] Fetch failed:", res.status, await res.text());
+    return [];
+  }
   const js = await res.json();
+  console.log("[CSV] Got", js.results?.length || 0, "rows for", varLabel);
   return js.results || [];
 }
 
@@ -353,6 +359,7 @@ document.getElementById("dlBtn").onclick = async function() {
     // Use admin-mapped labels (if present)
     let adminMapForDev = sensorMapConfig[deviceLabel] || {};
     const addresses = DALLAS_LIST.slice(0, 5);
+    console.log("[CSV] Downloading for device", deviceLabel, "ID", deviceID, "addresses", addresses);
 
     // Date conversion
     let startMs = startDate ? new Date(startDate).getTime() : null;
@@ -399,8 +406,10 @@ document.getElementById("dlBtn").onclick = async function() {
       a.remove();
     }, 500);
     expStatus.textContent = "Download complete!";
+    console.log("[CSV] Download complete. Rows:", csvRows.length);
   } catch (err) {
     document.getElementById("expStatus").textContent = "Download failed.";
     console.error(err);
   }
 };
+
