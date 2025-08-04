@@ -160,7 +160,7 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (SAME AS DASHBOARD) =====
+    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (EXACTLY AS DASHBOARD, NO UPPERCASE) =====
     async function fetchDallasAddresses(deviceID) {
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
       try {
@@ -172,10 +172,15 @@
           return [];
         }
         const js = await res.json();
-        // LITERAL DASHBOARD FILTER:
+        const now = Date.now();
+        // NO uppercasing! Use label as-is.
         return js.results
           .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
-          .map(v => v.label.toUpperCase())
+          .filter(v => {
+            let t = (v.lastValue && v.lastValue.timestamp) || 0;
+            return (now - t) < 3 * 60 * 1000;
+          })
+          .map(v => v.label)
           .sort();
       } catch (err) {
         console.error("[fetchDallasAddresses] Exception:", err, "for deviceID:", deviceID);
@@ -183,21 +188,19 @@
       }
     }
 
-    // CORRECTED BUILD SENSOR SLOTS (NO DUPES, LIVE FIRST, EXACT ORDER)
+    // CORRECTED BUILD SENSOR SLOTS (EXACT MERGE, CASE-CONSISTENT, NO DUPES)
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
       const mapped = SENSOR_MAP[deviceLabel] || {};
       const allAddr = [];
-      // 1. Add live addresses first, unique and in order
+      // Add live addresses first (no case/duplication issue)
       DALLAS_LIST.forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
-      // 2. Add mapped addresses that are not live (unique)
+      // Then mapped addresses that are not live, case-insensitive
       Object.keys(mapped).forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
-      // 3. Pad to 5
       while (allAddr.length < 5) allAddr.push(null);
-      // 4. For each slot, build the correct object
       return allAddr.slice(0, 5).map((addr, idx) => {
         if (!addr) return {
           id: `empty${idx}`,
@@ -264,7 +267,7 @@
           <tr class="${isLocked ? 'locked-row' : ''}">
             <td>Sensor ${idx + 1}</td>
             <td>
-              <input type="text" value="${s.address || ''}" class="sensorAddr" readonly style="width:180px;" ${isLocked ? 'tabindex="-1"' : ''}/>
+              <input type="text" value="${s.address || ''}" class="sensorAddr" readonly style="width:200px;" ${isLocked ? 'tabindex="-1"' : ''}/>
             </td>
             <td>
               <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:130px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
@@ -282,9 +285,9 @@
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-        const addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
+        const addr = tr.querySelector(".sensorAddr").value.trim();
         const isLocked = tr.classList.contains("locked-row");
-        if (!/^[0-9A-F]{16}$/.test(addr) || isLocked) return;
+        if (!/^[0-9a-fA-F]{16}$/.test(addr) || isLocked) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
         if (label || offset) sensors[addr] = { label, offset };
