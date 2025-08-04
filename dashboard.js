@@ -122,8 +122,35 @@ function buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP) {
   });
 }
 
+const variableCache = {};
+
 async function fetchUbidotsVar(dev, variable, limit = 1) {
-  let url = `${UBIDOTS_BASE}/devices/${dev}/${variable}/values/?page_size=${limit}`;
+  try {
+    if (!variableCache[dev]) {
+      const varRes = await fetch(`${UBIDOTS_BASE}/devices/${dev}/variables/`, {
+        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+      });
+      if (!varRes.ok) return [];
+      const varList = await varRes.json();
+      variableCache[dev] = {};
+      varList.results.forEach(v => {
+        variableCache[dev][v.label] = v.id;
+      });
+    }
+
+    const varId = variableCache[dev][variable];
+    if (!varId) return [];
+
+    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if (!valRes.ok) return [];
+    const js = await valRes.json();
+    return js.results || [];
+  } catch {
+    return [];
+  }
+}/devices/${dev}/${variable}/values/?page_size=${limit}`;
   try {
     const res = await fetch(url, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
