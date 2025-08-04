@@ -314,40 +314,10 @@ document.addEventListener("DOMContentLoaded", () => {
     await updateAll();
   });
 });
-async function fetchCsvRows(deviceID, varLabel, start, end) {
-  // Ensure variableCache is up to date (uses v2.0 for lookup)
-  if (!variableCache[deviceID]) {
-    const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    const varList = await varRes.json();
-    variableCache[deviceID] = {};
-    varList.results.forEach(v => variableCache[deviceID][v.label] = v.id);
-  }
-  const varId = variableCache[deviceID][varLabel];
-  if (!varId) {
-    console.log("[CSV] Variable not found for address:", varLabel);
-    return [];
-  }
-  // *** Use v1.6 for values fetch ***
-  let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1000`;
-  if (start) url += `&start=${start}`;
-  if (end) url += `&end=${end}`;
-  const res = await fetch(url, {
-    headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-  });
-  if (!res.ok) {
-    console.log("[CSV] Failed to fetch values for", varLabel, "status:", res.status);
-    return [];
-  }
-  const js = await res.json();
-  return js.results || [];
-}
-
 document.getElementById("dlBtn").onclick = async function() {
-  // Show status
   const expStatus = document.getElementById("expStatus");
   expStatus.textContent = "Downloading...";
+
   try {
     const deviceSelect = document.getElementById("deviceSelect");
     const deviceLabel = deviceSelect.value;
@@ -355,26 +325,20 @@ document.getElementById("dlBtn").onclick = async function() {
     const endDate = document.getElementById("end").value;
     const sensorMap = await fetchSensorMapConfig();
     const deviceID = sensorMap[deviceLabel]?.id;
-    const DALLAS_LIST = await fetchDallasAddresses(deviceID);
+    // Guarantee we're using the exact same addresses as the charts!
+    const slots = SENSORS; // Always the 5 currently displayed sensors
 
-    // Use admin-mapped labels (if present)
     let adminMapForDev = sensorMapConfig[deviceLabel] || {};
-    const addresses = DALLAS_LIST.slice(0, 5);
-    console.log("[CSV] Downloading for device", deviceLabel, "ID", deviceID, "addresses", addresses);
-
-    // Date conversion
+    const addresses = slots.map(s => s.address).filter(addr => !!addr);
     let startMs = startDate ? new Date(startDate).getTime() : null;
     let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
 
-    // Fetch data for each address
     let csvRows = [];
     let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
     csvRows.push(header);
 
-    // Gather data for each sensor address, keyed by timestamp
     let dataByTime = {};
     for (let addr of addresses) {
-      if (!addr) continue;
       let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
       for (let v of vals) {
         let t = v.timestamp;
@@ -383,7 +347,6 @@ document.getElementById("dlBtn").onclick = async function() {
       }
     }
 
-    // Make rows, sorted by timestamp descending
     let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
     for (let t of times) {
       let row = [new Date(t).toISOString()];
@@ -393,7 +356,6 @@ document.getElementById("dlBtn").onclick = async function() {
       csvRows.push(row);
     }
 
-    // Download
     let csv = csvRows.map(r => r.join(",")).join("\r\n");
     let blob = new Blob([csv], {type: "text/csv"});
     let url = URL.createObjectURL(blob);
@@ -413,6 +375,7 @@ document.getElementById("dlBtn").onclick = async function() {
     console.error(err);
   }
 };
+
 
 
 
