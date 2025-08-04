@@ -73,8 +73,9 @@
     const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
     const UBIDOTS_V1_BASE = "https://industrial.api.ubidots.com/api/v1.6";
     const CONFIG_DEVICE = "config";
-    const RAW_GET_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/sensor_map/values?page_size=1`;
-    const RAW_POST_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/sensor_map/values`;
+    const CONFIG_VARIABLE = "sensor_map";
+    const RAW_GET_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
+    const RAW_POST_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
 
     // ===== GLOBALS =====
     let sensorMap = {};
@@ -99,7 +100,7 @@
       }
     };
 
-    // ===== DROPDOWN LOGIC (ONLY skycafe-N, REGEX) =====
+    // ===== DROPDOWN LOGIC (IDENTICAL COPY) =====
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -109,7 +110,7 @@
         const js = await res.json();
         const context = {};
         js.results
-          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name)) // only skycafe-N
+          .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
           .forEach(dev => {
             const name = dev.name;
             const label = dev.label || name.replace("skycafe-", "SkyCafé ");
@@ -159,20 +160,20 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== EXACT DASHBOARD LOGIC FOR DALLAS SENSOR FETCH & SLOT BUILD =====
-    async function fetchDallasAddresses(deviceLabel) {
-      // Always use the device LABEL, not the ID!
-      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceLabel}`;
+    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (EXACTLY AS DASHBOARD, NO UPPERCASE) =====
+    async function fetchDallasAddresses(deviceID) {
+      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
       try {
         const res = await fetch(url, {
           headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
         });
         if (!res.ok) {
-          console.error("[fetchDallasAddresses] API error:", res.status, "for device:", deviceLabel);
+          console.error("[fetchDallasAddresses] API error:", res.status, "for deviceID:", deviceID);
           return [];
         }
         const js = await res.json();
         const now = Date.now();
+        // NO uppercasing! Use label as-is.
         return js.results
           .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
           .filter(v => {
@@ -182,20 +183,25 @@
           .map(v => v.label)
           .sort();
       } catch (err) {
-        console.error("[fetchDallasAddresses] Exception:", err, "for device:", deviceLabel);
+        console.error("[fetchDallasAddresses] Exception:", err, "for deviceID:", deviceID);
         return [];
       }
     }
 
+    // CORRECTED BUILD SENSOR SLOTS (EXACT MERGE, CASE-CONSISTENT, NO DUPES)
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
-      // EXACT copy of dashboard.js buildSensorSlots
       const mapped = SENSOR_MAP[deviceLabel] || {};
-      const allAddr = DALLAS_LIST.slice(0, 5);
+      const allAddr = [];
+      // Add live addresses first (no case/duplication issue)
+      DALLAS_LIST.forEach(addr => {
+        if (!allAddr.includes(addr)) allAddr.push(addr);
+      });
+      // Then mapped addresses that are not live, case-insensitive
       Object.keys(mapped).forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
       while (allAddr.length < 5) allAddr.push(null);
-      return allAddr.map((addr, idx) => {
+      return allAddr.slice(0, 5).map((addr, idx) => {
         if (!addr) return {
           id: `empty${idx}`,
           label: "",
@@ -244,12 +250,10 @@
     async function handleDeviceChange() {
       const deviceSelect = document.getElementById("deviceSelect");
       selectedDeviceLabel = deviceSelect.value;
+      const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
       document.getElementById("statusMsg").textContent = "Loading sensors...";
-      const tbl = document.getElementById("sensorTable").querySelector("tbody");
-      tbl.innerHTML = '';
-      // ALWAYS PASS LABEL (not id) to fetchDallasAddresses!
-      const DALLAS_LIST = selectedDeviceLabel ? await fetchDallasAddresses(selectedDeviceLabel) : [];
-      const slots = buildSensorSlots(selectedDeviceLabel, DALLAS_LIST, fullMapData);
+      const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
+      const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
       renderSensorTable(slots);
       document.getElementById("statusMsg").textContent = "";
     }
