@@ -76,7 +76,6 @@
     const CONFIG_VARIABLE = "sensor_map";
     const RAW_GET_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
-    const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
     // ===== GLOBALS =====
     let sensorMap = {};
@@ -161,9 +160,8 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== SENSOR SLOT LOGIC (LITERAL COPY/APPROACH FROM dashboard.js) =====
-
-    // Fetch live Dallas sensors for a device
+    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (LITERAL COPY) =====
+    // --- fetchDallasAddresses copied directly from dashboard.js
     async function fetchDallasAddresses(deviceID) {
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
       try {
@@ -171,61 +169,59 @@
           headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
         });
         if (!res.ok) {
-          console.error("[fetchDallasAddresses]  API error:", res.status, "for deviceID:", deviceID);
+          console.error("[fetchDallasAddresses] API error:", res.status, "for deviceID:", deviceID);
           return [];
         }
         const js = await res.json();
-        const now = Date.now();
+        // LITERAL DASHBOARD FILTER:
         return js.results
           .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
-          .filter(v => {
-            let t = (v.lastValue && v.lastValue.timestamp) || 0;
-            return (now - t) < 3 * 60 * 1000;
-          })
           .map(v => v.label.toUpperCase())
           .sort();
       } catch (err) {
-        console.error("[fetchDallasAddresses]  Exception:", err, "for deviceID:", deviceID);
+        console.error("[fetchDallasAddresses] Exception:", err, "for deviceID:", deviceID);
         return [];
       }
     }
 
-    // Build sensor slots: up to 5, live first, then mapped-not-live, then blanks
-    function buildSensorSlots(deviceLabel, liveDallas, MAPDATA) {
-      // Copy of dashboard.js approach, adapted for admin table rendering
-      const mapped = (MAPDATA && MAPDATA[deviceLabel]) ? MAPDATA[deviceLabel] : {};
-      let slots = [];
-      let added = new Set();
-      // 1. Add live sensors (whether mapped or not)
-      liveDallas.forEach(addr => {
-        slots.push({
-          address: addr,
-          label: (mapped[addr]?.label || ""),
-          offset: (typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0),
-          isLive: true,
-          isMapped: !!mapped[addr]
-        });
-        added.add(addr);
-      });
-      // 2. Add mapped sensors that are not live
+    // --- buildSensorSlots copied directly from dashboard.js
+    function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
+      const mapped = SENSOR_MAP[deviceLabel] || {};
+      const allAddr = DALLAS_LIST.slice(0, 5);
       Object.keys(mapped).forEach(addr => {
-        if (!added.has(addr)) {
-          slots.push({
-            address: addr,
-            label: mapped[addr]?.label || "",
-            offset: (typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0),
-            isLive: false,
-            isMapped: true
-          });
-          added.add(addr);
+        if (allAddr.length < 5 && !allAddr.includes(addr)) {
+          allAddr.push(addr);
         }
       });
-      // 3. Pad to 5 with empty slots
-      while (slots.length < 5) {
-        slots.push({ address: "", label: "", offset: 0, isLive: false, isMapped: false });
-      }
-      // 4. Limit to 5 slots
-      return slots.slice(0, 5);
+      while (allAddr.length < 5) allAddr.push(null);
+      return allAddr.map((addr, idx) => {
+        if (!addr) return {
+          id: `empty${idx}`,
+          label: "",
+          col: "#ccc",
+          chart: null,
+          address: "",
+          mapped: null,
+          calibration: 0,
+          isLive: false,
+          isMapped: false
+        };
+        let isLive = DALLAS_LIST.includes(addr);
+        let isMapped = !!mapped[addr];
+        let label = mapped[addr]?.label?.trim() || "";
+        let offset = typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0;
+        return {
+          id: addr,
+          label,
+          col: "#ccc",
+          chart: null,
+          address: addr,
+          mapped: mapped[addr],
+          calibration: offset,
+          isLive,
+          isMapped
+        };
+      });
     }
 
     // ===== MAIN LOGIC =====
@@ -270,13 +266,13 @@
           <tr class="${isLocked ? 'locked-row' : ''}">
             <td>Sensor ${idx + 1}</td>
             <td>
-              <input type="text" value="${s.address}" class="sensorAddr" readonly style="width:125px;" ${isLocked ? 'tabindex="-1"' : ''}/>
+              <input type="text" value="${s.address || ''}" class="sensorAddr" readonly style="width:125px;" ${isLocked ? 'tabindex="-1"' : ''}/>
             </td>
             <td>
-              <input type="text" value="${s.label || ""}" class="sensorLabel" style="width:130px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
+              <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:130px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
             </td>
             <td>
-              <input type="number" value="${typeof s.offset === "number" ? s.offset : 0}" step="0.1" class="sensorCal" style="width:65px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
+              <input type="number" value="${typeof s.calibration === 'number' ? s.calibration : 0}" step="0.1" class="sensorCal" style="width:65px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
             </td>
           </tr>`;
       });
@@ -289,7 +285,6 @@
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
         const addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
-        // Only allow editing for live sensors (not locked rows)
         const isLocked = tr.classList.contains("locked-row");
         if (!/^[0-9A-F]{16}$/.test(addr) || isLocked) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
