@@ -314,10 +314,39 @@ document.addEventListener("DOMContentLoaded", () => {
     await updateAll();
   });
 });
+async function fetchCsvRows(deviceID, varLabel, start, end) {
+  // Make sure variableCache is up to date
+  if (!variableCache[deviceID]) {
+    const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    const varList = await varRes.json();
+    variableCache[deviceID] = {};
+    varList.results.forEach(v => variableCache[deviceID][v.label] = v.id);
+  }
+  const varId = variableCache[deviceID][varLabel];
+  if (!varId) {
+    console.log("[CSV] Variable not found for address:", varLabel);
+    return [];
+  }
+  // Use v1.6 for values fetch (required!)
+  let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1000`;
+  if (start) url += `&start=${start}`;
+  if (end) url += `&end=${end}`;
+  const res = await fetch(url, {
+    headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+  });
+  if (!res.ok) {
+    console.log("[CSV] Failed to fetch values for", varLabel, "status:", res.status);
+    return [];
+  }
+  const js = await res.json();
+  return js.results || [];
+}
+
 document.getElementById("dlBtn").onclick = async function() {
   const expStatus = document.getElementById("expStatus");
   expStatus.textContent = "Downloading...";
-
   try {
     const deviceSelect = document.getElementById("deviceSelect");
     const deviceLabel = deviceSelect.value;
@@ -325,9 +354,13 @@ document.getElementById("dlBtn").onclick = async function() {
     const endDate = document.getElementById("end").value;
     const sensorMap = await fetchSensorMapConfig();
     const deviceID = sensorMap[deviceLabel]?.id;
-    // Guarantee we're using the exact same addresses as the charts!
-    const slots = SENSORS; // Always the 5 currently displayed sensors
 
+    // Use SENSORS array from the charts — guarantees correct addresses!
+    const slots = SENSORS;
+    if (!slots.length) {
+      expStatus.textContent = "No sensors available for this truck.";
+      return;
+    }
     let adminMapForDev = sensorMapConfig[deviceLabel] || {};
     const addresses = slots.map(s => s.address).filter(addr => !!addr);
     let startMs = startDate ? new Date(startDate).getTime() : null;
@@ -375,6 +408,7 @@ document.getElementById("dlBtn").onclick = async function() {
     console.error(err);
   }
 };
+
 
 
 
