@@ -20,6 +20,9 @@
       pointer-events: none;
       border-color: #d1d5db !important;
     }
+    .locked-row {
+      opacity: 0.55;
+    }
   </style>
 </head>
 <body>
@@ -77,10 +80,9 @@
 
     // ===== GLOBALS =====
     let sensorMap = {};
-    let variableCache = {};
     let selectedDeviceLabel = null;
-    let deviceList = [];
     let deviceIdMap = {};
+    let fullMapData = {};
 
     // ===== AUTH =====
     document.getElementById("unlockBtn").onclick = async function() {
@@ -100,7 +102,6 @@
     };
 
     // ===== DROPDOWN LOGIC (IDENTICAL COPY) =====
-
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -160,9 +161,9 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== UTILS =====
-    const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
+    // ===== SENSOR SLOT LOGIC (LITERAL COPY/APPROACH FROM dashboard.js) =====
 
+    // Fetch live Dallas sensors for a device
     async function fetchDallasAddresses(deviceID) {
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
       try {
@@ -189,14 +190,50 @@
       }
     }
 
-    // ===== MAIN LOGIC =====
+    // Build sensor slots: up to 5, live first, then mapped-not-live, then blanks
+    function buildSensorSlots(deviceLabel, liveDallas, MAPDATA) {
+      // Copy of dashboard.js approach, adapted for admin table rendering
+      const mapped = (MAPDATA && MAPDATA[deviceLabel]) ? MAPDATA[deviceLabel] : {};
+      let slots = [];
+      let added = new Set();
+      // 1. Add live sensors (whether mapped or not)
+      liveDallas.forEach(addr => {
+        slots.push({
+          address: addr,
+          label: (mapped[addr]?.label || ""),
+          offset: (typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0),
+          isLive: true,
+          isMapped: !!mapped[addr]
+        });
+        added.add(addr);
+      });
+      // 2. Add mapped sensors that are not live
+      Object.keys(mapped).forEach(addr => {
+        if (!added.has(addr)) {
+          slots.push({
+            address: addr,
+            label: mapped[addr]?.label || "",
+            offset: (typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0),
+            isLive: false,
+            isMapped: true
+          });
+          added.add(addr);
+        }
+      });
+      // 3. Pad to 5 with empty slots
+      while (slots.length < 5) {
+        slots.push({ address: "", label: "", offset: 0, isLive: false, isMapped: false });
+      }
+      // 4. Limit to 5 slots
+      return slots.slice(0, 5);
+    }
 
+    // ===== MAIN LOGIC =====
     async function loadInitialData() {
       document.getElementById("statusMsg").textContent = "Loading devices...";
-      // 1. Get all devices and build dropdown
       sensorMap = await fetchSensorMapConfig();
       buildDeviceDropdownFromConfig(sensorMap);
-      // 2. Load config mapping (sensor labels)
+      // Load config mapping (sensor labels)
       let config = {};
       try {
         let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_ACCOUNT_TOKEN}`);
@@ -206,8 +243,7 @@
           config = context;
         }
       } catch {}
-      window.fullMapData = config; // preserve all truck mappings
-      // 3. Select truck and show mapping UI
+      fullMapData = config;
       const deviceSelect = document.getElementById("deviceSelect");
       deviceSelect.onchange = handleDeviceChange;
       handleDeviceChange();
@@ -219,41 +255,31 @@
       selectedDeviceLabel = deviceSelect.value;
       const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
       document.getElementById("statusMsg").textContent = "Loading sensors...";
-      const DALLAS_LIST = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
-      renderSensorTable(selectedDeviceLabel, DALLAS_LIST);
+      const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
+      const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
+      renderSensorTable(slots);
       document.getElementById("statusMsg").textContent = "";
     }
 
-    function renderSensorTable(deviceLabel, DALLAS_LIST) {
+    function renderSensorTable(slots) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      let sensors = (window.fullMapData && window.fullMapData[deviceLabel]) ? window.fullMapData[deviceLabel] : {};
-      // Only Dallas addresses (16 hex chars)
-      let allAddr = DALLAS_LIST.slice(0, 5).map(a => a.toUpperCase());
-      // Fill up to 5 with mapped addresses (in case a mapping exists for an offline sensor)
-      Object.keys(sensors || {}).forEach(addr => {
-        if (allAddr.length < 5 && !allAddr.includes(addr.toUpperCase())) {
-          allAddr.push(addr.toUpperCase());
-        }
-      });
-      while (allAddr.length < 5) allAddr.push("");
-      for (let idx = 0; idx < 5; idx++) {
-        const addr = allAddr[idx];
-        const obj = addr && sensors[addr] ? sensors[addr] : {};
+      slots.forEach((s, idx) => {
+        const isLocked = !s.isLive && s.isMapped && s.address;
         tbl.innerHTML += `
-          <tr>
+          <tr class="${isLocked ? 'locked-row' : ''}">
             <td>Sensor ${idx + 1}</td>
             <td>
-              <input type="text" value="${addr}" class="sensorAddr" readonly style="width:125px;"/>
+              <input type="text" value="${s.address}" class="sensorAddr" readonly style="width:125px;" ${isLocked ? 'tabindex="-1"' : ''}/>
             </td>
             <td>
-              <input type="text" value="${obj.label || ""}" class="sensorLabel" style="width:130px;"/>
+              <input type="text" value="${s.label || ""}" class="sensorLabel" style="width:130px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
             </td>
             <td>
-              <input type="number" value="${typeof obj.offset === "number" ? obj.offset : 0}" step="0.1" class="sensorCal" style="width:65px;"/>
+              <input type="number" value="${typeof s.offset === "number" ? s.offset : 0}" step="0.1" class="sensorCal" style="width:65px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
             </td>
           </tr>`;
-      }
+      });
     }
 
     // ===== Event Handlers =====
@@ -262,22 +288,23 @@
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-        let addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
-        if (!/^[0-9A-F]{16}$/.test(addr)) return; // Only Dallas
+        const addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
+        // Only allow editing for live sensors (not locked rows)
+        const isLocked = tr.classList.contains("locked-row");
+        if (!/^[0-9A-F]{16}$/.test(addr) || isLocked) return;
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
         if (label || offset) sensors[addr] = { label, offset };
       });
-      // Update only the selected truck
-      if (!window.fullMapData) window.fullMapData = {};
-      window.fullMapData[selectedDeviceLabel] = sensors;
+      if (!fullMapData) fullMapData = {};
+      fullMapData[selectedDeviceLabel] = sensors;
     });
 
     document.getElementById("saveBtn").onclick = async function() {
       document.getElementById("saveBtn").disabled = true;
       document.getElementById("statusMsg").textContent = "Saving...";
       // Only update current truck in context; preserve others
-      let payload = { value: 0, context: window.fullMapData };
+      let payload = { value: 0, context: fullMapData };
       try {
         let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_ACCOUNT_TOKEN}`, {
           method: "POST",
