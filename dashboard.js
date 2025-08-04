@@ -127,12 +127,7 @@ const variableCache = {};
 async function fetchUbidotsVar(dev, variable, limit = 1) {
   try {
     if (!variableCache[dev]) {
-      const varRes = await fetch(`${UBIDOTS_BASE}/devices/${dev}/variables/`, {
-        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-      });
-      if (!varRes.ok) {
-        console.error("[ERROR] Variable fetch failed for device:", dev);
-        return [];
+      const varRes = await fetch(`${UBIDOTS_BASE
       }
       const varList = await varRes.json();
       variableCache[dev] = {};
