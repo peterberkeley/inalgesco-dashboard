@@ -314,36 +314,46 @@ document.addEventListener("DOMContentLoaded", () => {
     await updateAll();
   });
 });
+// ========== CSV Download (robust version) ==========
+
+// Always define this function first
 async function fetchCsvRows(deviceID, varLabel, start, end) {
-  // Make sure variableCache is up to date
-  if (!variableCache[deviceID]) {
-    const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
+  try {
+    // Make sure variableCache is up to date
+    if (!variableCache[deviceID]) {
+      const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
+        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+      });
+      const varList = await varRes.json();
+      variableCache[deviceID] = {};
+      varList.results.forEach(v => variableCache[deviceID][v.label] = v.id);
+    }
+    const varId = variableCache[deviceID][varLabel];
+    if (!varId) {
+      console.warn("[CSV] Variable not found for address:", varLabel);
+      return [];
+    }
+    // Use v1.6 for values fetch (required!)
+    let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1000`;
+    if (start) url += `&start=${start}`;
+    if (end) url += `&end=${end}`;
+    console.log(`[CSV] Fetching ${varLabel} values from:`, url);
+    const res = await fetch(url, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
-    const varList = await varRes.json();
-    variableCache[deviceID] = {};
-    varList.results.forEach(v => variableCache[deviceID][v.label] = v.id);
-  }
-  const varId = variableCache[deviceID][varLabel];
-  if (!varId) {
-    console.log("[CSV] Variable not found for address:", varLabel);
+    if (!res.ok) {
+      console.error(`[CSV] Failed to fetch values for ${varLabel} (${varId}): status`, res.status, await res.text());
+      return [];
+    }
+    const js = await res.json();
+    return js.results || [];
+  } catch (err) {
+    console.error(`[CSV] Exception in fetchCsvRows for ${varLabel}:`, err);
     return [];
   }
-  // Use v1.6 for values fetch (required!)
-  let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1000`;
-  if (start) url += `&start=${start}`;
-  if (end) url += `&end=${end}`;
-  const res = await fetch(url, {
-    headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-  });
-  if (!res.ok) {
-    console.log("[CSV] Failed to fetch values for", varLabel, "status:", res.status);
-    return [];
-  }
-  const js = await res.json();
-  return js.results || [];
 }
 
+// Download handler, make sure this is after fetchCsvRows definition
 document.getElementById("dlBtn").onclick = async function() {
   const expStatus = document.getElementById("expStatus");
   expStatus.textContent = "Downloading...";
@@ -355,14 +365,19 @@ document.getElementById("dlBtn").onclick = async function() {
     const sensorMap = await fetchSensorMapConfig();
     const deviceID = sensorMap[deviceLabel]?.id;
 
-    // Use SENSORS array from the charts — guarantees correct addresses!
+    // Use SENSORS as in charts for guaranteed address alignment
     const slots = SENSORS;
-    if (!slots.length) {
+    if (!slots || !slots.length) {
       expStatus.textContent = "No sensors available for this truck.";
       return;
     }
     let adminMapForDev = sensorMapConfig[deviceLabel] || {};
     const addresses = slots.map(s => s.address).filter(addr => !!addr);
+    if (!addresses.length) {
+      expStatus.textContent = "No valid sensor addresses.";
+      return;
+    }
+
     let startMs = startDate ? new Date(startDate).getTime() : null;
     let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
 
@@ -373,6 +388,9 @@ document.getElementById("dlBtn").onclick = async function() {
     let dataByTime = {};
     for (let addr of addresses) {
       let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
+      if (!vals.length) {
+        console.warn(`[CSV] No data rows returned for address: ${addr}`);
+      }
       for (let v of vals) {
         let t = v.timestamp;
         if (!dataByTime[t]) dataByTime[t] = {};
@@ -381,6 +399,10 @@ document.getElementById("dlBtn").onclick = async function() {
     }
 
     let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
+    if (!times.length) {
+      expStatus.textContent = "No data found for the selected range.";
+      return;
+    }
     for (let t of times) {
       let row = [new Date(t).toISOString()];
       for (let addr of addresses) {
@@ -404,10 +426,11 @@ document.getElementById("dlBtn").onclick = async function() {
     expStatus.textContent = "Download complete!";
     console.log("[CSV] Download complete. Rows:", csvRows.length);
   } catch (err) {
-    document.getElementById("expStatus").textContent = "Download failed.";
-    console.error(err);
+    expStatus.textContent = "Download failed.";
+    console.error("[CSV] Download error:", err);
   }
 };
+
 
 
 
