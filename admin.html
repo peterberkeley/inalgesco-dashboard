@@ -65,7 +65,7 @@
   </div>
   <script>
     // ===== CONFIG =====
-   const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
+    const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
     const PASSWORD = "Skycafe8971";
     const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
     const UBIDOTS_V1_BASE = "https://industrial.api.ubidots.com/api/v1.6";
@@ -101,11 +101,10 @@
 
     // ===== DROPDOWN LOGIC (IDENTICAL COPY) =====
 
-    // === [Copied directly from dashboard.js] ===
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
-          headers: { "X-Auth-Token": UBIDOTS_TOKEN }
+          headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
         });
         if (!res.ok) throw new Error("Failed to fetch devices");
         const js = await res.json();
@@ -160,7 +159,6 @@
       }
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
-    // === [End copy] ===
 
     // ===== UTILS =====
     const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
@@ -169,7 +167,7 @@
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
       try {
         const res = await fetch(url, {
-          headers: { "X-Auth-Token": UBIDOTS_TOKEN }
+          headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
         });
         if (!res.ok) {
           console.error("[fetchDallasAddresses]  API error:", res.status, "for deviceID:", deviceID);
@@ -201,7 +199,7 @@
       // 2. Load config mapping (sensor labels)
       let config = {};
       try {
-        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
+        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_ACCOUNT_TOKEN}`);
         if (res.ok) {
           let js = await res.json();
           let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
@@ -281,7 +279,7 @@
       // Only update current truck in context; preserve others
       let payload = { value: 0, context: window.fullMapData };
       try {
-        let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
+        let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_ACCOUNT_TOKEN}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
