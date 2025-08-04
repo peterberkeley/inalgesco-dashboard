@@ -99,7 +99,7 @@
       }
     };
 
-    // ===== DROPDOWN LOGIC (regex for skycafe-N only) =====
+    // ===== DROPDOWN LOGIC (ONLY skycafe-N, REGEX) =====
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -159,9 +159,9 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== FORENSIC: EXACT DASHBOARD DALLAS SENSOR LOGIC =====
+    // ===== EXACT DASHBOARD LOGIC FOR DALLAS SENSOR FETCH & SLOT BUILD =====
     async function fetchDallasAddresses(deviceLabel) {
-      // This is IDENTICAL to your dashboard.js
+      // Always use the device LABEL, not the ID!
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceLabel}`;
       try {
         const res = await fetch(url, {
@@ -188,7 +188,7 @@
     }
 
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
-      // IDENTICAL to dashboard.js
+      // EXACT copy of dashboard.js buildSensorSlots
       const mapped = SENSOR_MAP[deviceLabel] || {};
       const allAddr = DALLAS_LIST.slice(0, 5);
       Object.keys(mapped).forEach(addr => {
@@ -247,6 +247,7 @@
       document.getElementById("statusMsg").textContent = "Loading sensors...";
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
+      // ALWAYS PASS LABEL (not id) to fetchDallasAddresses!
       const DALLAS_LIST = selectedDeviceLabel ? await fetchDallasAddresses(selectedDeviceLabel) : [];
       const slots = buildSensorSlots(selectedDeviceLabel, DALLAS_LIST, fullMapData);
       renderSensorTable(slots);
