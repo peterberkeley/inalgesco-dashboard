@@ -147,7 +147,7 @@ async function fetchUbidotsVar(deviceID, variable, limit = 1) {
       console.warn(`[WARN] No variable ID found for '${variable}' on deviceID '${deviceID}'`);
       return [];
     }
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
+    const valRes = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=${limit}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if (!valRes.ok) {
