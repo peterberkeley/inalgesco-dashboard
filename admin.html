@@ -38,10 +38,8 @@
         <span class="text-xs text-gray-500">(Your dashboard will read live from Ubidots.)</span>
       </p>
       <div class="mb-3 flex flex-row gap-2 items-center" id="truckRow">
-        <label for="truckSelect" class="font-medium">Truck:</label>
-        <select id="truckSelect" class="p-1 rounded border"></select>
-        <button id="addTruckBtn" class="btn text-xs px-2 py-1">+ Add Truck</button>
-        <button id="delTruckBtn" class="btn text-xs px-2 py-1 bg-red-600 hover:bg-red-700">Delete</button>
+        <label for="deviceSelect" class="font-medium">Truck:</label>
+        <select id="deviceSelect" class="p-1 rounded border"></select>
       </div>
       <div class="mb-6">
         <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
@@ -51,7 +49,6 @@
               <th class="w-3/12">Sensor Address</th>
               <th class="w-4/12">Label</th>
               <th class="w-2/12">Calibration Offset (°)</th>
-              <th class="w-1/12"></th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -67,42 +64,25 @@
     </div>
   </div>
   <script>
+    // ===== CONFIG =====
     const UBIDOTS_TOKEN = "BBUS-Ghwc4x45HcRvzw1eOVF1DfBQBnAP7L";
     const PASSWORD = "Skycafe8971";
-    const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
+    const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
+    const UBIDOTS_V1_BASE = "https://industrial.api.ubidots.com/api/v1.6";
     const CONFIG_DEVICE = "config";
     const CONFIG_VARIABLE = "sensor_map";
-    const RAW_GET_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
-    const RAW_POST_URL = `${UBIDOTS_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
-    const DEVICES = Array.from({ length: 24 }, (_, i) => `skycafe-${i+1}`);
+    const RAW_GET_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
+    const RAW_POST_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
+    const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
-    let mapData = {};
-    let deviceStatus = {};
-    let DEVICE = null;
-    let fetchSensorTableID = 0;
+    // ===== GLOBALS =====
+    let sensorMap = {};
+    let variableCache = {};
+    let selectedDeviceLabel = null;
+    let deviceList = [];
+    let deviceIdMap = {};
 
-    async function getDeviceLastTimestamp(dev) {
-      try {
-        const url = `${UBIDOTS_BASE}/devices/${dev}/`;
-        const res = await fetch(url, { headers: { 'X-Auth-Token': UBIDOTS_TOKEN } });
-        if (!res.ok) return 0;
-        const js = await res.json();
-        return new Date(js.last_activity).getTime() || 0;
-      } catch {
-        return 0;
-      }
-    }
-
-    async function buildDeviceStatus() {
-      deviceStatus = {};
-      const now = Date.now();
-      const offlineCutoff = 60 * 60 * 1000; // 1 hour
-      await Promise.all(DEVICES.map(async dev => {
-        let lastTs = await getDeviceLastTimestamp(dev);
-        deviceStatus[dev] = (now - lastTs < offlineCutoff) ? 'online' : 'offline';
-      }));
-    }
-
+    // ===== AUTH =====
     document.getElementById("unlockBtn").onclick = async function() {
       const pass = document.getElementById("adminPass").value;
       if (pass.length < 8) {
@@ -113,156 +93,205 @@
         document.getElementById("authError").textContent = "";
         document.getElementById("lockscreen").style.display = "none";
         document.getElementById("adminPage").style.display = "";
-        await fetchConfigAndDeviceStatus();
+        await loadInitialData();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
       }
     };
 
-    async function fetchConfigAndDeviceStatus() {
-      document.getElementById("statusMsg").textContent = "Loading...";
-      mapData = {};
+    // ===== DEVICE DROPDOWN (Copied from dashboard.js, buildDeviceDropdownFromConfig) =====
+    async function fetchSensorMapConfig() {
+      try {
+        const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
+          headers: { "X-Auth-Token": UBIDOTS_TOKEN }
+        });
+        if (!res.ok) throw new Error("Failed to fetch devices");
+        const js = await res.json();
+        const context = {};
+        js.results
+          .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
+          .forEach(dev => {
+            const name = dev.name;
+            const label = dev.label || name.replace("skycafe-", "SkyCafé ");
+            const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
+            const id = dev.id || dev._id || dev["$id"];
+            context[name] = {
+              label,
+              last_seen: Math.floor(lastSeen / 1000),
+              id
+            };
+            deviceIdMap[name] = id;
+          });
+        return context;
+      } catch (err) {
+        console.error("Failed to fetch device list:", err);
+        return {};
+      }
+    }
+
+    function buildDeviceDropdownFromConfig(sensorMap) {
+      const deviceSelect = document.getElementById("deviceSelect");
+      const now = Math.floor(Date.now() / 1000);
+      deviceSelect.innerHTML = "";
+      const sortedEntries = Object.entries(sensorMap).sort(([a], [b]) => {
+        const numA = parseInt(a.replace("skycafe-", ""), 10);
+        const numB = parseInt(b.replace("skycafe-", ""), 10);
+        return numA - numB;
+      });
+      sortedEntries.forEach(([dev, obj]) => {
+        const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
+        const lastSeen = obj.last_seen || 0;
+        const isOnline = (now - lastSeen < 60);
+        const dot = isOnline ? "🟢" : "⚪️";
+        const opt = document.createElement("option");
+        opt.value = dev;
+        opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
+        deviceSelect.appendChild(opt);
+      });
+      let foundOnline = false;
+      for (let i = 0; i < deviceSelect.options.length; i++) {
+        if (deviceSelect.options[i].text.includes("Online")) {
+          deviceSelect.selectedIndex = i;
+          foundOnline = true;
+          break;
+        }
+      }
+      if (!foundOnline) deviceSelect.selectedIndex = 0;
+    }
+
+    // ===== UTILS =====
+    const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
+
+    async function fetchDallasAddresses(deviceID) {
+      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
+      try {
+        const res = await fetch(url, {
+          headers: { "X-Auth-Token": UBIDOTS_TOKEN }
+        });
+        if (!res.ok) {
+          console.error("[fetchDallasAddresses]  API error:", res.status, "for deviceID:", deviceID);
+          return [];
+        }
+        const js = await res.json();
+        const now = Date.now();
+        return js.results
+          .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
+          .filter(v => {
+            let t = (v.lastValue && v.lastValue.timestamp) || 0;
+            return (now - t) < 3 * 60 * 1000;
+          })
+          .map(v => v.label.toUpperCase())
+          .sort();
+      } catch (err) {
+        console.error("[fetchDallasAddresses]  Exception:", err, "for deviceID:", deviceID);
+        return [];
+      }
+    }
+
+    // ===== MAIN LOGIC =====
+
+    async function loadInitialData() {
+      document.getElementById("statusMsg").textContent = "Loading devices...";
+      // 1. Get all devices and build dropdown
+      sensorMap = await fetchSensorMapConfig();
+      buildDeviceDropdownFromConfig(sensorMap);
+      // 2. Load config mapping (sensor labels)
+      let config = {};
       try {
         let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_TOKEN}`);
-        if (!res.ok) throw new Error("Not found");
-        let js = await res.json();
-        let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
-        mapData = context;
-      } catch (e) { mapData = {}; }
-      await buildDeviceStatus();
-      refreshTruckSelect();
+        if (res.ok) {
+          let js = await res.json();
+          let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
+          config = context;
+        }
+      } catch {}
+      window.fullMapData = config; // preserve all truck mappings
+      // 3. Select truck and show mapping UI
+      const deviceSelect = document.getElementById("deviceSelect");
+      deviceSelect.onchange = handleDeviceChange;
+      handleDeviceChange();
       document.getElementById("statusMsg").textContent = "";
     }
 
-    function refreshTruckSelect() {
-      const sel = document.getElementById("truckSelect");
-      sel.innerHTML = '';
-      DEVICES.forEach(dev => {
-        const opt = document.createElement('option');
-        opt.value = dev;
-        opt.textContent = dev.replace('skycafe-','SkyCafé ');
-        if (deviceStatus[dev] === 'online') {
-          opt.style.fontWeight = '700';
-        } else {
-          opt.style.color = '#aaa';
-        }
-        sel.appendChild(opt);
-      });
-      DEVICE = DEVICES.find(d => deviceStatus[d] === 'online') || DEVICES[0];
-      sel.value = DEVICE;
-      handleTruckChange();
+    async function handleDeviceChange() {
+      const deviceSelect = document.getElementById("deviceSelect");
+      selectedDeviceLabel = deviceSelect.value;
+      const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
+      document.getElementById("statusMsg").textContent = "Loading sensors...";
+      const DALLAS_LIST = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
+      renderSensorTable(selectedDeviceLabel, DALLAS_LIST);
+      document.getElementById("statusMsg").textContent = "";
     }
 
-    document.getElementById("truckSelect").onchange = function(e) {
-      DEVICE = e.target.value;
-      handleTruckChange();
-    };
-
-    function handleTruckChange() {
-      renderSensorTable([], deviceStatus[DEVICE] !== 'online');
-      fetchAndRenderSensorTableForTruck(DEVICE);
-    }
-
-    async function fetchAndRenderSensorTableForTruck(dev) {
-      let myID = ++fetchSensorTableID;
-      let liveAddrs = [];
-      if (deviceStatus[dev] === 'online') {
-        let url = `${UBIDOTS_BASE}/variables/?device=${dev}&token=${UBIDOTS_TOKEN}`;
-        try {
-          let res = await fetch(url);
-          if (res.ok) {
-            let js = await res.json();
-            let addrsVars = js.results.filter(v => /^[0-9a-fA-F]{16}$/.test(v.label));
-            const now = Date.now();
-            const liveChecks = addrsVars.map(async v => {
-              let addr = v.label.toUpperCase();
-              if (!(v.last_value && v.last_value.timestamp && now - v.last_value.timestamp < 3 * 60 * 1000)) return null;
-              let valsUrl = `${UBIDOTS_BASE}/variables/${v.id}/values?page_size=2&token=${UBIDOTS_TOKEN}`;
-              let valsRes = await fetch(valsUrl);
-              if (!valsRes.ok) return null;
-              let valsJs = await valsRes.json();
-              let vals = valsJs.results || [];
-              if (vals.length < 2) return null;
-              let t0 = vals[0].timestamp, t1 = vals[1].timestamp;
-              if (Math.abs(t0 - t1) < 60 * 1000 && now - t0 < 3 * 60 * 1000) {
-                return addr;
-              }
-              return null;
-            });
-            let addrs = await Promise.all(liveChecks);
-            liveAddrs = addrs.filter(Boolean);
-          }
-        } catch {}
-      }
-      if (myID === fetchSensorTableID) {
-        renderSensorTable(liveAddrs, deviceStatus[dev] !== 'online');
-      }
-    }
-
-    function renderSensorTable(liveAddresses, isOffline) {
+    function renderSensorTable(deviceLabel, DALLAS_LIST) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      const sensors = mapData[DEVICE] || {};
-      const addresses = [...new Set([...Object.keys(sensors), ...(liveAddresses || [])])].slice(0,5);
-      if (!DEVICE || !addresses.length) {
-        tbl.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500">No sensors mapped or detected for this truck.</td></tr>`;
-        return;
-      }
-      addresses.forEach((addr, idx) => {
-        const obj = sensors[addr] || {};
-        const state = (isOffline || !(liveAddresses || []).includes(addr)) ? 'greyed' : 'editable';
-        const disabled = state === 'greyed' ? 'disabled' : '';
-        const trClass = state === 'greyed' ? 'greyed' : '';
-        tbl.innerHTML += `
-          <tr class="${trClass}">
-            <td>Sensor ${idx + 1}</td>
-            <td><input type="text" value="${addr}" class="sensorAddr" readonly ${disabled}/></td>
-            <td><input type="text" value="${obj.label || ''}" class="sensorLabel" ${disabled}/></td>
-            <td><input type="number" value="${obj.offset || 0}" step="0.1" class="sensorCal" ${disabled}/></td>
-            <td><button class="btn text-xs px-1 py-0 bg-red-500 delSensorBtn" ${disabled}>x</button></td>
-          </tr>`;
+      let sensors = (window.fullMapData && window.fullMapData[deviceLabel]) ? window.fullMapData[deviceLabel] : {};
+      // Only Dallas addresses (16 hex chars)
+      let allAddr = DALLAS_LIST.slice(0, 5).map(a => a.toUpperCase());
+      // Fill up to 5 with mapped addresses (in case a mapping exists for an offline sensor)
+      Object.keys(sensors || {}).forEach(addr => {
+        if (allAddr.length < 5 && !allAddr.includes(addr.toUpperCase())) {
+          allAddr.push(addr.toUpperCase());
+        }
       });
+      while (allAddr.length < 5) allAddr.push("");
+      for (let idx = 0; idx < 5; idx++) {
+        const addr = allAddr[idx];
+        const obj = addr && sensors[addr] ? sensors[addr] : {};
+        tbl.innerHTML += `
+          <tr>
+            <td>Sensor ${idx + 1}</td>
+            <td>
+              <input type="text" value="${addr}" class="sensorAddr" readonly style="width:125px;"/>
+            </td>
+            <td>
+              <input type="text" value="${obj.label || ""}" class="sensorLabel" style="width:130px;"/>
+            </td>
+            <td>
+              <input type="number" value="${typeof obj.offset === "number" ? obj.offset : 0}" step="0.1" class="sensorCal" style="width:65px;"/>
+            </td>
+          </tr>`;
+      }
     }
 
-    document.getElementById("sensorTable").addEventListener("click", function(e) {
-      if (e.target.classList.contains("delSensorBtn")) {
-        const row = e.target.closest("tr");
-        const addr = row.querySelector(".sensorAddr").value.trim().toUpperCase();
-        if (mapData[DEVICE]) delete mapData[DEVICE][addr];
-        fetchAndRenderSensorTableForTruck(DEVICE);
-      }
-    });
+    // ===== Event Handlers =====
 
     document.getElementById("sensorTable").addEventListener("input", function(e) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
       Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
         let addr = tr.querySelector(".sensorAddr").value.trim().toUpperCase();
-        if (!/^[0-9A-F]{16}$/.test(addr)) return;
+        if (!/^[0-9A-F]{16}$/.test(addr)) return; // Only Dallas
         let label = tr.querySelector(".sensorLabel").value.trim();
         let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
-        sensors[addr] = { label, offset };
+        if (label || offset) sensors[addr] = { label, offset };
       });
-      mapData[DEVICE] = sensors;
+      // Update only the selected truck
+      if (!window.fullMapData) window.fullMapData = {};
+      window.fullMapData[selectedDeviceLabel] = sensors;
     });
 
     document.getElementById("saveBtn").onclick = async function() {
       document.getElementById("saveBtn").disabled = true;
       document.getElementById("statusMsg").textContent = "Saving...";
+      // Only update current truck in context; preserve others
+      let payload = { value: 0, context: window.fullMapData };
       try {
         let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_TOKEN}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ value: 0, context: mapData })
+          body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error("Failed to save");
         document.getElementById("statusMsg").textContent = "Saved to Ubidots!";
       } catch (e) {
-        document.getElementById("statusMsg").textContent = "Failed to save.";
+        document.getElementById("statusMsg").textContent = "Failed to save. Check network/Ubidots.";
       }
       setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
       document.getElementById("saveBtn").disabled = false;
     };
+
   </script>
 </body>
 </html>
