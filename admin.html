@@ -100,7 +100,7 @@
       }
     };
 
-    // ===== DROPDOWN LOGIC (IDENTICAL COPY) =====
+    // ===== DROPDOWN LOGIC (REMOVES NON-NUMBERED DEVICES) =====
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -110,7 +110,7 @@
         const js = await res.json();
         const context = {};
         js.results
-          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name))
+          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name)) // ONLY skycafe-N
           .forEach(dev => {
             const name = dev.name;
             const label = dev.label || name.replace("skycafe-", "SkyCafé ");
@@ -160,7 +160,7 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (EXACTLY AS DASHBOARD, NO UPPERCASE) =====
+    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (AS DASHBOARD, NO UPPERCASE) =====
     async function fetchDallasAddresses(deviceID) {
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
       try {
@@ -173,7 +173,6 @@
         }
         const js = await res.json();
         const now = Date.now();
-        // NO uppercasing! Use label as-is.
         return js.results
           .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
           .filter(v => {
@@ -188,15 +187,12 @@
       }
     }
 
-    // CORRECTED BUILD SENSOR SLOTS (EXACT MERGE, CASE-CONSISTENT, NO DUPES)
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
       const mapped = SENSOR_MAP[deviceLabel] || {};
       const allAddr = [];
-      // Add live addresses first (no case/duplication issue)
       DALLAS_LIST.forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
-      // Then mapped addresses that are not live, case-insensitive
       Object.keys(mapped).forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
@@ -252,6 +248,10 @@
       selectedDeviceLabel = deviceSelect.value;
       const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
       document.getElementById("statusMsg").textContent = "Loading sensors...";
+      // ---- FULLY CLEAR THE SENSOR TABLE EACH TIME ----
+      const tbl = document.getElementById("sensorTable").querySelector("tbody");
+      tbl.innerHTML = '';
+      // ---- Then fetch and render
       const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
       const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
       renderSensorTable(slots);
