@@ -73,9 +73,8 @@
     const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
     const UBIDOTS_V1_BASE = "https://industrial.api.ubidots.com/api/v1.6";
     const CONFIG_DEVICE = "config";
-    const CONFIG_VARIABLE = "sensor_map";
-    const RAW_GET_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values?page_size=1`;
-    const RAW_POST_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/${CONFIG_VARIABLE}/values`;
+    const RAW_GET_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/sensor_map/values?page_size=1`;
+    const RAW_POST_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/sensor_map/values`;
 
     // ===== GLOBALS =====
     let sensorMap = {};
@@ -100,7 +99,7 @@
       }
     };
 
-    // ===== DROPDOWN LOGIC (REGEX: ONLY skycafe-N) =====
+    // ===== DROPDOWN LOGIC (regex for skycafe-N only) =====
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -110,7 +109,7 @@
         const js = await res.json();
         const context = {};
         js.results
-          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name)) // regex: numbered only!
+          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name)) // only skycafe-N
           .forEach(dev => {
             const name = dev.name;
             const label = dev.label || name.replace("skycafe-", "SkyCafé ");
@@ -160,9 +159,10 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (IDENTICAL TO DASHBOARD) =====
+    // ===== FORENSIC: EXACT DASHBOARD DALLAS SENSOR LOGIC =====
     async function fetchDallasAddresses(deviceLabel) {
-      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceLabel}`; // **USE LABEL**
+      // This is IDENTICAL to your dashboard.js
+      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceLabel}`;
       try {
         const res = await fetch(url, {
           headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
@@ -188,16 +188,14 @@
     }
 
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
+      // IDENTICAL to dashboard.js
       const mapped = SENSOR_MAP[deviceLabel] || {};
-      const allAddr = [];
-      DALLAS_LIST.forEach(addr => {
-        if (!allAddr.includes(addr)) allAddr.push(addr);
-      });
+      const allAddr = DALLAS_LIST.slice(0, 5);
       Object.keys(mapped).forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
       while (allAddr.length < 5) allAddr.push(null);
-      return allAddr.slice(0, 5).map((addr, idx) => {
+      return allAddr.map((addr, idx) => {
         if (!addr) return {
           id: `empty${idx}`,
           label: "",
@@ -247,11 +245,10 @@
       const deviceSelect = document.getElementById("deviceSelect");
       selectedDeviceLabel = deviceSelect.value;
       document.getElementById("statusMsg").textContent = "Loading sensors...";
-      // Always clear table before rendering!
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      const liveDallas = selectedDeviceLabel ? await fetchDallasAddresses(selectedDeviceLabel) : [];
-      const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
+      const DALLAS_LIST = selectedDeviceLabel ? await fetchDallasAddresses(selectedDeviceLabel) : [];
+      const slots = buildSensorSlots(selectedDeviceLabel, DALLAS_LIST, fullMapData);
       renderSensorTable(slots);
       document.getElementById("statusMsg").textContent = "";
     }
