@@ -14,7 +14,6 @@ async function fetchSensorMapConfig() {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if (!res.ok) throw new Error("Failed to fetch devices");
-
     const js = await res.json();
     const context = {};
     js.results
@@ -39,14 +38,11 @@ function buildDeviceDropdownFromConfig(sensorMap) {
   const deviceSelect = document.getElementById("deviceSelect");
   const now = Math.floor(Date.now() / 1000);
   deviceSelect.innerHTML = "";
-
-  // Sort by numeric suffix (e.g., skycafe-5 < skycafe-10)
   const sortedEntries = Object.entries(sensorMap).sort(([a], [b]) => {
     const numA = parseInt(a.replace("skycafe-", ""), 10);
     const numB = parseInt(b.replace("skycafe-", ""), 10);
     return numA - numB;
   });
-
   sortedEntries.forEach(([dev, obj]) => {
     const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
     const lastSeen = obj.last_seen || 0;
@@ -57,7 +53,6 @@ function buildDeviceDropdownFromConfig(sensorMap) {
     opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
     deviceSelect.appendChild(opt);
   });
-
   let foundOnline = false;
   for (let i = 0; i < deviceSelect.options.length; i++) {
     if (deviceSelect.options[i].text.includes("Online")) {
@@ -141,13 +136,11 @@ async function fetchUbidotsVar(dev, variable, limit = 1) {
         variableCache[dev][v.label] = v.id;
       });
     }
-
     const varId = variableCache[dev][variable];
     if (!varId) {
       console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
       return [];
     }
-
     const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
@@ -159,176 +152,6 @@ async function fetchUbidotsVar(dev, variable, limit = 1) {
     return js.results || [];
   } catch (err) {
     console.error("[EXCEPTION] fetchUbidotsVar error:", err);
-    return [];
-  }
-}
-      const varList = await varRes.json();
-      variableCache[dev] = {};
-      varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
-      });
-    }
-
-    const varId = variableCache[dev][variable];
-    if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
-      return [];
-    }
-
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
-      return [];
-    }
-    const js = await valRes.json();
-    return js.results || [];
-  } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
-    return [];
-  }
-}
-      const varList = await varRes.json();
-      variableCache[dev] = {};
-      varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
-      });
-    }
-
-    const varId = variableCache[dev][variable];
-    if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
-      return [];
-    }
-
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
-      return [];
-    }
-    const js = await valRes.json();
-    return js.results || [];
-  } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
-    return [];
-  }
-}
-      const varList = await varRes.json();
-      variableCache[dev] = {};
-      varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
-      });
-    }
-
-    const varId = variableCache[dev][variable];
-    if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
-      return [];
-    }
-
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
-      return [];
-    }
-    const js = await valRes.json();
-    return js.results || [];
-  } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
-    return [];
-  }
-}
-      }
-      const varList = await varRes.json();
-      variableCache[dev] = {};
-      varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
-      });
-    }
-
-    const varId = variableCache[dev][variable];
-    if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
-      return [];
-    }
-
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
-      return [];
-    }
-    const js = await valRes.json();
-    return js.results || [];
-  } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
-    return [];
-  }
-}
-      const varList = await varRes.json();
-      variableCache[dev] = {};
-      varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
-      });
-    }
-
-    const varId = variableCache[dev][variable];
-    if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
-      return [];
-    }
-
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
-      return [];
-    }
-    const js = await valRes.json();
-    return js.results || [];
-  } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
-    return [];
-  }
-}/devices/${dev}/variables/`, {
-        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-      });
-      if (!varRes.ok) return [];
-      const varList = await varRes.json();
-      variableCache[dev] = {};
-      varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
-      });
-    }
-
-    const varId = variableCache[dev][variable];
-    if (!varId) return [];
-
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!valRes.ok) return [];
-    const js = await valRes.json();
-    return js.results || [];
-  } catch {
-    return [];
-  }
-
-  try {
-    const res = await fetch(url, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!res.ok) return [];
-    const js = await res.json();
-    return js.results || [];
-  } catch {
     return [];
   }
 }
@@ -402,13 +225,11 @@ async function poll(DEVICE, SENSORS) {
   }
   if (!ts) ts = iccArr[0]?.timestamp || Date.now();
   const iccidVal = iccArr[0]?.value || null;
-
   let readings = {};
   await Promise.all(SENSORS.filter(s => s.address).map(async s => {
     const vals = await fetchUbidotsVar(DEVICE, s.address, 1);
     if (vals.length && vals[0].value != null) readings[s.address] = parseFloat(vals[0].value);
   }));
-
   let [signalArr, voltArr, speedArr] = await Promise.all([
     fetchUbidotsVar(DEVICE, "signal", 1),
     fetchUbidotsVar(DEVICE, "volt", 1),
@@ -417,7 +238,6 @@ async function poll(DEVICE, SENSORS) {
   let signalVal = signalArr[0]?.value || null;
   let voltVal = voltArr[0]?.value || null;
   let speedVal = speedArr[0]?.value || null;
-
   drawLive(
     {
       ts, iccid: iccidVal, lat, lon, speed: speedVal,
@@ -437,17 +257,13 @@ function initMap() {
 }
 
 // ========== Main ==========
-
 async function updateAll() {
   const sensorMap = await fetchSensorMapConfig();
   buildDeviceDropdownFromConfig(sensorMap);
-
   const deviceSelect = document.getElementById("deviceSelect");
   const DEVICE = deviceSelect.value;
-
   const DALLAS_LIST = await fetchDallasAddresses(DEVICE);
   SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, sensorMap);
-
   initCharts(SENSORS);
   await updateCharts(DEVICE, SENSORS);
   if (!map) initMap();
@@ -457,7 +273,6 @@ async function updateAll() {
 document.addEventListener("DOMContentLoaded", () => {
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
-
   document.getElementById("deviceSelect").addEventListener("change", async function() {
     await updateAll();
   });
