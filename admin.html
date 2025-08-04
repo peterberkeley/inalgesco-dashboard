@@ -248,15 +248,15 @@
     }
 
     async function handleDeviceChange() {
-      const deviceSelect = document.getElementById("deviceSelect");
-      selectedDeviceLabel = deviceSelect.value;
-      const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
-      document.getElementById("statusMsg").textContent = "Loading sensors...";
-      const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
-      const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
-      renderSensorTable(slots);
-      document.getElementById("statusMsg").textContent = "";
-    }
+  const deviceSelect = document.getElementById("deviceSelect");
+  selectedDeviceLabel = deviceSelect.value;
+  document.getElementById("statusMsg").textContent = "Loading sensors...";
+  // *** FIXED: Always use the LABEL, not the ID ***
+  const liveDallas = selectedDeviceLabel ? await fetchDallasAddresses(selectedDeviceLabel) : [];
+  const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
+  renderSensorTable(slots);
+  document.getElementById("statusMsg").textContent = "";
+}
 
     function renderSensorTable(slots) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
