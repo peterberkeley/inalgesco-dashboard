@@ -1,7 +1,7 @@
 // ========== Configuration ==========
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
-const REFRESH_INTERVAL = 60000;
+const REFRESH_INTERVAL = 30000;
 const HIST = 50;
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
