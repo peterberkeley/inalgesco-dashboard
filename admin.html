@@ -110,7 +110,7 @@
         const js = await res.json();
         const context = {};
         js.results
-          .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
+          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name))
           .forEach(dev => {
             const name = dev.name;
             const label = dev.label || name.replace("skycafe-", "SkyCafé ");
