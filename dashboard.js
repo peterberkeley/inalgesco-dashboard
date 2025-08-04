@@ -6,7 +6,7 @@ const HIST = 50;
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
 let SENSORS = [];
-let variableCache = {};  // Made let so we can clear on device change
+let variableCache = {};
 
 // ========== Fetch devices from Ubidots API v2 ==========
 async function fetchSensorMapConfig() {
@@ -52,7 +52,7 @@ function buildDeviceDropdownFromConfig(sensorMap) {
     const isOnline = (now - lastSeen < 60);
     const dot = isOnline ? "🟢" : "⚪️";
     const opt = document.createElement("option");
-    opt.value = dev; // still label, for map lookup
+    opt.value = dev;
     opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
     deviceSelect.appendChild(opt);
   });
@@ -76,7 +76,10 @@ async function fetchDallasAddresses(deviceID) {
     const res = await fetch(url, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error("[fetchDallasAddresses]  API error:", res.status, "for deviceID:", deviceID);
+      return [];
+    }
     const js = await res.json();
     const now = Date.now();
     return js.results
@@ -87,7 +90,8 @@ async function fetchDallasAddresses(deviceID) {
       })
       .map(v => v.label)
       .sort();
-  } catch {
+  } catch (err) {
+    console.error("[fetchDallasAddresses]  Exception:", err, "for deviceID:", deviceID);
     return [];
   }
 }
@@ -123,37 +127,37 @@ function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
 async function fetchUbidotsVar(deviceID, variable, limit = 1) {
   try {
     if (!variableCache[deviceID]) {
-      // Get all variables for this device
+      // Get all variables for this device (by device ID)
       const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
         headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
       });
       if (!varRes.ok) {
-        console.error("[ERROR] Variable fetch failed for device:", deviceID);
+        console.error("[fetchUbidotsVar] Variable fetch failed for deviceID:", deviceID, "status:", varRes.status);
         return [];
       }
       const varList = await varRes.json();
       variableCache[deviceID] = {};
-      console.log("[DEBUG] Variables for", deviceID, varList.results.map(v => v.label));
+      console.log("[DEBUG] Variables for deviceID", deviceID, varList.results.map(v => v.label));
       varList.results.forEach(v => {
         variableCache[deviceID][v.label] = v.id;
       });
     }
     const varId = variableCache[deviceID][variable];
     if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${deviceID}'`);
+      console.warn(`[WARN] No variable ID found for '${variable}' on deviceID '${deviceID}'`);
       return [];
     }
     const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${deviceID}'`);
+      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on deviceID '${deviceID}' status: ${valRes.status}`);
       return [];
     }
     const js = await valRes.json();
     return js.results || [];
   } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
+    console.error("[EXCEPTION] fetchUbidotsVar error:", err, "for deviceID:", deviceID, "var:", variable);
     return [];
   }
 }
@@ -266,12 +270,12 @@ async function updateAll() {
   const deviceLabel = deviceSelect.value;
   const deviceID = sensorMap[deviceLabel]?.id;
   if (!deviceID) {
-    console.error("Device ID not found for label:", deviceLabel);
+    console.error("Device ID not found for label:", deviceLabel, sensorMap);
     return;
   }
-  variableCache = {}; // Clear cache on device change to prevent label/ID mismatch
+  variableCache = {};
   const DALLAS_LIST = await fetchDallasAddresses(deviceID);
-  SENSORS = buildSensorSlots(deviceLabel, DALLAS_LIST, sensorMap); // label used for display only
+  SENSORS = buildSensorSlots(deviceLabel, DALLAS_LIST, sensorMap);
   initCharts(SENSORS);
   await updateCharts(deviceID, SENSORS);
   if (!map) initMap();
