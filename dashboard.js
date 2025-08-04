@@ -314,3 +314,84 @@ document.addEventListener("DOMContentLoaded", () => {
     await updateAll();
   });
 });
+async function fetchCsvRows(deviceID, varLabel, start, end) {
+  // Make sure variableCache is up to date
+  if (!variableCache[deviceID]) {
+    const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    const varList = await varRes.json();
+    variableCache[deviceID] = {};
+    varList.results.forEach(v => variableCache[deviceID][v.label] = v.id);
+  }
+  const varId = variableCache[deviceID][varLabel];
+  if (!varId) return [];
+  let url = `${UBIDOTS_BASE}/variables/${varId}/values/?page_size=1000`;
+  if (start) url += `&start=${start}`;
+  if (end) url += `&end=${end}`;
+  const res = await fetch(url, {
+    headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+  });
+  if (!res.ok) return [];
+  const js = await res.json();
+  return js.results || [];
+}
+
+document.getElementById("dlBtn").onclick = async function() {
+  const deviceSelect = document.getElementById("deviceSelect");
+  const deviceLabel = deviceSelect.value;
+  const startDate = document.getElementById("start").value;
+  const endDate = document.getElementById("end").value;
+  const sensorMap = await fetchSensorMapConfig();
+  const deviceID = sensorMap[deviceLabel]?.id;
+  const DALLAS_LIST = await fetchDallasAddresses(deviceID);
+
+  // Use admin-mapped labels (if present)
+  let adminMapForDev = sensorMapConfig[deviceLabel] || {};
+  const addresses = DALLAS_LIST.slice(0, 5);
+
+  // Date conversion
+  let startMs = startDate ? new Date(startDate).getTime() : null;
+  let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
+
+  // Fetch data for each address
+  let csvRows = [];
+  let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
+  csvRows.push(header);
+
+  // Gather data for each sensor address, keyed by timestamp
+  let dataByTime = {};
+  for (let addr of addresses) {
+    if (!addr) continue;
+    let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
+    for (let v of vals) {
+      let t = v.timestamp;
+      if (!dataByTime[t]) dataByTime[t] = {};
+      dataByTime[t][addr] = v.value;
+    }
+  }
+
+  // Make rows, sorted by timestamp descending
+  let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
+  for (let t of times) {
+    let row = [new Date(t).toISOString()];
+    for (let addr of addresses) {
+      row.push(dataByTime[t][addr] !== undefined ? dataByTime[t][addr] : "");
+    }
+    csvRows.push(row);
+  }
+
+  // Download
+  let csv = csvRows.map(r => r.join(",")).join("\r\n");
+  let blob = new Blob([csv], {type: "text/csv"});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement("a");
+  a.href = url;
+  a.download = `truck_${deviceLabel}_${startDate || "all"}_${endDate || "all"}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    a.remove();
+  }, 500);
+};
