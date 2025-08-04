@@ -39,7 +39,15 @@ function buildDeviceDropdownFromConfig(sensorMap) {
   const deviceSelect = document.getElementById("deviceSelect");
   const now = Math.floor(Date.now() / 1000);
   deviceSelect.innerHTML = "";
-  Object.entries(sensorMap).forEach(([dev, obj]) => {
+
+  // Sort by numeric suffix (e.g., skycafe-5 < skycafe-10)
+  const sortedEntries = Object.entries(sensorMap).sort(([a], [b]) => {
+    const numA = parseInt(a.replace("skycafe-", ""), 10);
+    const numB = parseInt(b.replace("skycafe-", ""), 10);
+    return numA - numB;
+  });
+
+  sortedEntries.forEach(([dev, obj]) => {
     const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
     const lastSeen = obj.last_seen || 0;
     const isOnline = (now - lastSeen < 60);
@@ -49,6 +57,7 @@ function buildDeviceDropdownFromConfig(sensorMap) {
     opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
     deviceSelect.appendChild(opt);
   });
+
   let foundOnline = false;
   for (let i = 0; i < deviceSelect.options.length; i++) {
     if (deviceSelect.options[i].text.includes("Online")) {
