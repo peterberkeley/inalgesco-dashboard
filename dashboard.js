@@ -150,7 +150,7 @@ async function fetchUbidotsVar(dev, variable, limit = 1) {
   } catch {
     return [];
   }
-}/devices/${dev}/${variable}/values/?page_size=${limit}`;
+
   try {
     const res = await fetch(url, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
