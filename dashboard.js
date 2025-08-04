@@ -6,6 +6,7 @@ const HIST = 50;
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
 let SENSORS = [];
+let variableCache = {};  // Made let so we can clear on device change
 
 // ========== Fetch devices from Ubidots API v2 ==========
 async function fetchSensorMapConfig() {
@@ -22,9 +23,11 @@ async function fetchSensorMapConfig() {
         const name = dev.name;
         const label = dev.label || name.replace("skycafe-", "SkyCafé ");
         const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
+        const id = dev.id || dev._id || dev["$id"];
         context[name] = {
           label,
-          last_seen: Math.floor(lastSeen / 1000)
+          last_seen: Math.floor(lastSeen / 1000),
+          id
         };
       });
     return context;
@@ -49,7 +52,7 @@ function buildDeviceDropdownFromConfig(sensorMap) {
     const isOnline = (now - lastSeen < 60);
     const dot = isOnline ? "🟢" : "⚪️";
     const opt = document.createElement("option");
-    opt.value = dev;
+    opt.value = dev; // still label, for map lookup
     opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
     deviceSelect.appendChild(opt);
   });
@@ -67,8 +70,8 @@ function buildDeviceDropdownFromConfig(sensorMap) {
 // ========== Utility and chart functions ==========
 const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
 
-async function fetchDallasAddresses(dev) {
-  const url = `${UBIDOTS_BASE}/variables/?device=${dev}`;
+async function fetchDallasAddresses(deviceID) {
+  const url = `${UBIDOTS_BASE}/variables/?device=${deviceID}`;
   try {
     const res = await fetch(url, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
@@ -89,8 +92,8 @@ async function fetchDallasAddresses(dev) {
   }
 }
 
-function buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP) {
-  const mapped = SENSOR_MAP[DEVICE] || {};
+function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
+  const mapped = SENSOR_MAP[deviceLabel] || {};
   const allAddr = DALLAS_LIST.slice(0, 5);
   while (allAddr.length < 5) allAddr.push(null);
   return allAddr.map((addr, idx) => {
@@ -117,35 +120,34 @@ function buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP) {
   });
 }
 
-const variableCache = {};
-
-async function fetchUbidotsVar(dev, variable, limit = 1) {
+async function fetchUbidotsVar(deviceID, variable, limit = 1) {
   try {
-    if (!variableCache[dev]) {
-      const varRes = await fetch(`${UBIDOTS_BASE}/devices/${dev}/variables/`, {
+    if (!variableCache[deviceID]) {
+      // Get all variables for this device
+      const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
         headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
       });
       if (!varRes.ok) {
-        console.error("[ERROR] Variable fetch failed for device:", dev);
+        console.error("[ERROR] Variable fetch failed for device:", deviceID);
         return [];
       }
       const varList = await varRes.json();
-      variableCache[dev] = {};
-      console.log("[DEBUG] Variables for", dev, varList.results.map(v => v.label));
+      variableCache[deviceID] = {};
+      console.log("[DEBUG] Variables for", deviceID, varList.results.map(v => v.label));
       varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
+        variableCache[deviceID][v.label] = v.id;
       });
     }
-    const varId = variableCache[dev][variable];
+    const varId = variableCache[deviceID][variable];
     if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
+      console.warn(`[WARN] No variable ID found for '${variable}' on device '${deviceID}'`);
       return [];
     }
     const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
+      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${deviceID}'`);
       return [];
     }
     const js = await valRes.json();
@@ -174,10 +176,10 @@ function initCharts(SENSORS) {
   });
 }
 
-async function updateCharts(DEVICE, SENSORS) {
+async function updateCharts(deviceID, SENSORS) {
   await Promise.all(SENSORS.map(async (s, idx) => {
     if (!s.address) return;
-    const rows = await fetchUbidotsVar(DEVICE, s.address, HIST);
+    const rows = await fetchUbidotsVar(deviceID, s.address, HIST);
     if (!rows.length) return;
     s.chart.data.labels = rows.map(r => new Date(r.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }));
     s.chart.data.datasets[0].data = rows.map(r => {
@@ -211,10 +213,10 @@ function drawLive(data, SENSORS) {
   }
 }
 
-async function poll(DEVICE, SENSORS) {
+async function poll(deviceID, SENSORS) {
   const [gpsArr, iccArr] = await Promise.all([
-    fetchUbidotsVar(DEVICE, "gps"),
-    fetchUbidotsVar(DEVICE, "iccid")
+    fetchUbidotsVar(deviceID, "gps"),
+    fetchUbidotsVar(deviceID, "iccid")
   ]);
   let ts = null, lat = null, lon = null, speed = null;
   if (gpsArr[0]?.timestamp) ts = gpsArr[0].timestamp;
@@ -227,13 +229,13 @@ async function poll(DEVICE, SENSORS) {
   const iccidVal = iccArr[0]?.value || null;
   let readings = {};
   await Promise.all(SENSORS.filter(s => s.address).map(async s => {
-    const vals = await fetchUbidotsVar(DEVICE, s.address, 1);
+    const vals = await fetchUbidotsVar(deviceID, s.address, 1);
     if (vals.length && vals[0].value != null) readings[s.address] = parseFloat(vals[0].value);
   }));
   let [signalArr, voltArr, speedArr] = await Promise.all([
-    fetchUbidotsVar(DEVICE, "signal", 1),
-    fetchUbidotsVar(DEVICE, "volt", 1),
-    fetchUbidotsVar(DEVICE, "speed", 1)
+    fetchUbidotsVar(deviceID, "signal", 1),
+    fetchUbidotsVar(deviceID, "volt", 1),
+    fetchUbidotsVar(deviceID, "speed", 1)
   ]);
   let signalVal = signalArr[0]?.value || null;
   let voltVal = voltArr[0]?.value || null;
@@ -261,13 +263,19 @@ async function updateAll() {
   const sensorMap = await fetchSensorMapConfig();
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceSelect = document.getElementById("deviceSelect");
-  const DEVICE = deviceSelect.value;
-  const DALLAS_LIST = await fetchDallasAddresses(DEVICE);
-  SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, sensorMap);
+  const deviceLabel = deviceSelect.value;
+  const deviceID = sensorMap[deviceLabel]?.id;
+  if (!deviceID) {
+    console.error("Device ID not found for label:", deviceLabel);
+    return;
+  }
+  variableCache = {}; // Clear cache on device change to prevent label/ID mismatch
+  const DALLAS_LIST = await fetchDallasAddresses(deviceID);
+  SENSORS = buildSensorSlots(deviceLabel, DALLAS_LIST, sensorMap); // label used for display only
   initCharts(SENSORS);
-  await updateCharts(DEVICE, SENSORS);
+  await updateCharts(deviceID, SENSORS);
   if (!map) initMap();
-  poll(DEVICE, SENSORS);
+  poll(deviceID, SENSORS);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
