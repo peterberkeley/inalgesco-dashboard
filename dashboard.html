@@ -1,279 +1,146 @@
-// ========== Configuration ==========
-const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
-const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
-const REFRESH_INTERVAL = 60000;
-const HIST = 50;
-const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <!-- [1] META & TITLE -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sky Café Trucks Dashboard</title>
 
-let SENSORS = [];
+  <!-- [2] STYLES & LIBRARIES -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-// ========== Fetch devices from Ubidots API v2 ==========
-async function fetchSensorMapConfig() {
-  try {
-    const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!res.ok) throw new Error("Failed to fetch devices");
-    const js = await res.json();
-    const context = {};
-    js.results
-      .filter(dev => dev.name.startsWith("skycafe-"))
-      .forEach(dev => {
-        const name = dev.name;
-        const label = dev.label || name.replace("skycafe-", "SkyCafé ");
-        const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
-        context[name] = {
-          label,
-          last_seen: Math.floor(lastSeen / 1000)
-        };
-      });
-    return context;
-  } catch (err) {
-    console.error("Failed to fetch device list:", err);
-    return {};
-  }
-}
-
-function buildDeviceDropdownFromConfig(sensorMap) {
-  const deviceSelect = document.getElementById("deviceSelect");
-  const now = Math.floor(Date.now() / 1000);
-  deviceSelect.innerHTML = "";
-  const sortedEntries = Object.entries(sensorMap).sort(([a], [b]) => {
-    const numA = parseInt(a.replace("skycafe-", ""), 10);
-    const numB = parseInt(b.replace("skycafe-", ""), 10);
-    return numA - numB;
-  });
-  sortedEntries.forEach(([dev, obj]) => {
-    const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
-    const lastSeen = obj.last_seen || 0;
-    const isOnline = (now - lastSeen < 60);
-    const dot = isOnline ? "🟢" : "⚪️";
-    const opt = document.createElement("option");
-    opt.value = dev;
-    opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
-    deviceSelect.appendChild(opt);
-  });
-  let foundOnline = false;
-  for (let i = 0; i < deviceSelect.options.length; i++) {
-    if (deviceSelect.options[i].text.includes("Online")) {
-      deviceSelect.selectedIndex = i;
-      foundOnline = true;
-      break;
+  <!-- [3] CUSTOM STYLES -->
+  <style>
+    :root {
+      --color-bg: #f9fafb;
+      --color-card: #ffffff;
+      --color-text: #1f2937;
+      --color-primary: #3b82f6;
+      --color-secondary: #10b981;
+      --color-accent: #f59e0b;
     }
-  }
-  if (!foundOnline) deviceSelect.selectedIndex = 0;
-}
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: 'Inter', sans-serif;
+    }
+    #charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+    .chart-box {
+      background: var(--color-card);
+      border-radius: 1rem;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      padding-bottom: 2rem;
+      transition: box-shadow 0.2s ease;
+      height: 360px;
+    }
+    .chart-box:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+    .chart-box h2 { margin-bottom: 0.75rem; font-size: 1.25rem; }
+    .chart-box canvas { flex:1; width:100% !important; height:260px !important; }
 
-// ========== Utility and chart functions ==========
-const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
+    .export-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .export-controls input { flex: 1 1 8rem; min-width: 6rem; }
 
-async function fetchDallasAddresses(dev) {
-  const url = `${UBIDOTS_BASE}/variables/?device=${dev}`;
-  try {
-    const res = await fetch(url, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!res.ok) return [];
-    const js = await res.json();
-    const now = Date.now();
-    return js.results
-      .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
-      .filter(v => {
-        let t = (v.lastValue && v.lastValue.timestamp) || 0;
-        return (now - t) < 3 * 60 * 1000;
-      })
-      .map(v => v.label)
-      .sort();
-  } catch {
-    return [];
-  }
-}
+    #deviceSelect, #dlBtn {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    #deviceSelect:hover, #dlBtn:hover { background: var(--color-secondary); }
+    #dlBtn:disabled { background: gray; cursor:not-allowed; }
 
-function buildSensorSlots(DEVICE, DALLAS_LIST, SENSOR_MAP) {
-  const mapped = SENSOR_MAP[DEVICE] || {};
-  const allAddr = DALLAS_LIST.slice(0, 5);
-  while (allAddr.length < 5) allAddr.push(null);
-  return allAddr.map((addr, idx) => {
-    if (!addr) return {
-      id: `empty${idx}`,
-      label: "",
-      col: SENSOR_COLORS[idx],
-      chart: null,
-      address: null,
-      mapped: null,
-      calibration: 0
+    #start, #end { font-size: 60%; }
+
+    #spinner {
+      position: fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      border:4px solid rgba(0,0,0,0.1);
+      border-top:4px solid var(--color-primary);
+      border-radius:50%; width:40px; height:40px;
+      animation:spin 1s linear infinite; display:none; z-index:1000;
+    }
+    @keyframes spin { to{ transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <header class="p-4 shadow-md flex items-center" style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
+    <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png" alt="Sky Café Trucks" class="h-10" />
+    <h1 class="ml-4 text-2xl font-semibold text-white">Sky Café Trucks Dashboard</h1>
+    <div class="ml-auto">
+      <label class="text-white font-medium">
+        Device:
+        <select id="deviceSelect" class="ml-2 p-1 rounded"></select>
+      </label>
+    </div>
+  </header>
+  <button id="adminBtn" class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
+    Admin Settings
+  </button>
+  <script>
+    document.getElementById('adminBtn').onclick = () => {
+      window.open('admin.html', '_blank');
     };
-    let label = mapped[addr]?.label?.trim() || addr;
-    let offset = typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0;
-    return {
-      id: addr,
-      label,
-      col: SENSOR_COLORS[idx],
-      chart: null,
-      address: addr,
-      mapped: mapped[addr],
-      calibration: offset
-    };
-  });
-}
+  </script>
 
-const variableCache = {};
+  <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <section class="lg:col-span-1 space-y-6">
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="text-lg font-semibold mb-2">Current Fix & Sensors</h2>
+        <table id="latest" class="w-full text-sm"></table>
+      </div>
 
-async function fetchUbidotsVar(dev, variable, limit = 1) {
-  try {
-    if (!variableCache[dev]) {
-      const varRes = await fetch(`${UBIDOTS_BASE}/devices/${dev}/variables/`, {
-        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-      });
-      if (!varRes.ok) {
-        console.error("[ERROR] Variable fetch failed for device:", dev);
-        return [];
-      }
-      const varList = await varRes.json();
-      variableCache[dev] = {};
-      console.log("[DEBUG] Variables for", dev, varList.results.map(v => v.label));
-      varList.results.forEach(v => {
-        variableCache[dev][v.label] = v.id;
-      });
-    }
-    const varId = variableCache[dev][variable];
-    if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on device '${dev}'`);
-      return [];
-    }
-    const valRes = await fetch(`${UBIDOTS_BASE}/variables/${varId}/values/?page_size=${limit}`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on device '${dev}'`);
-      return [];
-    }
-    const js = await valRes.json();
-    return js.results || [];
-  } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err);
-    return [];
-  }
-}
+      <div class="bg-white rounded-2xl shadow p-4">
+        <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
+        <div class="export-controls mb-4">
+          <input type="date" id="start" class="border p-1 rounded" />
+          <input type="date" id="end" class="border p-1 rounded" />
+          <button id="dlBtn">Download</button>
+        </div>
+        <div id="expStatus" class="text-sm text-gray-600"></div>
+      </div>
 
-function initCharts(SENSORS) {
-  const ctr = document.getElementById("charts");
-  ctr.innerHTML = "";
-  SENSORS.forEach(s => {
-    s.chart = null;
-    const card = document.createElement("div");
-    card.className = "chart-box";
-    card.innerHTML = `<h2>${s.label || ""}</h2><canvas></canvas>`;
-    ctr.appendChild(card);
-    const ctx = card.querySelector("canvas").getContext("2d");
-    s.chart = new Chart(ctx, {
-      type: "line",
-      data: { labels: [], datasets: [{ data: [], borderColor: s.col, borderWidth: 2, tension: 0.25 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-    });
-  });
-}
+      <!-- Maintenance Section -->
+      <div class="maintenance p-4 bg-white rounded-2xl shadow">
+        <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
+        <p id="filterStatus" class="mb-2"></p>
+        <button id="resetFilterBtn" class="mr-2 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600" style="display:none;">
+          Reset Filter
+        </button>
+        <p id="serviceStatus" class="mt-4 mb-2 text-red-600 font-semibold"></p>
+        <button id="resetServiceBtn" class="px-3 py-1 rounded bg-gray-500 text-white hover:bg-gray-600" style="display:none;">
+          Reset Service
+        </button>
+      </div>
+    </section>
 
-async function updateCharts(DEVICE, SENSORS) {
-  await Promise.all(SENSORS.map(async (s, idx) => {
-    if (!s.address) return;
-    const rows = await fetchUbidotsVar(DEVICE, s.address, HIST);
-    if (!rows.length) return;
-    s.chart.data.labels = rows.map(r => new Date(r.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }));
-    s.chart.data.datasets[0].data = rows.map(r => {
-      let val = parseFloat(r.value);
-      if (typeof s.calibration === "number") val += s.calibration;
-      return isNaN(val) ? null : val;
-    });
-    s.chart.update();
-  }));
-}
+    <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div id="charts" class="col-span-2"></div>
+      <div class="bg-white rounded-2xl shadow p-4 col-span-2 md:col-span-2">
+        <h2 class="text-lg font-semibold mb-2">Map View</h2>
+        <div id="map" class="h-64 rounded-lg"></div>
+      </div>
+    </section>
+  </main>
 
-function drawLive(data, SENSORS) {
-  let { ts, iccid, lat, lon, speed, signal, volt, addresses, readings } = data;
-  if (!ts) ts = Date.now();
-  const sensorRows = SENSORS.map((s, idx) =>
-    [s.label, s.address && readings[s.address] != null ? fmt(readings[s.address] + (s.calibration || 0), 1) : ""]
-  );
-  const rows = [
-    ["Local Time", ts ? new Date(ts).toLocaleString() : "–"],
-    ["ICCID", iccid || "–"],
-    ["Lat", fmt(lat, 6)], ["Lon", fmt(lon, 6)],
-    ["Speed (km/h)", fmt(speed, 1)], ["RSSI (dBm)", fmt(signal, 0)],
-    ["Volt (mV)", fmt(volt, 2)]
-  ].concat(sensorRows);
-  document.getElementById("latest").innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
-  if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
-    marker.setLatLng([lat, lon]);
-    trail.push([lat, lon]); if (trail.length > 50) trail.shift();
-    polyline.setLatLngs(trail);
-    map.setView([lat, lon], Math.max(map.getZoom(), 13));
-  }
-}
-
-async function poll(DEVICE, SENSORS) {
-  const [gpsArr, iccArr] = await Promise.all([
-    fetchUbidotsVar(DEVICE, "gps"),
-    fetchUbidotsVar(DEVICE, "iccid")
-  ]);
-  let ts = null, lat = null, lon = null, speed = null;
-  if (gpsArr[0]?.timestamp) ts = gpsArr[0].timestamp;
-  if (gpsArr[0]?.context) {
-    lat = gpsArr[0].context.lat;
-    lon = gpsArr[0].context.lng;
-    speed = gpsArr[0].context.speed;
-  }
-  if (!ts) ts = iccArr[0]?.timestamp || Date.now();
-  const iccidVal = iccArr[0]?.value || null;
-  let readings = {};
-  await Promise.all(SENSORS.filter(s => s.address).map(async s => {
-    const vals = await fetchUbidotsVar(DEVICE, s.address, 1);
-    if (vals.length && vals[0].value != null) readings[s.address] = parseFloat(vals[0].value);
-  }));
-  let [signalArr, voltArr, speedArr] = await Promise.all([
-    fetchUbidotsVar(DEVICE, "signal", 1),
-    fetchUbidotsVar(DEVICE, "volt", 1),
-    fetchUbidotsVar(DEVICE, "speed", 1)
-  ]);
-  let signalVal = signalArr[0]?.value || null;
-  let voltVal = voltArr[0]?.value || null;
-  let speedVal = speedArr[0]?.value || null;
-  drawLive(
-    {
-      ts, iccid: iccidVal, lat, lon, speed: speedVal,
-      signal: signalVal, volt: voltVal, addresses: SENSORS.map(s => s.address), readings
-    },
-    SENSORS
-  );
-}
-
-// ========== Map init ==========
-let map, marker, polyline, trail = [];
-function initMap() {
-  map = L.map("map").setView([0, 0], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
-  marker = L.marker([0, 0]).addTo(map);
-  polyline = L.polyline([], { weight: 3 }).addTo(map);
-}
-
-// ========== Main ==========
-async function updateAll() {
-  const sensorMap = await fetchSensorMapConfig();
-  buildDeviceDropdownFromConfig(sensorMap);
-  const deviceSelect = document.getElementById("deviceSelect");
-  const DEVICE = deviceSelect.value;
-  const DALLAS_LIST = await fetchDallasAddresses(DEVICE);
-  SENSORS = buildSensorSlots(DEVICE, DALLAS_LIST, sensorMap);
-  initCharts(SENSORS);
-  await updateCharts(DEVICE, SENSORS);
-  if (!map) initMap();
-  poll(DEVICE, SENSORS);
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  updateAll();
-  setInterval(updateAll, REFRESH_INTERVAL);
-  document.getElementById("deviceSelect").addEventListener("change", async function() {
-    await updateAll();
-  });
-});
+  <script src="dashboard.js"></script>
+</body>
+</html>
