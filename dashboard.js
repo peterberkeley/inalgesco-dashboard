@@ -338,60 +338,69 @@ async function fetchCsvRows(deviceID, varLabel, start, end) {
 }
 
 document.getElementById("dlBtn").onclick = async function() {
-  const deviceSelect = document.getElementById("deviceSelect");
-  const deviceLabel = deviceSelect.value;
-  const startDate = document.getElementById("start").value;
-  const endDate = document.getElementById("end").value;
-  const sensorMap = await fetchSensorMapConfig();
-  const deviceID = sensorMap[deviceLabel]?.id;
-  const DALLAS_LIST = await fetchDallasAddresses(deviceID);
+  // Show status
+  const expStatus = document.getElementById("expStatus");
+  expStatus.textContent = "Downloading...";
+  try {
+    const deviceSelect = document.getElementById("deviceSelect");
+    const deviceLabel = deviceSelect.value;
+    const startDate = document.getElementById("start").value;
+    const endDate = document.getElementById("end").value;
+    const sensorMap = await fetchSensorMapConfig();
+    const deviceID = sensorMap[deviceLabel]?.id;
+    const DALLAS_LIST = await fetchDallasAddresses(deviceID);
 
-  // Use admin-mapped labels (if present)
-  let adminMapForDev = sensorMapConfig[deviceLabel] || {};
-  const addresses = DALLAS_LIST.slice(0, 5);
+    // Use admin-mapped labels (if present)
+    let adminMapForDev = sensorMapConfig[deviceLabel] || {};
+    const addresses = DALLAS_LIST.slice(0, 5);
 
-  // Date conversion
-  let startMs = startDate ? new Date(startDate).getTime() : null;
-  let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
+    // Date conversion
+    let startMs = startDate ? new Date(startDate).getTime() : null;
+    let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
 
-  // Fetch data for each address
-  let csvRows = [];
-  let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
-  csvRows.push(header);
+    // Fetch data for each address
+    let csvRows = [];
+    let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
+    csvRows.push(header);
 
-  // Gather data for each sensor address, keyed by timestamp
-  let dataByTime = {};
-  for (let addr of addresses) {
-    if (!addr) continue;
-    let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
-    for (let v of vals) {
-      let t = v.timestamp;
-      if (!dataByTime[t]) dataByTime[t] = {};
-      dataByTime[t][addr] = v.value;
-    }
-  }
-
-  // Make rows, sorted by timestamp descending
-  let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
-  for (let t of times) {
-    let row = [new Date(t).toISOString()];
+    // Gather data for each sensor address, keyed by timestamp
+    let dataByTime = {};
     for (let addr of addresses) {
-      row.push(dataByTime[t][addr] !== undefined ? dataByTime[t][addr] : "");
+      if (!addr) continue;
+      let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
+      for (let v of vals) {
+        let t = v.timestamp;
+        if (!dataByTime[t]) dataByTime[t] = {};
+        dataByTime[t][addr] = v.value;
+      }
     }
-    csvRows.push(row);
-  }
 
-  // Download
-  let csv = csvRows.map(r => r.join(",")).join("\r\n");
-  let blob = new Blob([csv], {type: "text/csv"});
-  let url = URL.createObjectURL(blob);
-  let a = document.createElement("a");
-  a.href = url;
-  a.download = `truck_${deviceLabel}_${startDate || "all"}_${endDate || "all"}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-    a.remove();
-  }, 500);
+    // Make rows, sorted by timestamp descending
+    let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
+    for (let t of times) {
+      let row = [new Date(t).toISOString()];
+      for (let addr of addresses) {
+        row.push(dataByTime[t][addr] !== undefined ? dataByTime[t][addr] : "");
+      }
+      csvRows.push(row);
+    }
+
+    // Download
+    let csv = csvRows.map(r => r.join(",")).join("\r\n");
+    let blob = new Blob([csv], {type: "text/csv"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = `truck_${deviceLabel}_${startDate || "all"}_${endDate || "all"}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 500);
+    expStatus.textContent = "Download complete!";
+  } catch (err) {
+    document.getElementById("expStatus").textContent = "Download failed.";
+    console.error(err);
+  }
 };
