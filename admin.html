@@ -100,7 +100,7 @@
       }
     };
 
-    // ===== DROPDOWN LOGIC (REMOVES NON-NUMBERED DEVICES) =====
+    // ===== DROPDOWN LOGIC (REGEX: ONLY skycafe-N) =====
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -110,7 +110,7 @@
         const js = await res.json();
         const context = {};
         js.results
-          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name)) // ONLY skycafe-N
+          .filter(dev => dev.name && /^skycafe-\d+$/.test(dev.name)) // regex: numbered only!
           .forEach(dev => {
             const name = dev.name;
             const label = dev.label || name.replace("skycafe-", "SkyCafé ");
@@ -160,15 +160,15 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (AS DASHBOARD, NO UPPERCASE) =====
-    async function fetchDallasAddresses(deviceID) {
-      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}`;
+    // ===== DALLAS SENSOR FETCH & SLOT LOGIC (IDENTICAL TO DASHBOARD) =====
+    async function fetchDallasAddresses(deviceLabel) {
+      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceLabel}`; // **USE LABEL**
       try {
         const res = await fetch(url, {
           headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
         });
         if (!res.ok) {
-          console.error("[fetchDallasAddresses] API error:", res.status, "for deviceID:", deviceID);
+          console.error("[fetchDallasAddresses] API error:", res.status, "for device:", deviceLabel);
           return [];
         }
         const js = await res.json();
@@ -182,7 +182,7 @@
           .map(v => v.label)
           .sort();
       } catch (err) {
-        console.error("[fetchDallasAddresses] Exception:", err, "for deviceID:", deviceID);
+        console.error("[fetchDallasAddresses] Exception:", err, "for device:", deviceLabel);
         return [];
       }
     }
@@ -246,13 +246,11 @@
     async function handleDeviceChange() {
       const deviceSelect = document.getElementById("deviceSelect");
       selectedDeviceLabel = deviceSelect.value;
-      const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
       document.getElementById("statusMsg").textContent = "Loading sensors...";
-      // ---- FULLY CLEAR THE SENSOR TABLE EACH TIME ----
+      // Always clear table before rendering!
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
-      // ---- Then fetch and render
-      const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
+      const liveDallas = selectedDeviceLabel ? await fetchDallasAddresses(selectedDeviceLabel) : [];
       const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
       renderSensorTable(slots);
       document.getElementById("statusMsg").textContent = "";
