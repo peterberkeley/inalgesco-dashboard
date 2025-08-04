@@ -1,6 +1,6 @@
 // ========== Configuration ==========
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
-const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
+const UBIDOTS_BASE = "https://industrial.ubidots.com/api/v1.6";
 const REFRESH_INTERVAL = 30000;
 const HIST = 50;
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
@@ -168,7 +168,7 @@ function drawLive(data, SENSORS) {
     ["Volt (mV)", fmt(volt, 2)]
   ].concat(sensorRows);
   document.getElementById("latest").innerHTML = rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
-  if (isFinite(lat) && isFinite(lon)) {
+  if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
     marker.setLatLng([lat, lon]);
     trail.push([lat, lon]); if (trail.length > 50) trail.shift();
     polyline.setLatLngs(trail);
