@@ -1,6 +1,5 @@
 // ========== Configuration ==========
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
-const CONFIG_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v1.6";
 const REFRESH_INTERVAL = 60000;
 const HIST = 50;
@@ -8,16 +7,28 @@ const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
 let SENSORS = [];
 
-// ========== Dropdown population from config ==========
+// ========== Fetch devices from Ubidots and mark online/offline ==========
 async function fetchSensorMapConfig() {
-  const CONFIG_URL = `${UBIDOTS_BASE}/devices/config/sensor_map/values?page_size=1&token=${CONFIG_TOKEN}`;
   try {
-    const res = await fetch(CONFIG_URL);
-    if (!res.ok) throw new Error("Config fetch failed");
+    const res = await fetch(`${UBIDOTS_BASE}/devices/?token=${UBIDOTS_ACCOUNT_TOKEN}`);
+    if (!res.ok) throw new Error("Failed to fetch devices");
+
     const js = await res.json();
-    return (js.results && js.results[0] && js.results[0].context) ? js.results[0].context : {};
+    const context = {};
+    js.results
+      .filter(dev => dev.name.startsWith("skycafe-"))
+      .forEach(dev => {
+        const name = dev.name;
+        const label = dev.label || name.replace("skycafe-", "SkyCafé ");
+        const lastSeen = new Date(dev.last_activity).getTime();
+        context[name] = {
+          label,
+          last_seen: Math.floor(lastSeen / 1000)
+        };
+      });
+    return context;
   } catch (err) {
-    console.error("Failed to fetch sensor map config:", err);
+    console.error("Failed to fetch device list:", err);
     return {};
   }
 }
