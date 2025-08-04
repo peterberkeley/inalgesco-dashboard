@@ -8,6 +8,26 @@ const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 let SENSORS = [];
 let variableCache = {};
 
+// ========== Sensor Mapping from Admin ==========
+let sensorMapConfig = {};
+
+async function fetchSensorMapMapping() {
+  try {
+    const res = await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?page_size=1', {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    const js = await res.json();
+    if (js.results && js.results[0] && js.results[0].context) {
+      sensorMapConfig = js.results[0].context;
+    } else {
+      sensorMapConfig = {};
+    }
+  } catch (e) {
+    console.error("Failed to fetch sensor_map:", e);
+    sensorMapConfig = {};
+  }
+}
+
 // ========== Fetch devices from Ubidots API v2 ==========
 async function fetchSensorMapConfig() {
   try {
@@ -110,8 +130,12 @@ function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
       mapped: null,
       calibration: 0
     };
-    let label = mapped[addr]?.label?.trim() || addr;
-    let offset = typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0;
+    // Use admin-mapped label if available, else fallback to address
+    let adminMapForDev = sensorMapConfig[deviceLabel] || {};
+    let label = adminMapForDev[addr]?.label?.trim() || mapped[addr]?.label?.trim() || addr;
+    let offset = typeof adminMapForDev[addr]?.offset === "number"
+      ? adminMapForDev[addr].offset
+      : (typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0);
     return {
       id: addr,
       label,
@@ -137,30 +161,27 @@ async function fetchUbidotsVar(deviceID, variable, limit = 1) {
       }
       const varList = await varRes.json();
       variableCache[deviceID] = {};
-      console.log("[DEBUG] Variables for deviceID", deviceID, varList.results.map(v => v.label));
+      // console.log("[DEBUG] Variables for deviceID", deviceID, varList.results.map(v => v.label));
       varList.results.forEach(v => {
         variableCache[deviceID][v.label] = v.id;
       });
     }
     const varId = variableCache[deviceID][variable];
     if (!varId) {
-      console.warn(`[WARN] No variable ID found for '${variable}' on deviceID '${deviceID}'`);
+      // console.warn(`[WARN] No variable ID found for '${variable}' on deviceID '${deviceID}'`);
       return [];
     }
-    // ==== DEBUG PRINT: FETCH URL ====
-    console.log("[fetchUbidotsVar] Fetch URL:", `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=${limit}`);
-    // ===============================
     const valRes = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=${limit}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if (!valRes.ok) {
-      console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on deviceID '${deviceID}' status: ${valRes.status}`);
+      // console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on deviceID '${deviceID}' status: ${valRes.status}`);
       return [];
     }
     const js = await valRes.json();
     return js.results || [];
   } catch (err) {
-    console.error("[EXCEPTION] fetchUbidotsVar error:", err, "for deviceID:", deviceID, "var:", variable);
+    // console.error("[EXCEPTION] fetchUbidotsVar error:", err, "for deviceID:", deviceID, "var:", variable);
     return [];
   }
 }
@@ -267,6 +288,7 @@ function initMap() {
 
 // ========== Main ==========
 async function updateAll() {
+  await fetchSensorMapMapping(); // << fetch mapping from admin
   const sensorMap = await fetchSensorMapConfig();
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceSelect = document.getElementById("deviceSelect");
