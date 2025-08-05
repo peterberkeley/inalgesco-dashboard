@@ -9,6 +9,15 @@ let SENSORS = [];
 let variableCache = {};
 let sensorMapConfig = {};
 
+// ========== Utility: onReady ==========
+function onReady(fn) {
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(fn, 1);
+  } else {
+    document.addEventListener("DOMContentLoaded", fn);
+  }
+}
+
 // ========== Sensor Mapping from Admin ==========
 async function fetchSensorMapMapping() {
   try {
@@ -86,7 +95,6 @@ function buildDeviceDropdownFromConfig(sensorMap) {
   if (!foundOnline) deviceSelect.selectedIndex = 0;
 }
 
-// ========== Utility and chart functions ==========
 const fmt = (v, p = 1) => (v == null || isNaN(v)) ? "–" : (+v).toFixed(p);
 
 async function fetchDallasAddresses(deviceID) {
@@ -146,6 +154,7 @@ function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
   });
 }
 
+// ... rest of code in next message ...
 async function fetchUbidotsVar(deviceID, variable, limit = 1) {
   try {
     if (!variableCache[deviceID]) {
@@ -263,6 +272,15 @@ async function poll(deviceID, SENSORS) {
   );
 }
 
+// ========== Map init ==========
+let map, marker, polyline, trail = [];
+function initMap() {
+  map = L.map("map").setView([0, 0], 2);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
+  marker = L.marker([0, 0]).addTo(map);
+  polyline = L.polyline([], { weight: 3 }).addTo(map);
+}
+
 // ========== MAINTENANCE UI & RESET LOGIC ==========
 const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
 
@@ -351,11 +369,11 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID) {
 }
 
 async function renderMaintenanceBox(truckLabel, deviceID) {
-  const box = document.getElementById("maintenanceBox");
-  // DEBUG:
-  // console.log("Rendering maintenance box for", truckLabel, deviceID, box);
+  // Defer if #maintenanceBox is not in DOM yet!
+  let box = document.getElementById("maintenanceBox");
   if (!box) {
-    console.error("No #maintenanceBox found in DOM");
+    // Try again after DOMContentLoaded
+    onReady(() => renderMaintenanceBox(truckLabel, deviceID));
     return;
   }
   let state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
@@ -400,7 +418,7 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
   };
 }
 
-// ========== CSV Download (robust version) ==========
+// ========== CSV Download ==========
 async function fetchCsvRows(deviceID, varLabel, start, end) {
   try {
     if (!variableCache[deviceID]) {
@@ -427,83 +445,88 @@ async function fetchCsvRows(deviceID, varLabel, start, end) {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  // Main startup -- runs AFTER DOM fully loaded!
+document.getElementById("dlBtn").onclick = async function() {
+  const expStatus = document.getElementById("expStatus");
+  expStatus.textContent = "Downloading...";
+  try {
+    const deviceSelect = document.getElementById("deviceSelect");
+    const deviceLabel = deviceSelect.value;
+    const startDate = document.getElementById("start").value;
+    const endDate = document.getElementById("end").value;
+    const sensorMap = await fetchSensorMapConfig();
+    const deviceID = sensorMap[deviceLabel]?.id;
+
+    const slots = SENSORS;
+    if (!slots || !slots.length) {
+      expStatus.textContent = "No sensors available for this truck.";
+      return;
+    }
+    let adminMapForDev = sensorMapConfig[deviceLabel] || {};
+    const addresses = slots.map(s => s.address).filter(addr => !!addr);
+    if (!addresses.length) {
+      expStatus.textContent = "No valid sensor addresses.";
+      return;
+    }
+
+    let startMs = startDate ? new Date(startDate).getTime() : null;
+    let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
+
+    let csvRows = [];
+    let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
+    csvRows.push(header);
+
+    let dataByTime = {};
+    for (let addr of addresses) {
+      let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
+      for (let v of vals) {
+        let t = v.timestamp;
+        if (!dataByTime[t]) dataByTime[t] = {};
+        dataByTime[t][addr] = v.value;
+      }
+    }
+
+    let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
+    if (!times.length) {
+      expStatus.textContent = "No data found for the selected range.";
+      return;
+    }
+    for (let t of times) {
+      let row = [new Date(t).toISOString()];
+      for (let addr of addresses) {
+        row.push(dataByTime[t][addr] !== undefined ? dataByTime[t][addr] : "");
+      }
+      csvRows.push(row);
+    }
+
+    let csv = csvRows.map(r => r.join(",")).join("\r\n");
+    let blob = new Blob([csv], {type: "text/csv"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = `truck_${deviceLabel}_${startDate || "all"}_${endDate || "all"}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 500);
+    expStatus.textContent = "Download complete!";
+  } catch (err) {
+    expStatus.textContent = "Download failed.";
+  }
+};
+
+// ========== Main ==========
+onReady(() => {
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
   document.getElementById("deviceSelect").addEventListener("change", async function() {
     await updateAll();
   });
-  // CSV Download button (also safe here)
-  document.getElementById("dlBtn").onclick = async function() {
-    const expStatus = document.getElementById("expStatus");
-    expStatus.textContent = "Downloading...";
-    try {
-      const deviceSelect = document.getElementById("deviceSelect");
-      const deviceLabel = deviceSelect.value;
-      const startDate = document.getElementById("start").value;
-      const endDate = document.getElementById("end").value;
-      const sensorMap = await fetchSensorMapConfig();
-      const deviceID = sensorMap[deviceLabel]?.id;
-      const slots = SENSORS;
-      if (!slots || !slots.length) {
-        expStatus.textContent = "No sensors available for this truck.";
-        return;
-      }
-      let adminMapForDev = sensorMapConfig[deviceLabel] || {};
-      const addresses = slots.map(s => s.address).filter(addr => !!addr);
-      if (!addresses.length) {
-        expStatus.textContent = "No valid sensor addresses.";
-        return;
-      }
-      let startMs = startDate ? new Date(startDate).getTime() : null;
-      let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
-      let csvRows = [];
-      let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
-      csvRows.push(header);
-      let dataByTime = {};
-      for (let addr of addresses) {
-        let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
-        for (let v of vals) {
-          let t = v.timestamp;
-          if (!dataByTime[t]) dataByTime[t] = {};
-          dataByTime[t][addr] = v.value;
-        }
-      }
-      let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
-      if (!times.length) {
-        expStatus.textContent = "No data found for the selected range.";
-        return;
-      }
-      for (let t of times) {
-        let row = [new Date(t).toISOString()];
-        for (let addr of addresses) {
-          row.push(dataByTime[t][addr] !== undefined ? dataByTime[t][addr] : "");
-        }
-        csvRows.push(row);
-      }
-      let csv = csvRows.map(r => r.join(",")).join("\r\n");
-      let blob = new Blob([csv], {type: "text/csv"});
-      let url = URL.createObjectURL(blob);
-      let a = document.createElement("a");
-      a.href = url;
-      a.download = `truck_${deviceLabel}_${startDate || "all"}_${endDate || "all"}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        a.remove();
-      }, 500);
-      expStatus.textContent = "Download complete!";
-    } catch (err) {
-      expStatus.textContent = "Download failed.";
-    }
-  };
 });
 
-// ========== MAIN UPDATE FUNCTION ==========
 async function updateAll() {
-  await fetchSensorMapMapping(); // << fetch mapping from admin
+  await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceSelect = document.getElementById("deviceSelect");
