@@ -431,6 +431,70 @@ document.getElementById("dlBtn").onclick = async function() {
   }
 };
 
+// ========== MAINTENANCE LOGIC (step 1: state, decrement, save) ==========
+
+// --- Per-truck, synced with Ubidots config context
+const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
+
+function getTodayString() {
+  // Returns "YYYY-MM-DD" in UTC (for consistent decrement)
+  const now = new Date();
+  return now.toISOString().slice(0,10);
+}
+
+// Get maintenance state for a truck (from sensorMapConfig, fallback defaults)
+function getMaintState(truckLabel) {
+  const map = sensorMapConfig[truckLabel] || {};
+  // Keep keys in sensor_map context: "filterDays", "serviceDays", "lastDecrementDate"
+  return {
+    filterDays: typeof map.filterDays === "number" ? map.filterDays : MAINTENANCE_DEFAULTS.filterDays,
+    serviceDays: typeof map.serviceDays === "number" ? map.serviceDays : MAINTENANCE_DEFAULTS.serviceDays,
+    lastDecrementDate: map.lastDecrementDate || null,
+  };
+}
+
+// Save maintenance state to Ubidots context (overwrites sensor_map context for this truck only)
+async function saveMaintState(truckLabel, maintObj) {
+  // Always merge into sensorMapConfig for the truck (keep all keys, don't wipe sensor label mappings)
+  if (!sensorMapConfig[truckLabel]) sensorMapConfig[truckLabel] = {};
+  Object.assign(sensorMapConfig[truckLabel], maintObj);
+  // Save full sensorMapConfig as context
+  await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?token=' + UBIDOTS_ACCOUNT_TOKEN, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value: 0, context: sensorMapConfig })
+  });
+}
+
+// Run this after SENSORS are built and before UI render
+async function checkAndUpdateMaintCounters(truckLabel) {
+  let state = getMaintState(truckLabel);
+  let today = getTodayString();
+  if (state.lastDecrementDate === today) return state; // Already decremented today
+
+  // Activity detection: any sensor seen with value today
+  let hasActivityToday = false;
+  for (let s of SENSORS) {
+    if (!s.address) continue;
+    let vals = await fetchUbidotsVar(sensorMapConfig[truckLabel]?.id || null, s.address, 1);
+    if (vals && vals.length && vals[0].timestamp) {
+      let dt = new Date(vals[0].timestamp);
+      let valDay = dt.toISOString().slice(0,10);
+      if (valDay === today) {
+        hasActivityToday = true;
+        break;
+      }
+    }
+  }
+  if (hasActivityToday) {
+    // Only decrement if both counters > 0 (never negative)
+    if (state.filterDays > 0) state.filterDays--;
+    if (state.serviceDays > 0) state.serviceDays--;
+    state.lastDecrementDate = today;
+    await saveMaintState(truckLabel, state);
+  }
+  return state;
+}
 
 
 
