@@ -318,9 +318,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // ========== MAINTENANCE UI & RESET LOGIC ==========
 
-// Utility to show a modal input prompt in the center of the screen
 function showPromptModal(message, callback) {
-  // Remove any previous modal
   const old = document.getElementById("promptModal");
   if (old) old.remove();
 
@@ -359,12 +357,59 @@ function showPromptModal(message, callback) {
   };
 }
 
-// Call this to update the Maintenance UI box in the dashboard
+const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
+
+function getMaintState(truckLabel) {
+  const map = sensorMapConfig[truckLabel] || {};
+  return {
+    filterDays: typeof map.filterDays === "number" ? map.filterDays : MAINTENANCE_DEFAULTS.filterDays,
+    serviceDays: typeof map.serviceDays === "number" ? map.serviceDays : MAINTENANCE_DEFAULTS.serviceDays,
+    lastDecrementDate: map.lastDecrementDate || null,
+  };
+}
+
+async function saveMaintState(truckLabel, maintObj) {
+  if (!sensorMapConfig[truckLabel]) sensorMapConfig[truckLabel] = {};
+  Object.assign(sensorMapConfig[truckLabel], maintObj);
+  await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?token=' + UBIDOTS_ACCOUNT_TOKEN, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value: 0, context: sensorMapConfig })
+  });
+}
+
+async function checkAndUpdateMaintCounters(truckLabel) {
+  let state = getMaintState(truckLabel);
+  let today = (new Date()).toISOString().slice(0,10);
+  if (state.lastDecrementDate === today) return state;
+  let hasActivityToday = false;
+  for (let s of SENSORS) {
+    if (!s.address) continue;
+    let vals = await fetchUbidotsVar(sensorMapConfig[truckLabel]?.id || null, s.address, 1);
+    if (vals && vals.length && vals[0].timestamp) {
+      let dt = new Date(vals[0].timestamp);
+      let valDay = dt.toISOString().slice(0,10);
+      if (valDay === today) {
+        hasActivityToday = true;
+        break;
+      }
+    }
+  }
+  if (hasActivityToday) {
+    if (state.filterDays > 0) state.filterDays--;
+    if (state.serviceDays > 0) state.serviceDays--;
+    state.lastDecrementDate = today;
+    await saveMaintState(truckLabel, state);
+  }
+  return state;
+}
+
 async function renderMaintenanceBox(truckLabel) {
   const box = document.getElementById("maintenanceBox");
   if (!box) return;
   let state = await checkAndUpdateMaintCounters(truckLabel);
-
+  // Add debug:
+  console.log("Maintenance render for", truckLabel, state);
   function color(days) { return days <= 0 ? "red" : "#1f2937"; }
   box.innerHTML = `
     <div style="margin-bottom:0.8em;">
@@ -382,8 +427,6 @@ async function renderMaintenanceBox(truckLabel) {
       <button id="resetServiceBtn" class="btn" style="margin-left:1.2em; font-size:0.95em; padding:0.2em 1em;">Reset</button>
     </div>
   `;
-
-  // Button handlers
   document.getElementById("resetFilterBtn").onclick = () => {
     showPromptModal("Enter code to reset filter (60 days):", async (val, close, showError) => {
       if (val === "0000") {
@@ -407,6 +450,7 @@ async function renderMaintenanceBox(truckLabel) {
     });
   };
 }
+
 
 // ========== CSV Download (robust version) ==========
 
