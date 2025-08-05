@@ -80,6 +80,15 @@
     </div>
   </header>
 
+  <button id="adminBtn" class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
+    Admin Settings
+  </button>
+  <script>
+    document.getElementById('adminBtn').onclick = () => {
+      window.open('admin.html', '_blank');
+    };
+  </script>
+
   <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
     <!-- LEFT SIDEBAR -->
     <section class="lg:col-span-1 space-y-6">
@@ -99,10 +108,10 @@
         </div>
         <div id="expStatus" class="text-sm text-gray-600"></div>
       </div>
-      <!-- MAINTENANCE CARD -->
+      <!-- MAINTENANCE CARD — now correctly present -->
       <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
         <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
-        <!-- JS will replace this content -->
+        <!-- dashboard.js will replace this innerHTML -->
       </div>
     </section>
 
@@ -118,18 +127,10 @@
       </div>
     </section>
   </main>
+  <!-- spinner overlay -->
+  <div id="spinner"></div>
 
-  <!-- ADMIN BUTTON -->
-  <button id="adminBtn"
-          class="fixed bottom-4 right-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
-    Admin Settings
-  </button>
-  <script>
-    document.getElementById('adminBtn').onclick = () => {
-      window.open('admin.html', '_blank');
-    };
-  </script>
-  <!-- Dashboard JS -->
+  <!-- main dashboard logic -->
   <script src="dashboard.js"></script>
 </body>
 </html>
