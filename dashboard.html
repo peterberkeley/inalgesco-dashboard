@@ -1,18 +1,13 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
-  <!-- [1] META & TITLE -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sky Café Trucks Dashboard</title>
-
-  <!-- [2] STYLES & LIBRARIES -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-  <!-- [3] CUSTOM STYLES -->
   <style>
     :root {
       --color-bg: #f9fafb;
@@ -118,7 +113,7 @@
         <div id="expStatus" class="text-sm text-gray-600"></div>
       </div>
 
-      <!-- Maintenance Section (corrected for new JS logic) -->
+      <!-- Maintenance Section (MUST include this id!) -->
       <div class="maintenance p-4 bg-white rounded-2xl shadow">
         <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
         <div id="maintenanceBox"></div>
