@@ -536,23 +536,39 @@ onReady(() => {
 });
 
 async function updateAll() {
+  // ─── DEBUG: Did we even enter updateAll? ───
   console.log("⏯ updateAll() entered");
+
+  // Fetch mappings
   await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
+  console.log("🔍 sensorMap:", sensorMap);
+
+  // Rebuild device dropdown
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceSelect = document.getElementById("deviceSelect");
-  const deviceLabel = deviceSelect.value;
+  const deviceLabel  = deviceSelect.value;
+  console.log("🔍 selected device label:", deviceLabel);
+
   const deviceID = sensorMap[deviceLabel]?.id;
+  console.log("🔍 resolved deviceID:", deviceID);
+
   if (!deviceID) {
     console.error("Device ID not found for label:", deviceLabel, sensorMap);
-    return;
+  } else {
+    // Only update charts/map if we have a device
+    variableCache = {};
+    const DALLAS_LIST = await fetchDallasAddresses(deviceID);
+    SENSORS = buildSensorSlots(deviceLabel, DALLAS_LIST, sensorMap);
+    initCharts(SENSORS);
+    await updateCharts(deviceID, SENSORS);
+    if (!map) initMap();
+    poll(deviceID, SENSORS);
   }
-  variableCache = {};
-  const DALLAS_LIST = await fetchDallasAddresses(deviceID);
-  SENSORS = buildSensorSlots(deviceLabel, DALLAS_LIST, sensorMap);
-  initCharts(SENSORS);
-  await updateCharts(deviceID, SENSORS);
-  if (!map) initMap();
-  poll(deviceID, SENSORS);
+
+  // ─── DEBUG: about to render maintenance UI ───
+  console.log("⏯ about to call renderMaintenanceBox");
   await renderMaintenanceBox(deviceLabel, deviceID);
+  console.log("✅ renderMaintenanceBox completed");
 }
+
