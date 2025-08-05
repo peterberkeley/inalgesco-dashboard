@@ -68,7 +68,8 @@
 </head>
 <body>
 
-  <header class="p-4 shadow-md flex items-center" style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
+  <header class="p-4 shadow-md flex items-center"
+          style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
     <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png"
          alt="Sky Café Trucks" class="h-10" />
     <h1 class="ml-4 text-2xl font-semibold text-white">Sky Café Trucks Dashboard</h1>
@@ -80,7 +81,8 @@
     </div>
   </header>
 
-  <button id="adminBtn" class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
+  <button id="adminBtn"
+          class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
     Admin Settings
   </button>
   <script>
@@ -94,7 +96,7 @@
     <section class="lg:col-span-1 space-y-6">
       <!-- LIVE DATA CARD -->
       <div class="bg-white rounded-2xl shadow p-4">
-        <h2 class="text-lg font-semibold mb-2">Current Fix & Sensors</h2>
+        <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
         <table id="latest" class="w-full text-sm"></table>
       </div>
 
@@ -110,29 +112,32 @@
       </div>
 
       <!-- MAINTENANCE CARD -->
-<div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
-  <!-- Filter row -->
-  <div class="flex items-center justify-between mb-2">
-    <div>
-      <span class="font-medium">Filter Replacement:</span>
-      <span id="filterStatus">– days to go</span>
-    </div>
-    <button id="resetFilterBtn" class="ml-4 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
-      Reset
-    </button>
-  </div>
-  <!-- Service row -->
-  <div class="flex items-center justify-between">
-    <div>
-      <span class="font-medium">Annual Service:</span>
-      <span id="serviceStatus">– days to go</span>
-    </div>
-    <button id="resetServiceBtn" class="ml-4 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
-      Reset
-    </button>
-  </div>
-</div>
-
+      <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
+        <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
+        <!-- Filter row -->
+        <div class="flex items-center justify-between mb-2">
+          <span>
+            <strong>Filter Replacement:</strong>
+            <span id="filterStatus">– days to go</span>
+          </span>
+          <button id="resetFilterBtn"
+                  class="ml-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">
+            Reset
+          </button>
+        </div>
+        <!-- Service row -->
+        <div class="flex items-center justify-between">
+          <span>
+            <strong>Annual Service:</strong>
+            <span id="serviceStatus">– days to go</span>
+          </span>
+          <button id="resetServiceBtn"
+                  class="ml-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">
+            Reset
+          </button>
+        </div>
+      </div>
+      <!-- End MAINTENANCE CARD -->
 
     </section>
 
