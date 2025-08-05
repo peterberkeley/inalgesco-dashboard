@@ -371,6 +371,7 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID) {
 
 async function renderMaintenanceBox(truckLabel, deviceID) {
   // ─── DEBUG: ensure we’re grabbing the right element ───
+  console.clear();
   console.log("🔍 maintenanceBox element:", document.getElementById("maintenanceBox"));
   const box = document.getElementById("maintenanceBox");
   if (!box) {
@@ -384,21 +385,29 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
   const state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
   console.log("🔍 renderMaintenanceBox got state:", state);
 
-  const color = days => days <= 0 ? "red" : "#1f2937";
+  // ─── Inject styled maintenance card ───
   box.innerHTML = `
-    <div style="margin-bottom:0.8em;">
-      <span style="font-weight:600;">Filter Replacement:</span>
-      <span style="color:${color(state.filterDays)}; font-weight:600; margin-left:0.5em;">
-        ${state.filterDays} day${state.filterDays === 1 ? "" : "s"} to go
-      </span>
-      <button id="resetFilterBtn" class="btn" style="margin-left:1.2em; font-size:0.95em; padding:0.2em 1em;">Reset</button>
-    </div>
-    <div>
-      <span style="font-weight:600;">Annual Service:</span>
-      <span style="color:${color(state.serviceDays)}; font-weight:600; margin-left:0.5em;">
-        ${state.serviceDays} day${state.serviceDays === 1 ? "" : "s"} to go
-      </span>
-      <button id="resetServiceBtn" class="btn" style="margin-left:1.2em; font-size:0.95em; padding:0.2em 1em;">Reset</button>
+    <div class="bg-white rounded-2xl shadow p-4 space-y-4">
+      <div class="flex justify-between items-center">
+        <span>
+          <strong>Filter Replacement:</strong>
+          ${state.filterDays} day${state.filterDays === 1 ? "" : "s"} to go
+        </span>
+        <button id="resetFilterBtn"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">
+          Reset
+        </button>
+      </div>
+      <div class="flex justify-between items-center">
+        <span>
+          <strong>Annual Service:</strong>
+          ${state.serviceDays} day${state.serviceDays === 1 ? "" : "s"} to go
+        </span>
+        <button id="resetServiceBtn"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">
+          Reset
+        </button>
+      </div>
     </div>
   `;
 
@@ -414,6 +423,20 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
       }
     });
   };
+
+  document.getElementById("resetServiceBtn").onclick = () => {
+    showPromptModal("Enter code to reset annual service (365 days):", async (val, close, showError) => {
+      if (val === "8971") {
+        await saveMaintState(truckLabel, { serviceDays: 365 });
+        close();
+        renderMaintenanceBox(truckLabel, deviceID);
+      } else {
+        showError("Invalid code");
+      }
+    });
+  };
+}
+
 
   document.getElementById("resetServiceBtn").onclick = () => {
     showPromptModal("Enter code to reset annual service (365 days):", async (val, close, showError) => {
