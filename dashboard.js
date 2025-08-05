@@ -369,15 +369,21 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID) {
 }
 
 async function renderMaintenanceBox(truckLabel, deviceID) {
-  // Defer if #maintenanceBox is not in DOM yet!
-  let box = document.getElementById("maintenanceBox");
+  // ─── DEBUG: ensure we’re grabbing the right element ───
+  console.log("🔍 maintenanceBox element:", document.getElementById("maintenanceBox"));
+  const box = document.getElementById("maintenanceBox");
   if (!box) {
-    // Try again after DOMContentLoaded
+    console.warn("⚠️ maintenanceBox not found, will defer rendering");
     onReady(() => renderMaintenanceBox(truckLabel, deviceID));
     return;
   }
-  let state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
-  function color(days) { return days <= 0 ? "red" : "#1f2937"; }
+
+  // ─── DEBUG: inspect the state we’ll render ───
+  console.log("⏯ renderMaintenanceBox called for", truckLabel, deviceID);
+  const state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
+  console.log("🔍 renderMaintenanceBox got state:", state);
+
+  const color = days => days <= 0 ? "red" : "#1f2937";
   box.innerHTML = `
     <div style="margin-bottom:0.8em;">
       <span style="font-weight:600;">Filter Replacement:</span>
@@ -394,6 +400,8 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
       <button id="resetServiceBtn" class="btn" style="margin-left:1.2em; font-size:0.95em; padding:0.2em 1em;">Reset</button>
     </div>
   `;
+
+  // ─── Hook up Reset buttons ───
   document.getElementById("resetFilterBtn").onclick = () => {
     showPromptModal("Enter code to reset filter (60 days):", async (val, close, showError) => {
       if (val === "0000") {
@@ -405,6 +413,7 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
       }
     });
   };
+
   document.getElementById("resetServiceBtn").onclick = () => {
     showPromptModal("Enter code to reset annual service (365 days):", async (val, close, showError) => {
       if (val === "8971") {
@@ -417,6 +426,7 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
     });
   };
 }
+
 
 // ========== CSV Download ==========
 async function fetchCsvRows(deviceID, varLabel, start, end) {
