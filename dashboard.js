@@ -305,6 +305,7 @@ async function updateAll() {
   await updateCharts(deviceID, SENSORS);
   if (!map) initMap();
   poll(deviceID, SENSORS);
+  await renderMaintenanceBox(deviceLabel);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
