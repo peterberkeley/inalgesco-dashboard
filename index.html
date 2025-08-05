@@ -82,8 +82,10 @@
 </head>
 <body>
 
-  <header class="p-4 shadow-md flex items-center" style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
-    <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png" alt="Sky Café Trucks" class="h-10" />
+  <header class="p-4 shadow-md flex items-center"
+          style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
+    <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png"
+         alt="Sky Café Trucks" class="h-10" />
     <h1 class="ml-4 text-2xl font-semibold text-white">Sky Café Trucks Dashboard</h1>
     <div class="ml-auto">
       <label class="text-white font-medium">
@@ -93,7 +95,8 @@
     </div>
   </header>
 
-  <button id="adminBtn" class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
+  <button id="adminBtn"
+          class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
     Admin Settings
   </button>
   <script>
@@ -103,6 +106,7 @@
   </script>
 
   <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- LEFT SIDEBAR -->
     <section class="lg:col-span-1 space-y-6">
       <!-- LIVE DATA CARD -->
       <div class="bg-white rounded-2xl shadow p-4">
@@ -121,34 +125,13 @@
         <div id="expStatus" class="text-sm text-gray-600"></div>
       </div>
 
-      <!-- MAINTENANCE CARD -->
-      <div class="bg-white rounded-2xl shadow p-4">
-        <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
-        <!-- Row 1: Filter -->
-        <div class="mb-4">
-          <label class="block font-medium">Filter Replacement:</label>
-          <div class="flex">
-            <span id="filterStatus" class="flex-1">– days to go</span>
-            <button id="resetFilterBtn" class="ml-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">
-              Reset
-            </button>
-          </div>
-        </div>
-        <!-- Row 2: Service -->
-        <div>
-          <label class="block font-medium">Annual Service:</label>
-          <div class="flex">
-            <span id="serviceStatus" class="flex-1">– days to go</span>
-            <button id="resetServiceBtn" class="ml-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">
-              Reset
-            </button>
-          </div>
-        </div>
+      <!-- MAINTENANCE CARD (populated by JS) -->
+      <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
+        <!-- JS will inject two rows here -->
       </div>
-      <!-- End MAINTENANCE CARD -->
-
     </section>
 
+    <!-- RIGHT CONTENT -->
     <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
       <!-- CHARTS GRID -->
       <div id="charts" class="col-span-2"></div>
