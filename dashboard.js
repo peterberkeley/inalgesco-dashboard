@@ -314,6 +314,99 @@ document.addEventListener("DOMContentLoaded", () => {
     await updateAll();
   });
 });
+
+// ========== MAINTENANCE UI & RESET LOGIC ==========
+
+// Utility to show a modal input prompt in the center of the screen
+function showPromptModal(message, callback) {
+  // Remove any previous modal
+  const old = document.getElementById("promptModal");
+  if (old) old.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "promptModal";
+  modal.style.position = "fixed";
+  modal.style.top = "0"; modal.style.left = "0";
+  modal.style.width = "100vw"; modal.style.height = "100vh";
+  modal.style.background = "rgba(0,0,0,0.15)";
+  modal.style.display = "flex"; modal.style.alignItems = "center"; modal.style.justifyContent = "center";
+  modal.innerHTML = `
+    <div style="background:#fff; border-radius:1rem; box-shadow:0 6px 24px rgba(0,0,0,0.12); padding:2rem 2.5rem; display:flex; flex-direction:column; align-items:center; gap:1rem; min-width:280px;">
+      <div style="font-size:1.15rem; font-weight:600; margin-bottom:0.5rem;">${message}</div>
+      <input type="password" id="modalCodeInput" style="font-size:1.1rem; padding:0.4rem 0.7rem; border-radius:0.5rem; border:1px solid #ccc; width:10rem;" autocomplete="off" autofocus>
+      <div style="color:#c00; font-weight:600; display:none" id="modalCodeError"></div>
+      <div style="display:flex; gap:1rem;">
+        <button id="modalOkBtn" class="btn" style="min-width:70px;">OK</button>
+        <button id="modalCancelBtn" class="btn" style="background:#bbb; color:#fff;">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById("modalCodeInput").focus(), 50);
+
+  function close() { modal.remove(); }
+  document.getElementById("modalCancelBtn").onclick = close;
+  document.getElementById("modalOkBtn").onclick = () => {
+    const val = document.getElementById("modalCodeInput").value;
+    callback(val, close, function showError(msg) {
+      const err = document.getElementById("modalCodeError");
+      err.textContent = msg;
+      err.style.display = "block";
+    });
+  };
+  document.getElementById("modalCodeInput").onkeydown = function(e) {
+    if (e.key === "Enter") document.getElementById("modalOkBtn").click();
+  };
+}
+
+// Call this to update the Maintenance UI box in the dashboard
+async function renderMaintenanceBox(truckLabel) {
+  const box = document.getElementById("maintenanceBox");
+  if (!box) return;
+  let state = await checkAndUpdateMaintCounters(truckLabel);
+
+  function color(days) { return days <= 0 ? "red" : "#1f2937"; }
+  box.innerHTML = `
+    <div style="margin-bottom:0.8em;">
+      <span style="font-weight:600;">Filter Replacement:</span>
+      <span style="color:${color(state.filterDays)}; font-weight:600; margin-left:0.5em;">
+        ${state.filterDays} day${state.filterDays === 1 ? "" : "s"} to go
+      </span>
+      <button id="resetFilterBtn" class="btn" style="margin-left:1.2em; font-size:0.95em; padding:0.2em 1em;">Reset</button>
+    </div>
+    <div>
+      <span style="font-weight:600;">Annual Service:</span>
+      <span style="color:${color(state.serviceDays)}; font-weight:600; margin-left:0.5em;">
+        ${state.serviceDays} day${state.serviceDays === 1 ? "" : "s"} to go
+      </span>
+      <button id="resetServiceBtn" class="btn" style="margin-left:1.2em; font-size:0.95em; padding:0.2em 1em;">Reset</button>
+    </div>
+  `;
+
+  // Button handlers
+  document.getElementById("resetFilterBtn").onclick = () => {
+    showPromptModal("Enter code to reset filter (60 days):", async (val, close, showError) => {
+      if (val === "0000") {
+        await saveMaintState(truckLabel, { filterDays: 60 });
+        close();
+        renderMaintenanceBox(truckLabel);
+      } else {
+        showError("Invalid code");
+      }
+    });
+  };
+  document.getElementById("resetServiceBtn").onclick = () => {
+    showPromptModal("Enter code to reset annual service (365 days):", async (val, close, showError) => {
+      if (val === "8971") {
+        await saveMaintState(truckLabel, { serviceDays: 365 });
+        close();
+        renderMaintenanceBox(truckLabel);
+      } else {
+        showError("Invalid code");
+      }
+    });
+  };
+}
+
 // ========== CSV Download (robust version) ==========
 
 // Always define this function first
