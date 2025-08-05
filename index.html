@@ -92,6 +92,7 @@
       </label>
     </div>
   </header>
+
   <button id="adminBtn" class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
     Admin Settings
   </button>
@@ -103,11 +104,13 @@
 
   <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
     <section class="lg:col-span-1 space-y-6">
+      <!-- LIVE DATA CARD -->
       <div class="bg-white rounded-2xl shadow p-4">
         <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
         <table id="latest" class="w-full text-sm"></table>
       </div>
 
+      <!-- CSV EXPORT CARD -->
       <div class="bg-white rounded-2xl shadow p-4">
         <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
         <div class="export-controls mb-4">
@@ -118,24 +121,18 @@
         <div id="expStatus" class="text-sm text-gray-600"></div>
       </div>
 
-      <!-- Maintenance Section Updated -->
-      <div class="maintenance p-4 bg-white rounded-2xl shadow">
+      <!-- MAINTENANCE CARD -->
+      <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
         <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
-        <p id="filterStatus" class="mb-2"></p>
-        <button id="resetFilterBtn" class="mr-2 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600" style="display:none;">
-          Reset Filter
-        </button>
-        <p id="serviceStatus" class="mt-4 mb-2 text-red-600 font-semibold"></p>
-        <button id="resetServiceBtn" class="px-3 py-1 rounded bg-gray-500 text-white hover:bg-gray-600" style="display:none;">
-          Reset Service
-        </button>
+        <!-- dashboard.js will inject the filter/service details here -->
       </div>
-      <!-- End Maintenance Section -->
-
     </section>
 
     <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- CHARTS GRID -->
       <div id="charts" class="col-span-2"></div>
+
+      <!-- MAP CARD -->
       <div class="bg-white rounded-2xl shadow p-4 col-span-2 md:col-span-2">
         <h2 class="text-lg font-semibold mb-2">Map View</h2>
         <div id="map" class="h-64 rounded-lg"></div>
@@ -143,7 +140,9 @@
     </section>
   </main>
 
-  <!-- If your logic is in dashboard.js, make sure it is present! -->
-  <script src="dashboard.js"></script>
+  <div id="spinner"></div>
+
+  <!-- Load dashboard logic after DOM -->
+  <script src="dashboard.js" defer></script>
 </body>
 </html>
