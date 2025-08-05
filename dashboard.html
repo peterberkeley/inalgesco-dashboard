@@ -108,11 +108,24 @@
         </div>
         <div id="expStatus" class="text-sm text-gray-600"></div>
       </div>
-      <!-- MAINTENANCE CARD — now correctly present -->
-      <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
-        <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
-        <!-- dashboard.js will replace this innerHTML -->
+
+      <!-- MAINTENANCE CARD -->
+      <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4 space-y-2">
+        <div class="flex justify-between items-center">
+          <span><strong>Filter Replacement:</strong> <span id="filterStatus">–</span></span>
+          <button id="resetFilterBtn" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
+            Reset
+          </button>
+        </div>
+        <div class="flex justify-between items-center">
+          <span><strong>Annual Service:</strong> <span id="serviceStatus">–</span></span>
+          <button id="resetServiceBtn" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
+            Reset
+          </button>
+        </div>
       </div>
+      <!-- End MAINTENANCE CARD -->
+
     </section>
 
     <!-- RIGHT CONTENT -->
@@ -127,10 +140,11 @@
       </div>
     </section>
   </main>
+
   <!-- spinner overlay -->
   <div id="spinner"></div>
 
   <!-- main dashboard logic -->
-  <script src="dashboard.js"></script>
+  <script src="dashboard.js" defer></script>
 </body>
 </html>
