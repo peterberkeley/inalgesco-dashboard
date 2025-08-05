@@ -403,8 +403,13 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID) {
 
 async function renderMaintenanceBox(truckLabel, deviceID) {
   const box = document.getElementById("maintenanceBox");
-  if (!box) return;
+  console.log("Rendering maintenance box for", truckLabel, deviceID, box);
+  if (!box) {
+    console.error("No #maintenanceBox found in DOM");
+    return;
+  }
   let state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
+  console.log("Maintenance state is", state);
   function color(days) { return days <= 0 ? "red" : "#1f2937"; }
   box.innerHTML = `
     <div style="margin-bottom:0.8em;">
@@ -445,6 +450,7 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
     });
   };
 }
+
 
 // ========== CSV Download (robust version) ==========
 
