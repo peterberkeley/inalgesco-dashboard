@@ -110,21 +110,29 @@
       </div>
 
       <!-- MAINTENANCE CARD -->
-      <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4 space-y-2">
-        <div class="flex justify-between items-center">
-          <span><strong>Filter Replacement:</strong> <span id="filterStatus">–</span></span>
-          <button id="resetFilterBtn" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
-            Reset
-          </button>
-        </div>
-        <div class="flex justify-between items-center">
-          <span><strong>Annual Service:</strong> <span id="serviceStatus">–</span></span>
-          <button id="resetServiceBtn" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
-            Reset
-          </button>
-        </div>
-      </div>
-      <!-- End MAINTENANCE CARD -->
+<div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
+  <!-- Filter row -->
+  <div class="flex items-center justify-between mb-2">
+    <div>
+      <span class="font-medium">Filter Replacement:</span>
+      <span id="filterStatus">– days to go</span>
+    </div>
+    <button id="resetFilterBtn" class="ml-4 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
+      Reset
+    </button>
+  </div>
+  <!-- Service row -->
+  <div class="flex items-center justify-between">
+    <div>
+      <span class="font-medium">Annual Service:</span>
+      <span id="serviceStatus">– days to go</span>
+    </div>
+    <button id="resetServiceBtn" class="ml-4 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">
+      Reset
+    </button>
+  </div>
+</div>
+
 
     </section>
 
