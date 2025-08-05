@@ -370,7 +370,6 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID) {
 }
 
 async function renderMaintenanceBox(truckLabel, deviceID) {
-  // ─── DEBUG: ensure we’re grabbing the right element ───
   console.clear();
   console.log("🔍 maintenanceBox element:", document.getElementById("maintenanceBox"));
   const box = document.getElementById("maintenanceBox");
@@ -380,14 +379,13 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
     return;
   }
 
-  // ─── DEBUG: inspect the state we’ll render ───
   console.log("⏯ renderMaintenanceBox called for", truckLabel, deviceID);
   const state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
   console.log("🔍 renderMaintenanceBox got state:", state);
 
-  // ─── Inject styled maintenance card ───
   box.innerHTML = `
-    <div class="bg-white rounded-2xl shadow p-4 space-y-4">
+    <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
+    <div class="space-y-4">
       <div class="flex justify-between items-center">
         <span>
           <strong>Filter Replacement:</strong>
@@ -411,7 +409,6 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
     </div>
   `;
 
-  // ─── Hook up Reset buttons ───
   document.getElementById("resetFilterBtn").onclick = () => {
     showPromptModal("Enter code to reset filter (60 days):", async (val, close, showError) => {
       if (val === "0000") {
@@ -423,6 +420,20 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
       }
     });
   };
+
+  document.getElementById("resetServiceBtn").onclick = () => {
+    showPromptModal("Enter code to reset annual service (365 days):", async (val, close, showError) => {
+      if (val === "8971") {
+        await saveMaintState(truckLabel, { serviceDays: 365 });
+        close();
+        renderMaintenanceBox(truckLabel, deviceID);
+      } else {
+        showError("Invalid code");
+      }
+    });
+  };
+}
+
 
   document.getElementById("resetServiceBtn").onclick = () => {
     showPromptModal("Enter code to reset annual service (365 days):", async (val, close, showError) => {
