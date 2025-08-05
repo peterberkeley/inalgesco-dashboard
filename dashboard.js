@@ -7,10 +7,9 @@ const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
 let SENSORS = [];
 let variableCache = {};
-
-// ========== Sensor Mapping from Admin ==========
 let sensorMapConfig = {};
 
+// ========== Sensor Mapping from Admin ==========
 async function fetchSensorMapMapping() {
   try {
     const res = await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?page_size=1', {
@@ -130,7 +129,6 @@ function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
       mapped: null,
       calibration: 0
     };
-    // Use admin-mapped label if available, else fallback to address
     let adminMapForDev = sensorMapConfig[deviceLabel] || {};
     let label = adminMapForDev[addr]?.label?.trim() || mapped[addr]?.label?.trim() || addr;
     let offset = typeof adminMapForDev[addr]?.offset === "number"
@@ -151,14 +149,10 @@ function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
 async function fetchUbidotsVar(deviceID, variable, limit = 1) {
   try {
     if (!variableCache[deviceID]) {
-      // Get all variables for this device (by device ID)
       const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
         headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
       });
-      if (!varRes.ok) {
-        console.error("[fetchUbidotsVar] Variable fetch failed for deviceID:", deviceID, "status:", varRes.status);
-        return [];
-      }
+      if (!varRes.ok) return [];
       const varList = await varRes.json();
       variableCache[deviceID] = {};
       varList.results.forEach(v => {
@@ -166,15 +160,11 @@ async function fetchUbidotsVar(deviceID, variable, limit = 1) {
       });
     }
     const varId = variableCache[deviceID][variable];
-    if (!varId) {
-      return [];
-    }
+    if (!varId) return [];
     const valRes = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=${limit}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
-    if (!valRes.ok) {
-      return [];
-    }
+    if (!valRes.ok) return [];
     const js = await valRes.json();
     return js.results || [];
   } catch (err) {
@@ -273,48 +263,7 @@ async function poll(deviceID, SENSORS) {
   );
 }
 
-// ========== Map init ==========
-let map, marker, polyline, trail = [];
-function initMap() {
-  map = L.map("map").setView([0, 0], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
-  marker = L.marker([0, 0]).addTo(map);
-  polyline = L.polyline([], { weight: 3 }).addTo(map);
-}
-
-// ========== Main ==========
-async function updateAll() {
-  await fetchSensorMapMapping(); // << fetch mapping from admin
-  const sensorMap = await fetchSensorMapConfig();
-  buildDeviceDropdownFromConfig(sensorMap);
-  const deviceSelect = document.getElementById("deviceSelect");
-  const deviceLabel = deviceSelect.value;
-  const deviceID = sensorMap[deviceLabel]?.id;
-  if (!deviceID) {
-    console.error("Device ID not found for label:", deviceLabel, sensorMap);
-    return;
-  }
-  variableCache = {};
-  const DALLAS_LIST = await fetchDallasAddresses(deviceID);
-  SENSORS = buildSensorSlots(deviceLabel, DALLAS_LIST, sensorMap);
-  initCharts(SENSORS);
-  await updateCharts(deviceID, SENSORS);
-  if (!map) initMap();
-  poll(deviceID, SENSORS);
-  await renderMaintenanceBox(deviceLabel, deviceID); // <- pass deviceID too!
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  updateAll();
-  setInterval(updateAll, REFRESH_INTERVAL);
-  document.getElementById("deviceSelect").addEventListener("change", async function() {
-    await updateAll();
-  });
-});
-
 // ========== MAINTENANCE UI & RESET LOGIC ==========
-
-// Single definition!
 const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
 
 function showPromptModal(message, callback) {
@@ -403,13 +352,13 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID) {
 
 async function renderMaintenanceBox(truckLabel, deviceID) {
   const box = document.getElementById("maintenanceBox");
-  console.log("Rendering maintenance box for", truckLabel, deviceID, box);
+  // DEBUG:
+  // console.log("Rendering maintenance box for", truckLabel, deviceID, box);
   if (!box) {
     console.error("No #maintenanceBox found in DOM");
     return;
   }
   let state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
-  console.log("Maintenance state is", state);
   function color(days) { return days <= 0 ? "red" : "#1f2937"; }
   box.innerHTML = `
     <div style="margin-bottom:0.8em;">
@@ -451,9 +400,7 @@ async function renderMaintenanceBox(truckLabel, deviceID) {
   };
 }
 
-
 // ========== CSV Download (robust version) ==========
-
 async function fetchCsvRows(deviceID, varLabel, start, end) {
   try {
     if (!variableCache[deviceID]) {
@@ -465,19 +412,14 @@ async function fetchCsvRows(deviceID, varLabel, start, end) {
       varList.results.forEach(v => variableCache[deviceID][v.label] = v.id);
     }
     const varId = variableCache[deviceID][varLabel];
-    if (!varId) {
-      console.warn("[CSV] Variable not found for address:", varLabel);
-      return [];
-    }
+    if (!varId) return [];
     let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1000`;
     if (start) url += `&start=${start}`;
     if (end) url += `&end=${end}`;
     const res = await fetch(url, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
-    if (!res.ok) {
-      return [];
-    }
+    if (!res.ok) return [];
     const js = await res.json();
     return js.results || [];
   } catch (err) {
@@ -485,73 +427,98 @@ async function fetchCsvRows(deviceID, varLabel, start, end) {
   }
 }
 
-document.getElementById("dlBtn").onclick = async function() {
-  const expStatus = document.getElementById("expStatus");
-  expStatus.textContent = "Downloading...";
-  try {
-    const deviceSelect = document.getElementById("deviceSelect");
-    const deviceLabel = deviceSelect.value;
-    const startDate = document.getElementById("start").value;
-    const endDate = document.getElementById("end").value;
-    const sensorMap = await fetchSensorMapConfig();
-    const deviceID = sensorMap[deviceLabel]?.id;
-
-    const slots = SENSORS;
-    if (!slots || !slots.length) {
-      expStatus.textContent = "No sensors available for this truck.";
-      return;
-    }
-    let adminMapForDev = sensorMapConfig[deviceLabel] || {};
-    const addresses = slots.map(s => s.address).filter(addr => !!addr);
-    if (!addresses.length) {
-      expStatus.textContent = "No valid sensor addresses.";
-      return;
-    }
-
-    let startMs = startDate ? new Date(startDate).getTime() : null;
-    let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
-
-    let csvRows = [];
-    let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
-    csvRows.push(header);
-
-    let dataByTime = {};
-    for (let addr of addresses) {
-      let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
-      for (let v of vals) {
-        let t = v.timestamp;
-        if (!dataByTime[t]) dataByTime[t] = {};
-        dataByTime[t][addr] = v.value;
+document.addEventListener("DOMContentLoaded", () => {
+  // Main startup -- runs AFTER DOM fully loaded!
+  updateAll();
+  setInterval(updateAll, REFRESH_INTERVAL);
+  document.getElementById("deviceSelect").addEventListener("change", async function() {
+    await updateAll();
+  });
+  // CSV Download button (also safe here)
+  document.getElementById("dlBtn").onclick = async function() {
+    const expStatus = document.getElementById("expStatus");
+    expStatus.textContent = "Downloading...";
+    try {
+      const deviceSelect = document.getElementById("deviceSelect");
+      const deviceLabel = deviceSelect.value;
+      const startDate = document.getElementById("start").value;
+      const endDate = document.getElementById("end").value;
+      const sensorMap = await fetchSensorMapConfig();
+      const deviceID = sensorMap[deviceLabel]?.id;
+      const slots = SENSORS;
+      if (!slots || !slots.length) {
+        expStatus.textContent = "No sensors available for this truck.";
+        return;
       }
-    }
-
-    let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
-    if (!times.length) {
-      expStatus.textContent = "No data found for the selected range.";
-      return;
-    }
-    for (let t of times) {
-      let row = [new Date(t).toISOString()];
+      let adminMapForDev = sensorMapConfig[deviceLabel] || {};
+      const addresses = slots.map(s => s.address).filter(addr => !!addr);
+      if (!addresses.length) {
+        expStatus.textContent = "No valid sensor addresses.";
+        return;
+      }
+      let startMs = startDate ? new Date(startDate).getTime() : null;
+      let endMs = endDate ? (new Date(endDate).getTime() + 24 * 3600 * 1000) : null;
+      let csvRows = [];
+      let header = ["Timestamp", ...addresses.map(addr => (adminMapForDev[addr]?.label || addr))];
+      csvRows.push(header);
+      let dataByTime = {};
       for (let addr of addresses) {
-        row.push(dataByTime[t][addr] !== undefined ? dataByTime[t][addr] : "");
+        let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
+        for (let v of vals) {
+          let t = v.timestamp;
+          if (!dataByTime[t]) dataByTime[t] = {};
+          dataByTime[t][addr] = v.value;
+        }
       }
-      csvRows.push(row);
+      let times = Object.keys(dataByTime).map(Number).sort((a, b) => b - a);
+      if (!times.length) {
+        expStatus.textContent = "No data found for the selected range.";
+        return;
+      }
+      for (let t of times) {
+        let row = [new Date(t).toISOString()];
+        for (let addr of addresses) {
+          row.push(dataByTime[t][addr] !== undefined ? dataByTime[t][addr] : "");
+        }
+        csvRows.push(row);
+      }
+      let csv = csvRows.map(r => r.join(",")).join("\r\n");
+      let blob = new Blob([csv], {type: "text/csv"});
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement("a");
+      a.href = url;
+      a.download = `truck_${deviceLabel}_${startDate || "all"}_${endDate || "all"}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        a.remove();
+      }, 500);
+      expStatus.textContent = "Download complete!";
+    } catch (err) {
+      expStatus.textContent = "Download failed.";
     }
+  };
+});
 
-    let csv = csvRows.map(r => r.join(",")).join("\r\n");
-    let blob = new Blob([csv], {type: "text/csv"});
-    let url = URL.createObjectURL(blob);
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = `truck_${deviceLabel}_${startDate || "all"}_${endDate || "all"}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      a.remove();
-    }, 500);
-    expStatus.textContent = "Download complete!";
-  } catch (err) {
-    expStatus.textContent = "Download failed.";
+// ========== MAIN UPDATE FUNCTION ==========
+async function updateAll() {
+  await fetchSensorMapMapping(); // << fetch mapping from admin
+  const sensorMap = await fetchSensorMapConfig();
+  buildDeviceDropdownFromConfig(sensorMap);
+  const deviceSelect = document.getElementById("deviceSelect");
+  const deviceLabel = deviceSelect.value;
+  const deviceID = sensorMap[deviceLabel]?.id;
+  if (!deviceID) {
+    console.error("Device ID not found for label:", deviceLabel, sensorMap);
+    return;
   }
-};
+  variableCache = {};
+  const DALLAS_LIST = await fetchDallasAddresses(deviceID);
+  SENSORS = buildSensorSlots(deviceLabel, DALLAS_LIST, sensorMap);
+  initCharts(SENSORS);
+  await updateCharts(deviceID, SENSORS);
+  if (!map) initMap();
+  poll(deviceID, SENSORS);
+  await renderMaintenanceBox(deviceLabel, deviceID);
+}
