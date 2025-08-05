@@ -301,7 +301,7 @@ async function updateAll() {
   await updateCharts(deviceID, SENSORS);
   if (!map) initMap();
   poll(deviceID, SENSORS);
-  await renderMaintenanceBox(deviceLabel);
+  await renderMaintenanceBox(deviceLabel, deviceID); // <- pass deviceID too!
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -313,6 +313,8 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ========== MAINTENANCE UI & RESET LOGIC ==========
+
+// Single definition!
 const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
 
 function showPromptModal(message, callback) {
@@ -373,14 +375,14 @@ async function saveMaintState(truckLabel, maintObj) {
   });
 }
 
-async function checkAndUpdateMaintCounters(truckLabel) {
+async function checkAndUpdateMaintCounters(truckLabel, deviceID) {
   let state = getMaintState(truckLabel);
   let today = (new Date()).toISOString().slice(0,10);
   if (state.lastDecrementDate === today) return state;
   let hasActivityToday = false;
   for (let s of SENSORS) {
     if (!s.address) continue;
-    let vals = await fetchUbidotsVar(sensorMapConfig[truckLabel]?.id || null, s.address, 1);
+    let vals = await fetchUbidotsVar(deviceID, s.address, 1);
     if (vals && vals.length && vals[0].timestamp) {
       let dt = new Date(vals[0].timestamp);
       let valDay = dt.toISOString().slice(0,10);
@@ -399,10 +401,10 @@ async function checkAndUpdateMaintCounters(truckLabel) {
   return state;
 }
 
-async function renderMaintenanceBox(truckLabel) {
+async function renderMaintenanceBox(truckLabel, deviceID) {
   const box = document.getElementById("maintenanceBox");
   if (!box) return;
-  let state = await checkAndUpdateMaintCounters(truckLabel);
+  let state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
   function color(days) { return days <= 0 ? "red" : "#1f2937"; }
   box.innerHTML = `
     <div style="margin-bottom:0.8em;">
@@ -425,7 +427,7 @@ async function renderMaintenanceBox(truckLabel) {
       if (val === "0000") {
         await saveMaintState(truckLabel, { filterDays: 60 });
         close();
-        renderMaintenanceBox(truckLabel);
+        renderMaintenanceBox(truckLabel, deviceID);
       } else {
         showError("Invalid code");
       }
@@ -436,7 +438,7 @@ async function renderMaintenanceBox(truckLabel) {
       if (val === "8971") {
         await saveMaintState(truckLabel, { serviceDays: 365 });
         close();
-        renderMaintenanceBox(truckLabel);
+        renderMaintenanceBox(truckLabel, deviceID);
       } else {
         showError("Invalid code");
       }
