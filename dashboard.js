@@ -161,27 +161,23 @@ async function fetchUbidotsVar(deviceID, variable, limit = 1) {
       }
       const varList = await varRes.json();
       variableCache[deviceID] = {};
-      // console.log("[DEBUG] Variables for deviceID", deviceID, varList.results.map(v => v.label));
       varList.results.forEach(v => {
         variableCache[deviceID][v.label] = v.id;
       });
     }
     const varId = variableCache[deviceID][variable];
     if (!varId) {
-      // console.warn(`[WARN] No variable ID found for '${variable}' on deviceID '${deviceID}'`);
       return [];
     }
     const valRes = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=${limit}`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if (!valRes.ok) {
-      // console.error(`[ERROR] Value fetch failed for variable '${variable}' (id=${varId}) on deviceID '${deviceID}' status: ${valRes.status}`);
       return [];
     }
     const js = await valRes.json();
     return js.results || [];
   } catch (err) {
-    // console.error("[EXCEPTION] fetchUbidotsVar error:", err, "for deviceID:", deviceID, "var:", variable);
     return [];
   }
 }
@@ -317,6 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ========== MAINTENANCE UI & RESET LOGIC ==========
+const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
 
 function showPromptModal(message, callback) {
   const old = document.getElementById("promptModal");
@@ -356,8 +353,6 @@ function showPromptModal(message, callback) {
     if (e.key === "Enter") document.getElementById("modalOkBtn").click();
   };
 }
-
-const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
 
 function getMaintState(truckLabel) {
   const map = sensorMapConfig[truckLabel] || {};
@@ -408,8 +403,6 @@ async function renderMaintenanceBox(truckLabel) {
   const box = document.getElementById("maintenanceBox");
   if (!box) return;
   let state = await checkAndUpdateMaintCounters(truckLabel);
-  // Add debug:
-  console.log("Maintenance render for", truckLabel, state);
   function color(days) { return days <= 0 ? "red" : "#1f2937"; }
   box.innerHTML = `
     <div style="margin-bottom:0.8em;">
@@ -451,13 +444,10 @@ async function renderMaintenanceBox(truckLabel) {
   };
 }
 
-
 // ========== CSV Download (robust version) ==========
 
-// Always define this function first
 async function fetchCsvRows(deviceID, varLabel, start, end) {
   try {
-    // Make sure variableCache is up to date
     if (!variableCache[deviceID]) {
       const varRes = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, {
         headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
@@ -471,27 +461,22 @@ async function fetchCsvRows(deviceID, varLabel, start, end) {
       console.warn("[CSV] Variable not found for address:", varLabel);
       return [];
     }
-    // Use v1.6 for values fetch (required!)
     let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1000`;
     if (start) url += `&start=${start}`;
     if (end) url += `&end=${end}`;
-    console.log(`[CSV] Fetching ${varLabel} values from:`, url);
     const res = await fetch(url, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if (!res.ok) {
-      console.error(`[CSV] Failed to fetch values for ${varLabel} (${varId}): status`, res.status, await res.text());
       return [];
     }
     const js = await res.json();
     return js.results || [];
   } catch (err) {
-    console.error(`[CSV] Exception in fetchCsvRows for ${varLabel}:`, err);
     return [];
   }
 }
 
-// Download handler, make sure this is after fetchCsvRows definition
 document.getElementById("dlBtn").onclick = async function() {
   const expStatus = document.getElementById("expStatus");
   expStatus.textContent = "Downloading...";
@@ -503,7 +488,6 @@ document.getElementById("dlBtn").onclick = async function() {
     const sensorMap = await fetchSensorMapConfig();
     const deviceID = sensorMap[deviceLabel]?.id;
 
-    // Use SENSORS as in charts for guaranteed address alignment
     const slots = SENSORS;
     if (!slots || !slots.length) {
       expStatus.textContent = "No sensors available for this truck.";
@@ -526,9 +510,6 @@ document.getElementById("dlBtn").onclick = async function() {
     let dataByTime = {};
     for (let addr of addresses) {
       let vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
-      if (!vals.length) {
-        console.warn(`[CSV] No data rows returned for address: ${addr}`);
-      }
       for (let v of vals) {
         let t = v.timestamp;
         if (!dataByTime[t]) dataByTime[t] = {};
@@ -562,79 +543,7 @@ document.getElementById("dlBtn").onclick = async function() {
       a.remove();
     }, 500);
     expStatus.textContent = "Download complete!";
-    console.log("[CSV] Download complete. Rows:", csvRows.length);
   } catch (err) {
     expStatus.textContent = "Download failed.";
-    console.error("[CSV] Download error:", err);
   }
 };
-
-// ========== MAINTENANCE LOGIC (step 1: state, decrement, save) ==========
-
-// --- Per-truck, synced with Ubidots config context
-const MAINTENANCE_DEFAULTS = { filterDays: 60, serviceDays: 365, lastDecrementDate: null };
-
-function getTodayString() {
-  // Returns "YYYY-MM-DD" in UTC (for consistent decrement)
-  const now = new Date();
-  return now.toISOString().slice(0,10);
-}
-
-// Get maintenance state for a truck (from sensorMapConfig, fallback defaults)
-function getMaintState(truckLabel) {
-  const map = sensorMapConfig[truckLabel] || {};
-  // Keep keys in sensor_map context: "filterDays", "serviceDays", "lastDecrementDate"
-  return {
-    filterDays: typeof map.filterDays === "number" ? map.filterDays : MAINTENANCE_DEFAULTS.filterDays,
-    serviceDays: typeof map.serviceDays === "number" ? map.serviceDays : MAINTENANCE_DEFAULTS.serviceDays,
-    lastDecrementDate: map.lastDecrementDate || null,
-  };
-}
-
-// Save maintenance state to Ubidots context (overwrites sensor_map context for this truck only)
-async function saveMaintState(truckLabel, maintObj) {
-  // Always merge into sensorMapConfig for the truck (keep all keys, don't wipe sensor label mappings)
-  if (!sensorMapConfig[truckLabel]) sensorMapConfig[truckLabel] = {};
-  Object.assign(sensorMapConfig[truckLabel], maintObj);
-  // Save full sensorMapConfig as context
-  await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?token=' + UBIDOTS_ACCOUNT_TOKEN, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value: 0, context: sensorMapConfig })
-  });
-}
-
-// Run this after SENSORS are built and before UI render
-async function checkAndUpdateMaintCounters(truckLabel) {
-  let state = getMaintState(truckLabel);
-  let today = getTodayString();
-  if (state.lastDecrementDate === today) return state; // Already decremented today
-
-  // Activity detection: any sensor seen with value today
-  let hasActivityToday = false;
-  for (let s of SENSORS) {
-    if (!s.address) continue;
-    let vals = await fetchUbidotsVar(sensorMapConfig[truckLabel]?.id || null, s.address, 1);
-    if (vals && vals.length && vals[0].timestamp) {
-      let dt = new Date(vals[0].timestamp);
-      let valDay = dt.toISOString().slice(0,10);
-      if (valDay === today) {
-        hasActivityToday = true;
-        break;
-      }
-    }
-  }
-  if (hasActivityToday) {
-    // Only decrement if both counters > 0 (never negative)
-    if (state.filterDays > 0) state.filterDays--;
-    if (state.serviceDays > 0) state.serviceDays--;
-    state.lastDecrementDate = today;
-    await saveMaintState(truckLabel, state);
-  }
-  return state;
-}
-
-
-
-
-
