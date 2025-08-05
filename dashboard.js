@@ -1,3 +1,4 @@
+let _maintenanceLogged = false;
 // ========== Configuration ==========
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
