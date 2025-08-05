@@ -526,6 +526,7 @@ onReady(() => {
 });
 
 async function updateAll() {
+  console.log("⏯ updateAll() entered");
   await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
   buildDeviceDropdownFromConfig(sensorMap);
