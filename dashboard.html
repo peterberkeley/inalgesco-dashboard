@@ -68,14 +68,47 @@
 </head>
 <body>
   <script>
-    const PASSWORD = "Password";
-    const entered = prompt("Enter password to access SkyCafeTrucks:");
-    if (entered !== PASSWORD) {
-      alert("Incorrect password. Access denied.");
-      // Block access by stopping script execution and hiding page content
-      document.documentElement.innerHTML = "";
-      throw new Error("Access denied due to wrong password.");
-    }
+    (function() {
+      const PASSWORD = "Password";
+      const SESSION_KEY = "skycafe_password_auth";
+      const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+      function isSessionValid() {
+        const session = localStorage.getItem(SESSION_KEY);
+        if (!session) return false;
+        try {
+          const data = JSON.parse(session);
+          const now = Date.now();
+          return data.password === PASSWORD && (now - data.timestamp < SESSION_TIMEOUT_MS);
+        } catch {
+          return false;
+        }
+      }
+
+      async function promptPassword() {
+        let attempts = 0;
+        while (attempts < 3) {
+          const entered = prompt("Enter password to access SkyCafeTrucks:");
+          if (entered === PASSWORD) {
+            localStorage.setItem(SESSION_KEY, JSON.stringify({ password: PASSWORD, timestamp: Date.now() }));
+            return true;
+          } else {
+            alert("Incorrect password. Try again.");
+            attempts++;
+          }
+        }
+        alert("Too many incorrect attempts. Access denied.");
+        document.documentElement.innerHTML = "";
+        throw new Error("Access denied due to wrong password.");
+      }
+
+      if (!isSessionValid()) {
+        promptPassword();
+      } else {
+        // Refresh timestamp to extend session on page load
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ password: PASSWORD, timestamp: Date.now() }));
+      }
+    })();
   </script>
 
   <header class="p-4 shadow-md flex items-center"
@@ -97,7 +130,6 @@
   </button>
   <script>
     document.getElementById('adminBtn').onclick = () => {
-      // Open admin.html in the same tab
       window.location.href = 'admin.html';
     };
   </script>
@@ -168,7 +200,6 @@
   <!-- spinner overlay -->
   <div id="spinner"></div>
 
-  <!-- main dashboard logic -->
   <script src="dashboard.js" defer></script>
 </body>
 </html>
