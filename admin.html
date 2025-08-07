@@ -23,10 +23,25 @@
     .locked-row {
       opacity: 0.55;
     }
+    .return-btn {
+      margin-bottom: 1rem;
+      background: #10b981;
+      color: white;
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s ease;
+    }
+    .return-btn:hover {
+      background: #059669;
+    }
   </style>
 </head>
 <body>
   <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
+    <button class="return-btn" onclick="window.location.href='dashboard.html'">← Return to Dashboard</button>
     <div id="lockscreen" class="flex flex-col items-center justify-center py-16">
       <h2 class="text-xl mb-4 font-semibold">Admin Access Required</h2>
       <input id="adminPass" type="password" placeholder="Enter password" class="mb-2 p-2 rounded border" />
