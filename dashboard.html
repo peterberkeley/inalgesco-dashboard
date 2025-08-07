@@ -67,6 +67,16 @@
   </style>
 </head>
 <body>
+  <script>
+    const PASSWORD = "Password";
+    const entered = prompt("Enter password to access SkyCafeTrucks:");
+    if (entered !== PASSWORD) {
+      alert("Incorrect password. Access denied.");
+      // Block access by stopping script execution and hiding page content
+      document.documentElement.innerHTML = "";
+      throw new Error("Access denied due to wrong password.");
+    }
+  </script>
 
   <header class="p-4 shadow-md flex items-center"
           style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
