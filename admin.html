@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SkyCafé Sensor Mapping Admin</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -14,32 +14,14 @@
     .btn:hover { background: #0ea5e9; }
     .error { color: #b91c1c; font-weight: 600; }
     .success { color: #059669; font-weight: 600; }
-    .greyed input, .greyed button, .greyed select {
-      background: #e5e7eb !important;
-      color: #9ca3af !important;
-      pointer-events: none;
-      border-color: #d1d5db !important;
-    }
-    .locked-row {
-      opacity: 0.55;
-    }
-    .return-btn {
-      margin-bottom: 1rem;
-      background: #10b981;
-      color: white;
-      padding: 8px 20px;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      transition: background 0.2s ease;
-    }
-    .return-btn:hover {
-      background: #059669;
-    }
+    .greyed input, .greyed button, .greyed select { background: #e5e7eb !important; color: #9ca3af !important; pointer-events: none; border-color: #d1d5db !important; }
+    .locked-row { opacity: 0.55; }
+    .return-btn { margin-bottom: 1rem; background: #10b981; color: white; padding: 8px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; transition: background 0.2s ease; }
+    .return-btn:hover { background: #059669; }
   </style>
 </head>
 <body>
+
   <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
     <button class="return-btn" onclick="window.location.href='dashboard.html'">← Return to Dashboard</button>
     <div id="lockscreen" class="flex flex-col items-center justify-center py-16">
@@ -48,6 +30,7 @@
       <button id="unlockBtn" class="btn">Unlock</button>
       <div id="authError" class="error mt-2"></div>
     </div>
+
     <div id="adminPage" style="display:none;">
       <h1 class="text-2xl font-bold mb-2 text-blue-700">SkyCafé Sensor Mapping Admin</h1>
       <p class="mb-4 text-gray-600">
@@ -55,10 +38,20 @@
         <b>Save</b> after edits to update Ubidots for all users.<br>
         <span class="text-xs text-gray-500">(Your dashboard will read live from Ubidots.)</span>
       </p>
+
+      <!-- Truck selection -->
       <div class="mb-3 flex flex-row gap-2 items-center" id="truckRow">
         <label for="deviceSelect" class="font-medium">Truck:</label>
         <select id="deviceSelect" class="p-1 rounded border"></select>
       </div>
+
+      <!-- Alias (friendly name) input -->
+      <div class="mb-3 flex flex-row gap-2 items-center" id="aliasRow">
+        <label for="aliasInput" class="font-medium">Display name:</label>
+        <input type="text" id="aliasInput" placeholder="Optional display name" class="p-1 rounded border" />
+        <span class="text-xs text-gray-500">Original: <span id="origName"></span></span>
+      </div>
+
       <div class="mb-6">
         <table id="sensorTable" class="w-full table-fixed border mt-2 bg-blue-50 rounded">
           <thead>
@@ -72,15 +65,18 @@
           <tbody></tbody>
         </table>
       </div>
+
       <div class="flex flex-row gap-4 items-center mt-2">
         <button id="saveBtn" class="btn">Save to Ubidots</button>
         <span id="statusMsg" class="ml-2"></span>
       </div>
+
       <div class="mt-6 text-xs text-gray-400">
         <p>For help: <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></p>
       </div>
     </div>
   </div>
+
   <script>
     // ===== CONFIG =====
     const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
@@ -114,7 +110,7 @@
       }
     };
 
-    // ===== DROPDOWN LOGIC (IDENTICAL TO DASHBOARD) =====
+    // ===== FETCH DEVICE LIST =====
     async function fetchSensorMapConfig() {
       try {
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
@@ -144,6 +140,7 @@
       }
     }
 
+    // ===== POPULATE DEVICE DROPDOWN =====
     function buildDeviceDropdownFromConfig(sensorMap) {
       const deviceSelect = document.getElementById("deviceSelect");
       const now = Math.floor(Date.now() / 1000);
@@ -157,7 +154,7 @@
         const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
         const lastSeen = obj.last_seen || 0;
         const isOnline = (now - lastSeen < 60);
-        const dot = isOnline ? "🟢" : "⚪️";
+        const dot = isOnline ? "" : "⚪️";
         const opt = document.createElement("option");
         opt.value = dev;
         opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
@@ -174,9 +171,9 @@
       if (!foundOnline) deviceSelect.selectedIndex = 0;
     }
 
-    // ===== FETCH DALLAS ADDRESSES (MUST USE DEVICE ID) =====
+    // ===== FETCH DALLAS ADDRESSES =====
     async function fetchDallasAddresses(deviceID) {
-     const url = `${UBIDOTS_BASE}/variables/?device=${deviceID}`;
+      const url = `${UBIDOTS_BASE}/variables/?device=${deviceID}`;
       try {
         const res = await fetch(url, {
           headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
@@ -201,7 +198,7 @@
       }
     }
 
-    // ===== BUILD SENSOR SLOTS (UNCHANGED) =====
+    // ===== BUILD SENSOR SLOTS =====
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
       const mapped = SENSOR_MAP[deviceLabel] || {};
       const allAddr = [];
@@ -236,12 +233,13 @@
       });
     }
 
-    // ===== MAIN LOGIC =====
+    // ===== LOAD INITIAL DATA =====
     async function loadInitialData() {
       document.getElementById("statusMsg").textContent = "Loading devices...";
       sensorMap = await fetchSensorMapConfig();
       buildDeviceDropdownFromConfig(sensorMap);
-      // Load config mapping (sensor labels)
+
+      // Load config mapping (sensor labels and aliases)
       let config = {};
       try {
         let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_ACCOUNT_TOKEN}`);
@@ -252,17 +250,40 @@
         }
       } catch {}
       fullMapData = config;
+
+      // ensure alias map exists in context
+      if (!fullMapData.__aliases) fullMapData.__aliases = {};
+
       const deviceSelect = document.getElementById("deviceSelect");
       deviceSelect.onchange = handleDeviceChange;
+
+      // attach alias input handler once
+      document.getElementById("aliasInput").addEventListener('input', function(){
+        const alias = this.value.trim();
+        if (!fullMapData.__aliases) fullMapData.__aliases = {};
+        if (alias) {
+          fullMapData.__aliases[selectedDeviceLabel] = alias;
+        } else {
+          delete fullMapData.__aliases[selectedDeviceLabel];
+        }
+      });
+
       handleDeviceChange();
       document.getElementById("statusMsg").textContent = "";
     }
 
-    // ===== PATCHED: ALWAYS USE DEVICE ID FOR DALLAS =====
+    // ===== HANDLE TRUCK CHANGE =====
     async function handleDeviceChange() {
       const deviceSelect = document.getElementById("deviceSelect");
       selectedDeviceLabel = deviceSelect.value;
       const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
+
+      // update alias input and show original name
+      const aliasInput = document.getElementById("aliasInput");
+      const origNameEl = document.getElementById("origName");
+      origNameEl.textContent = selectedDeviceLabel;
+      aliasInput.value = (fullMapData.__aliases && fullMapData.__aliases[selectedDeviceLabel]) || '';
+
       document.getElementById("statusMsg").textContent = "Loading sensors...";
       const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
       const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
@@ -270,29 +291,29 @@
       document.getElementById("statusMsg").textContent = "";
     }
 
+    // ===== RENDER SENSOR TABLE =====
     function renderSensorTable(slots) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       tbl.innerHTML = '';
       slots.forEach((s, idx) => {
         const isLocked = !s.isLive && s.isMapped && s.address;
         tbl.innerHTML += `
-          <tr class="${isLocked ? 'locked-row' : ''}">
-            <td>Sensor ${idx + 1}</td>
-            <td>
-              <input type="text" value="${s.address || ''}" class="sensorAddr" readonly style="width:200px;" ${isLocked ? 'tabindex="-1"' : ''}/>
-            </td>
-            <td>
-              <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:130px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
-            </td>
-            <td>
-              <input type="number" value="${typeof s.calibration === 'number' ? s.calibration : 0}" step="0.1" class="sensorCal" style="width:65px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
-            </td>
-          </tr>`;
+              <tr class="${isLocked ? 'locked-row' : ''}">
+                <td>Sensor ${idx + 1}</td>
+                <td>
+                  <input type="text" value="${s.address || ''}" class="sensorAddr" readonly style="width:200px;" ${isLocked ? 'tabindex="-1"' : ''}/>
+                </td>
+                <td>
+                  <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:130px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
+                </td>
+                <td>
+                  <input type="number" value="${typeof s.calibration === 'number' ? s.calibration : 0}" step="0.1" class="sensorCal" style="width:65px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
+                </td>
+              </tr>`;
       });
     }
 
-    // ===== Event Handlers =====
-
+    // ===== HANDLE SENSOR TABLE EDITS =====
     document.getElementById("sensorTable").addEventListener("input", function(e) {
       const tbl = document.getElementById("sensorTable").querySelector("tbody");
       const sensors = {};
@@ -308,10 +329,10 @@
       fullMapData[selectedDeviceLabel] = sensors;
     });
 
+    // ===== SAVE BUTTON =====
     document.getElementById("saveBtn").onclick = async function() {
       document.getElementById("saveBtn").disabled = true;
       document.getElementById("statusMsg").textContent = "Saving...";
-      // Only update current truck in context; preserve others
       let payload = { value: 0, context: fullMapData };
       try {
         let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_ACCOUNT_TOKEN}`, {
@@ -327,7 +348,7 @@
       setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
       document.getElementById("saveBtn").disabled = false;
     };
-
   </script>
+
 </body>
 </html>
