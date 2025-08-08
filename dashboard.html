@@ -34,7 +34,7 @@
 
     /* Charts area grid */
     #charts{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:1rem }
-    .chart-box{ background:var(--color-card); border-radius:1rem; box-shadow:0 4px 16px rgba(15,23,42,.06); padding:1rem 1rem 1.25rem; height:360px; }
+    .chart-box{ background:var(--color-card); border-radius:1rem; box-shadow:0 4px 16px rgba(15,23,42,.06); padding:1rem 1rem 1.25rem; height:360px; overflow:hidden; }
     .chart-box h3{ font-weight:700; margin:0 0 .5rem 0; font-size:1rem }
 
     /* Info table */
@@ -190,9 +190,9 @@
           </div>
           <div class="flex items-center gap-2 text-sm">
             <button data-range="50"  class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">1h</button>
-            <button data-range="180" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">3h</button>
-            <button data-range="720" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">12h</button>
-            <button data-range="1440" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">24h</button>
+            <button data-range="180" class "rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">3h</button>
+            <button data-range="720" class "rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">12h</button>
+            <button data-range="1440" class "rangeBtn px-2 py-1 rounded bg-gray-100 hover bg-gray-200">24h</button>
           </div>
         </div>
         <div id="charts"></div>
