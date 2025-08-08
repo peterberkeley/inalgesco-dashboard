@@ -5,7 +5,7 @@ const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
 
 let REFRESH_INTERVAL = 60_000;      // poll live every 60s
-let HIST_POINTS      = 50;          // default points on charts (newest on the right)
+let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 
@@ -16,6 +16,44 @@ let sensorMapConfig = {};           // admin mapping/config from Ubidots (contex
 // aliasMap holds friendly display names per truck label. Populated from
 // sensorMapConfig.__aliases and used to override labels in the UI.
 let aliasMap = {};
+
+// Breadcrumb route configuration
+// Colors used for each segment when drawing breadcrumb routes on the map.  When
+// the truck pauses longer than 15 minutes between two GPS points, a new
+// segment is started and assigned the next colour in this array (cycling
+// through if there are more than seven segments).
+const SEGMENT_COLORS = [
+  "#dc2626", // red
+  "#16a34a", // green
+  "#2563eb", // blue
+  "#eab308", // yellow
+  "#8b5cf6", // purple
+  "#f97316", // orange
+  "#000000"  // black
+];
+
+// Selected time window in minutes for breadcrumbs and chart history. The
+// default is 60 (1 hour). When a range button is clicked, this value is
+// updated to the minutes specified in the button's data-range attribute.
+let selectedRangeMinutes = 60;
+
+// Tracks whether the last-range button (aka “Last seen”) is active. This
+// value is updated by the range button click handler. It can be used for
+// custom behaviour if needed, but presently both last and range modes
+// behave similarly except that the button label differs.
+let selectedRangeMode = "range";
+
+// Arrays to keep references to Leaflet polylines and markers representing
+// breadcrumb segments. Each time the breadcrumbs are updated these arrays
+// are cleared and repopulated so the old markers and lines can be
+// removed from the map cleanly.
+let segmentPolylines = [];
+let segmentMarkers = [];
+
+// Holds the Leaflet control used to display the legend for the
+// breadcrumb segments. This reference allows removing the legend when
+// updating the route.
+let legendControl = null;
 
 /* =================== Helpers =================== */
 function onReady(fn){
@@ -228,12 +266,16 @@ async function updateCharts(deviceID, SENSORS){
 }
 
 /* =================== Live panel + map =================== */
-let map, marker, polyline, trail=[];
+// Leaflet map and marker instances.  The map is created once and reused.
+let map, marker;
 function initMap(){
+  // Initialise the Leaflet map if it hasn't been created yet.  Use a
+  // lightweight base map and add a single marker to represent the
+  // truck's current position.  Breadcrumb polylines and markers will
+  // be added dynamically elsewhere when range selections are made.
   map = L.map("map").setView([0,0], 2);
   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
   marker = L.marker([0,0]).addTo(map);
-  polyline = L.polyline([],{ weight:3 }).addTo(map);
 }
 
 function signalBarsFrom(value){
@@ -291,10 +333,13 @@ function drawLive(data, SENSORS){
     rows.map(r=>`<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
 
   if(lat!=null && lon!=null && isFinite(lat) && isFinite(lon)){
+    // Update the current position marker on the map and pan
+    // smoothly to keep the truck visible.  Breadcrumb routes are
+    // handled separately in updateBreadcrumbs().
     marker.setLatLng([lat,lon]);
-    trail.push([lat,lon]); if(trail.length>50) trail.shift();
-    polyline.setLatLngs(trail);
-    map.setView([lat,lon], Math.max(map.getZoom(), 13));
+    if (map) {
+      map.setView([lat,lon], Math.max(map.getZoom(), 13));
+    }
   }
 }
 
@@ -433,73 +478,196 @@ async function fetchCsvRows(deviceID, varLabel, start, end){
   }catch{ return []; }
 }
 
-document.getElementById("dlBtn").onclick = async function(){
-  const expStatus = document.getElementById("expStatus");
-  expStatus.textContent = "Downloading...";
+/* =================== Breadcrumb route drawing =================== */
+/**
+ * Draw breadcrumb routes on the map for the selected device and time window.
+ *
+ * This function fetches GPS data (lat/lon/speed) and temperature readings
+ * across the specified time window, divides the GPS points into segments
+ * whenever there is more than a 15 minute gap between consecutive points,
+ * and then draws a polyline for each segment using a distinct colour from
+ * SEGMENT_COLORS.  It also places small circular markers at each point
+ * along the route and binds a tooltip displaying the timestamp (24‑hour
+ * format), vehicle speed and average temperature.  A legend is added to
+ * the bottom‑right of the map showing the colour and start/end time for
+ * each segment.
+ *
+ * @param {string} deviceID Unique Ubidots device ID
+ * @param {number} rangeMinutes Time window in minutes
+ */
+async function updateBreadcrumbs(deviceID, rangeMinutes){
   try{
-    const deviceLabel = document.getElementById("deviceSelect").value;
-    const startDate = document.getElementById("start").value;
-    const endDate   = document.getElementById("end").value;
-    const sensorMap = await fetchSensorMapConfig();
-    const deviceID  = sensorMap[deviceLabel]?.id;
-
-    if(!SENSORS.length){ expStatus.textContent="No sensors available for this truck."; return; }
-    const addresses = SENSORS.map(s=>s.address).filter(Boolean);
-    if(!addresses.length){ expStatus.textContent="No valid sensor addresses."; return; }
-
-    const startMs = startDate? new Date(startDate).getTime() : null;
-    const endMs   = endDate  ? new Date(endDate).getTime()+24*3600*1000 : null;
-
-    const dataByTime = {};
-    for(const addr of addresses){
-      const vals = await fetchCsvRows(deviceID, addr, startMs, endMs);
-      for(const v of vals){
-        dataByTime[v.timestamp] = dataByTime[v.timestamp]||{};
-        dataByTime[v.timestamp][addr]=v.value;
+    // Ensure the map is initialised
+    if(!map) initMap();
+    // Remove any existing breadcrumb lines, markers and legend
+    segmentPolylines.forEach(p=>p.remove());
+    segmentMarkers.forEach(m=>m.remove());
+    segmentPolylines = [];
+    segmentMarkers = [];
+    if (legendControl){
+      map.removeControl(legendControl);
+      legendControl = null;
+    }
+    const nowMs = Date.now();
+    const startTime = nowMs - (rangeMinutes * 60 * 1000);
+    // Fetch GPS points within the window
+    const gpsRows = await fetchCsvRows(deviceID, 'gps', startTime, nowMs);
+    const gpsPoints = gpsRows
+      .filter(r => r.context && r.context.lat != null && r.context.lng != null)
+      .sort((a,b) => a.timestamp - b.timestamp);
+    if(!gpsPoints.length) return;
+    // Build temperature averages keyed by timestamp
+    const tempData = {};
+    const tempAvg  = {};
+    // Gather temperature readings for each sensor in SENSORS
+    for(const s of SENSORS){
+      if(!s.address) continue;
+      const rows = await fetchCsvRows(deviceID, s.address, startTime, nowMs);
+      for(const r of rows){
+        const ts = r.timestamp;
+        let v = parseFloat(r.value);
+        if(isNaN(v)) continue;
+        if(typeof s.calibration === 'number') v += s.calibration;
+        if(!tempData[ts]) tempData[ts] = [];
+        tempData[ts].push(v);
       }
     }
-
-    const times = Object.keys(dataByTime).map(Number).sort((a,b)=>b-a);
-    if(!times.length){ expStatus.textContent="No data found for the selected range."; return; }
-
-    const adminMap = sensorMapConfig[deviceLabel]||{};
-    const header = ["Timestamp", ...addresses.map(a=>adminMap[a]?.label||a)];
-    const rows = [header];
-    times.forEach(t=>{
-      const row=[new Date(+t).toISOString()];
-      addresses.forEach(a=> row.push(dataByTime[t][a]!==undefined?dataByTime[t][a]:""));
-      rows.push(row);
+    // Compute average per timestamp
+    Object.keys(tempData).forEach(ts => {
+      const vals = tempData[ts];
+      if(vals && vals.length){
+        const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+        tempAvg[ts] = avg;
+      }
     });
-
-    const csv = rows.map(r=>r.join(",")).join("\r\n");
-    const blob = new Blob([csv], {type:"text/csv"});
-    const url = URL.createObjectURL(blob);
-    const a=document.createElement("a"); a.href=url; a.download=`truck_${deviceLabel}_${startDate||"all"}_${endDate||"all"}.csv`;
-    document.body.appendChild(a); a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 500);
-    expStatus.textContent="Download complete!";
-  }catch(e){
-    console.error(e);
-    expStatus.textContent="Download failed.";
+    const tempTimestamps = Object.keys(tempAvg).map(t=>+t).sort((a,b)=>a-b);
+    // Divide the GPS points into segments based on time gaps > 15 minutes
+    const segments = [];
+    let currentSeg = [];
+    for(let i=0;i<gpsPoints.length;i++){
+      const pt = gpsPoints[i];
+      if(currentSeg.length === 0){
+        currentSeg.push(pt);
+      } else {
+        const prev = gpsPoints[i-1];
+        if((pt.timestamp - prev.timestamp) > (15 * 60 * 1000)){
+          segments.push(currentSeg);
+          currentSeg = [pt];
+        } else {
+          currentSeg.push(pt);
+        }
+      }
+    }
+    if(currentSeg.length) segments.push(currentSeg);
+    // Build legend entries and draw segments
+    const legendEntries = [];
+    segments.forEach((seg, idx) => {
+      const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
+      const latlngs = seg.map(r => [r.context.lat, r.context.lng]);
+      const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
+      segmentPolylines.push(poly);
+      // Legend times
+      const startDate = new Date(seg[0].timestamp);
+      const endDate   = new Date(seg[seg.length-1].timestamp);
+      legendEntries.push({ color, start: startDate, end: endDate });
+      // Place markers with tooltips
+      seg.forEach(pt => {
+        const latlng = [pt.context.lat, pt.context.lng];
+        // Find nearest average temperature within ±5 minutes
+        let nearestAvg = null;
+        let closestDiff = Infinity;
+        const ts = pt.timestamp;
+        for(const t of tempTimestamps){
+          const diff = Math.abs(ts - t);
+          if(diff < closestDiff && diff <= 5 * 60 * 1000){
+            closestDiff = diff;
+            nearestAvg = tempAvg[t];
+          }
+        }
+        const speed = pt.context.speed;
+        const timeStr = new Date(pt.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+        let tooltipHtml = `<div>Time: ${timeStr}</div>`;
+        if(speed != null && !isNaN(speed)){
+          tooltipHtml += `<div>Speed: ${speed.toFixed(1)} km/h</div>`;
+        }
+        if(nearestAvg != null && !isNaN(nearestAvg)){
+          tooltipHtml += `<div>Avg Temp: ${nearestAvg.toFixed(1)}°</div>`;
+        }
+        const markerObj = L.circleMarker(latlng, {
+          radius: 4,
+          fillColor: color,
+          color: color,
+          weight: 1,
+          opacity: 0.9,
+          fillOpacity: 0.8
+        }).bindTooltip(tooltipHtml, { className: 'tooltip', direction: 'top', offset: [0,-6] });
+        markerObj.addTo(map);
+        segmentMarkers.push(markerObj);
+      });
+    });
+    // Fit map bounds to the entire route if there are points
+    if(segments.length > 0){
+      const allLatLngs = [];
+      segments.forEach(seg => {
+        seg.forEach(pt => {
+          allLatLngs.push([pt.context.lat, pt.context.lng]);
+        });
+      });
+      const bounds = L.latLngBounds(allLatLngs);
+      map.fitBounds(bounds, { padding: [20,20] });
+    }
+    // Add legend control
+    if(legendEntries.length > 0){
+      legendControl = L.control({ position: 'bottomright' });
+      legendControl.onAdd = function(){
+        const div = L.DomUtil.create('div', 'breadcrumb-legend');
+        // Style inline for clarity; adjust in CSS if needed
+        div.style.background = 'rgba(255,255,255,0.85)';
+        div.style.padding = '8px 10px';
+        div.style.borderRadius = '6px';
+        div.style.fontSize = '0.75rem';
+        div.style.lineHeight = '1.2';
+        div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        let html = '<strong>Segments</strong><br>';
+        legendEntries.forEach(entry => {
+          const startT = entry.start.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false });
+          const endT   = entry.end.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false });
+          html += `<span style="display:inline-block;width:12px;height:12px;margin-right:4px;background:${entry.color}"></span>${startT}–${endT}<br>`;
+        });
+        div.innerHTML = html;
+        return div;
+      };
+      legendControl.addTo(map);
+    }
+  }catch(err){
+    console.error('updateBreadcrumbs error', err);
   }
-};
+}
 
 /* =================== Range buttons =================== */
 function wireRangeButtons(){
   const buttons = document.querySelectorAll(".rangeBtn");
   buttons.forEach(btn=>{
-    // use the onclick property to ensure only one handler per button
+    // Assign a single click handler to each range button.  It updates
+    // the selected window and then triggers a refresh of the dashboard.
     btn.onclick = async function(){
-      // reset all range buttons to default colours
+      // reset all range buttons to their default appearance
       buttons.forEach(b=>{
         b.style.backgroundColor = '';
         b.style.color = '';
       });
-      // highlight clicked button in green with white text
+      // highlight the clicked button in green with white text
       this.style.backgroundColor = '#10b981';
       this.style.color = '#ffffff';
-      const val = parseInt(this.getAttribute('data-range'), 10);
-      HIST_POINTS = isFinite(val) ? val : 50;
+      // Determine the range (in minutes) and mode from the button's attributes
+      const modeAttr = this.getAttribute('data-mode') || 'range';
+      const valAttr = parseInt(this.getAttribute('data-range'), 10);
+      selectedRangeMinutes = isFinite(valAttr) ? valAttr : 60;
+      selectedRangeMode = modeAttr;
+      // Use the selected window for chart history points as well.  For
+      // example, a 60‑minute window draws 60 points.  If you prefer a
+      // fixed number of points irrespective of minutes, adjust here.
+      HIST_POINTS = selectedRangeMinutes;
       await updateAll();
     };
   });
@@ -538,6 +706,8 @@ async function updateAll(){
     if(!map) initMap();
     await poll(deviceID, SENSORS);
     await renderMaintenanceBox(deviceLabel, deviceID);
+    // After rendering maintenance, update breadcrumb routes for the selected time window
+    await updateBreadcrumbs(deviceID, selectedRangeMinutes);
   }else{
     console.error("Device ID not found for", deviceLabel);
   }
