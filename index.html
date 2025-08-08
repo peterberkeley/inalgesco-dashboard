@@ -1,152 +1,26 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-  <!-- [1] META & TITLE -->
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sky Café Trucks Dashboard</title>
-
-  <!-- [2] STYLES & LIBRARIES -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-  <!-- [3] CUSTOM STYLES -->
-  <style>
-    :root {
-      --color-bg: #f9fafb;
-      --color-card: #ffffff;
-      --color-text: #1f2937;
-      --color-primary: #3b82f6;
-      --color-secondary: #10b981;
-      --color-accent: #f59e0b;
-    }
-    body {
-      background: var(--color-bg);
-      color: var(--color-text);
-      font-family: 'Inter', sans-serif;
-    }
-    #charts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1rem;
-    }
-    .chart-box {
-      background: var(--color-card);
-      border-radius: 1rem;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-      padding: 1.5rem;
-      padding-bottom: 2rem;
-      transition: box-shadow 0.2s ease;
-      height: 360px;
-    }
-    .chart-box:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
-    .chart-box h2 { margin-bottom: 0.75rem; font-size: 1.25rem; }
-    .chart-box canvas { flex:1; width:100% !important; height:260px !important; }
-
-    .export-controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
-    }
-    .export-controls input { flex: 1 1 8rem; min-width: 6rem; }
-
-    #deviceSelect, #dlBtn {
-      background: var(--color-primary);
-      color: #fff;
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      border: none;
-      cursor: pointer;
-      transition: background 0.2s;
-      white-space: nowrap;
-    }
-    #deviceSelect:hover, #dlBtn:hover { background: var(--color-secondary); }
-    #dlBtn:disabled { background: gray; cursor:not-allowed; }
-
-    #start, #end { font-size: 60%; }
-
-    #spinner {
-      position: fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-      border:4px solid rgba(0,0,0,0.1);
-      border-top:4px solid var(--color-primary);
-      border-radius:50%; width:40px; height:40px;
-      animation:spin 1s linear infinite; display:none; z-index:1000;
-    }
-    @keyframes spin { to{ transform:rotate(360deg); } }
-  </style>
-</head>
-<body>
-
-  <header class="p-4 shadow-md flex items-center"
-          style="background: linear-gradient(to right, #d9eaf8, #3b82f6);">
-    <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png"
-         alt="Sky Café Trucks" class="h-10" />
-    <h1 class="ml-4 text-2xl font-semibold text-white">Sky Café Trucks Dashboard</h1>
-    <div class="ml-auto">
-      <label class="text-white font-medium">
-        Device:
-        <select id="deviceSelect" class="ml-2 p-1 rounded"></select>
-      </label>
-    </div>
-  </header>
-
-  <button id="adminBtn"
-          class="ml-4 px-3 py-1 rounded bg-blue-700 text-white hover:bg-blue-900">
-    Admin Settings
-  </button>
-  <script>
-    document.getElementById('adminBtn').onclick = () => {
-      window.open('admin.html', '_blank');
-    };
-  </script>
-
-  <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
-    <!-- LEFT SIDEBAR -->
-    <section class="lg:col-span-1 space-y-6">
-      <!-- LIVE DATA CARD -->
-      <div class="bg-white rounded-2xl shadow p-4">
-        <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
-        <table id="latest" class="w-full text-sm"></table>
-      </div>
-
-      <!-- CSV EXPORT CARD -->
-      <div class="bg-white rounded-2xl shadow p-4">
-        <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
-        <div class="export-controls mb-4">
-          <input type="date" id="start" class="border p-1 rounded" />
-          <input type="date" id="end" class="border p-1 rounded" />
-          <button id="dlBtn">Download</button>
-        </div>
-        <div id="expStatus" class="text-sm text-gray-600"></div>
-      </div>
-
-      <!-- MAINTENANCE CARD (populated by JS) -->
-      <div id="maintenanceBox" class="bg-white rounded-2xl shadow p-4">
-        <!-- JS will inject two rows here -->
-      </div>
-    </section>
-
-    <!-- RIGHT CONTENT -->
-    <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- CHARTS GRID -->
-      <div id="charts" class="col-span-2"></div>
-
-      <!-- MAP CARD -->
-      <div class="bg-white rounded-2xl shadow p-4 col-span-2 md:col-span-2">
-        <h2 class="text-lg font-semibold mb-2">Map View</h2>
-        <div id="map" class="h-64 rounded-lg"></div>
-      </div>
-    </section>
-  </main>
-
-  <div id="spinner"></div>
-
-  <!-- Load dashboard logic after DOM -->
-  <script src="dashboard.js" defer></script>
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sky Café Trucks</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Immediate redirect to dashboard.html, preserving query + hash and adding a cache-buster -->
+    <script>
+      (function () {
+        var qs = window.location.search || "";
+        var hash = window.location.hash || "";
+        var buster = "v=" + Date.now();
+        var sep = qs ? "&" : "?";
+        window.location.replace("dashboard.html" + qs + sep + buster + hash);
+      })();
+    </script>
+    <noscript>
+      <meta http-equiv="refresh" content="0; url=dashboard.html?v=reload" />
+    </noscript>
+  </head>
+  <body>
+    <p>Loading dashboard… If you are not redirected, 
+      <a href="dashboard.html?v=reload">click here</a>.
+    </p>
+  </body>
 </html>
