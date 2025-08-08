@@ -71,7 +71,7 @@ function buildDeviceDropdownFromConfig(sensorMap){
     opt.text  = `${dot} ${obj.label} (${isOnline?"Online":"Offline"})`;
     sel.appendChild(opt);
   });
-  // prefer an online truck
+  // prefer an online truck by default
   for(let i=0;i<sel.options.length;i++){
     if (sel.options[i].text.includes("Online")) { sel.selectedIndex=i; break; }
   }
@@ -107,10 +107,9 @@ async function fetchDallasAddresses(deviceID){
     const res = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
     if(!res.ok) return [];
     const js = await res.json();
-    const now = Date.now();
+    // Keep any 16‑character hex sensor label regardless of last reading time
     return js.results
       .filter(v=>/^[0-9a-fA-F]{16}$/.test(v.label))
-      .filter(v=>((v.lastValue?.timestamp)||0) > now - 3*60*1000)
       .map(v=>v.label)
       .sort();
   }catch(e){ return []; }
@@ -216,7 +215,7 @@ function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,speed,signal,volt,readings} = data;
   ts = ts || Date.now();
 
-  // Average temp KPI (from current readings we just fetched)
+  // Average temp KPI
   const temps = SENSORS
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
     .filter(v=>v!=null && isFinite(v));
@@ -226,7 +225,9 @@ function drawLive(data, SENSORS){
   // Truck + last updated
   const devSel = document.getElementById("deviceSelect");
   document.getElementById("kpiTruck").textContent = devSel.value || "—";
-  document.getElementById("kpiSeen").textContent  = `updated ${Math.round((Date.now()-ts)/1000)}s ago`;
+  // Show exact last update time in 24h format with seconds
+  const updateTime = new Date(ts).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+  document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
 
   // Phone-like signal bars colored
   const sigBars = signalBarsFrom(signal);
@@ -448,9 +449,18 @@ document.getElementById("dlBtn").onclick = async function(){
 
 /* =================== Range buttons =================== */
 function wireRangeButtons(){
-  document.querySelectorAll(".rangeBtn").forEach(btn=>{
+  const buttons = document.querySelectorAll(".rangeBtn");
+  buttons.forEach(btn=>{
     btn.addEventListener("click", async ()=>{
-      const val = parseInt(btn.getAttribute("data-range"),10);
+      // reset all range buttons to default colours
+      buttons.forEach(b=>{
+        b.style.backgroundColor = '';
+        b.style.color = '';
+      });
+      // highlight clicked button in green with white text
+      btn.style.backgroundColor = '#10b981';
+      btn.style.color = '#ffffff';
+      const val = parseInt(btn.getAttribute("data-range"), 10);
       HIST_POINTS = isFinite(val) ? val : 50;
       await updateAll();
     });
