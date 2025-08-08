@@ -49,9 +49,9 @@
     .sig i{ width:5px; background:#e5e7eb; border-radius:2px; display:inline-block }
     .sig i.on{ background:#10b981 }
     .sig i.l1{ height:6px } .sig i.l2{ height:9px } .sig i.l3{ height:12px } .sig i.l4{ height:15px } .sig i.l5{ height:18px }
-    .sig.low  i.on{ background:#ef4444 }
-    .sig.med  i.on{ background:#f59e0b }
-    .sig.high i.on{ background:#10b981 }
+    .sig.low  i.on{ background:#ef4444 }  /* red   */
+    .sig.med  i.on{ background:#f59e0b }  /* orange*/
+    .sig.high i.on{ background:#10b981 }  /* green */
 
     /* Map height */
     #map{ height:22rem }
@@ -68,11 +68,25 @@
       animation:spin 1s linear infinite;
     }
     @keyframes spin{ to{ transform:rotate(360deg) } }
+
+    /* Breadcrumb legend styling for route segments */
+    .breadcrumb-legend {
+      font-size: 0.75rem;
+    }
+    /* Custom tooltip styling for breadcrumb markers */
+    .leaflet-tooltip.tooltip {
+      background:#fff;
+      color:#374151;
+      border:1px solid #d1d5db;
+      border-radius:4px;
+      padding:2px 4px;
+      box-shadow:0 2px 4px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
 
-  <!-- Simple password gate (10‑min session) -->
+  <!-- Simple password gate (10 min session) -->
   <script>
     (function(){
       const PASSWORD="Password";
@@ -189,10 +203,11 @@
             <div id="chartRange" class="text-sm text-gray-500"></div>
           </div>
           <div class="flex items-center gap-2 text-sm">
-            <button data-range="60"  class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">1h</button>
-            <button data-range="180" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">3h</button>
-            <button data-range="720" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">12h</button>
-            <button data-range="1440" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">24h</button>
+            <button data-range="60"  data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">1h</button>
+            <button data-range="180" data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">3h</button>
+            <button data-range="720" data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">12h</button>
+            <button data-range="1440" data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">24h</button>
+            <button data-range="60"  data-mode="last"  class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Last</button>
           </div>
         </div>
         <div id="charts"></div>
