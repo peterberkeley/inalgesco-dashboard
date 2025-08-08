@@ -4,242 +4,231 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sky Café Trucks Dashboard</title>
+
+  <!-- Tailwind & libs -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <style>
     :root {
-      --color-bg: #f9fafb;
+      --color-bg: #f6f7fb;
       --color-card: #ffffff;
-      --color-text: #1f2937;
+      --color-text: #111827;
+      --color-muted: #6b7280;
       --color-primary: #3b82f6;
       --color-secondary: #10b981;
-      --color-accent: #f59e0b;
+      --color-warn: #f59e0b;
+      --color-danger: #ef4444;
     }
-    body {
-      background: var(--color-bg);
-      color: var(--color-text);
-      font-family: 'Inter', sans-serif;
-    }
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'Inter', sans-serif; }
 
-    /* Cards grid */
-    #charts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1rem;
-    }
+    /* Card utility */
+    .card { background: var(--color-card); border-radius: 1rem; box-shadow: 0 6px 16px rgba(17,24,39,.06); }
 
-    /* Chart cards */
-    .chart-box {
-      background: var(--color-card);
-      border-radius: 1rem;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-      padding: 1.5rem;
-      padding-bottom: 2rem;
-      transition: box-shadow 0.2s ease;
-      height: 360px;
-    }
-    .chart-box:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
-    .chart-box h2 { margin-bottom: 0.75rem; font-size: 1.25rem; }
+    /* Charts grid */
+    #charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+    .chart-box { background: var(--color-card); border-radius: 1rem; box-shadow: 0 4px 12px rgba(17,24,39,.06); padding: 1rem 1rem 1.25rem; height: 360px; display:flex; flex-direction:column; }
+    .chart-box h2 { margin-bottom: .5rem; font-size: 1.05rem; font-weight: 600; color:#111827; }
     .chart-box canvas { flex:1; width:100% !important; height:260px !important; }
 
-    /* Export controls row */
-    .export-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-    .export-controls input { flex: 1 1 8rem; min-width: 6rem; }
-    #deviceSelect, #dlBtn {
-      background: var(--color-primary);
-      color: #fff;
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      border: none;
-      cursor: pointer;
-      transition: background 0.2s;
-      white-space: nowrap;
-    }
-    #deviceSelect:hover, #dlBtn:hover { background: var(--color-secondary); }
-    #dlBtn:disabled { background: gray; cursor:not-allowed; }
-    #start, #end { font-size: 60%; }
+    /* Latest table */
+    #latest { border-radius: .75rem; overflow:hidden; font-size: .92rem; }
+    #latest th, #latest td { padding: .5rem .65rem; }
+    #latest th { text-align:left; color:#374151; font-weight:600; width:56%; }
+    #latest td { text-align:right; color:#111827; font-variant-numeric: tabular-nums; }
+    #latest tr:nth-child(odd){ background:#f9fafb; }
+    #latest tr:nth-child(even){ background:#f3f4f6; }
+
+    /* Signal bars */
+    .sig { display:inline-flex; gap:2px; align-items:flex-end; margin-left:.25rem; }
+    .sig i { width:4px; border-radius:1px; background:#d1d5db; display:block; }
+    .sig i.on { background:#10b981; }
+    .sig i.l1{ height:6px } .sig i.l2{ height:9px } .sig i.l3{ height:12px } .sig i.l4{ height:15px } .sig i.l5{ height:18px }
+
+    /* Map */
+    #map { height: 20rem; }
+    @media (min-width: 768px){ #map { height: 24rem; } }
+    @media (min-width: 1024px){ #map { height: 30rem; } }
 
     /* Spinner */
-    #spinner {
-      position: fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-      border:4px solid rgba(0,0,0,0.1);
-      border-top:4px solid var(--color-primary);
-      border-radius:50%; width:40px; height:40px;
-      animation:spin 1s linear infinite; display:none; z-index:1000;
-    }
-    @keyframes spin { to{ transform:rotate(360deg); } }
+    #spinner { position: fixed; top:50%; left:50%; transform:translate(-50%,-50%); border:4px solid rgba(0,0,0,0.08); border-top:4px solid var(--color-primary); border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; display:none; z-index:1000; }
+    @keyframes spin { to { transform:rotate(360deg) } }
 
-    /* Reusable card utility */
-    .card {
-      background: var(--color-card);
-      border-radius: 1rem;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
+    /* KPI strip */
+    .kpi { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; }
+    @media (min-width:768px){ .kpi{ grid-template-columns: repeat(4,minmax(0,1fr)); } }
+    .kpi .tile { padding: .9rem 1rem; border-radius: .9rem; background:#fff; box-shadow: 0 4px 12px rgba(17,24,39,.06); }
+    .kpi .lab{ font-size:.78rem; color:#6b7280; }
+    .kpi .val{ font-size:1.25rem; font-weight:700; color:#111827; }
+    .kpi .sub{ font-size:.75rem; color:#6b7280; }
 
-    /* Info table polish */
-    #latest th {
-      text-align: left;
-      padding: 6px 8px;
-      color: #374151;
-      font-weight: 600;
-      width: 55%;
-    }
-    #latest td {
-      text-align: right;
-      padding: 6px 8px;
-      color: #111827;
-      font-variant-numeric: tabular-nums;
-    }
-    #latest tr:nth-child(odd)  { background: #f9fafb; }
-    #latest tr:nth-child(even) { background: #f3f4f6; }
-    #latest { border-radius: 0.75rem; overflow: hidden; }
+    /* Export controls */
+    .export-controls { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+    .export-controls input{ flex:1 1 8rem; min-width:6rem; }
+    #dlBtn{ background:var(--color-primary); color:#fff; padding:.4rem .8rem; border-radius:.5rem; border:0; }
+    #dlBtn:hover{ background:#2563eb; }
   </style>
 </head>
 <body>
-  <!-- Simple password session (10 min) -->
+  <!-- Password session (10 minutes) -->
   <script>
     (function() {
       const PASSWORD = "Password";
       const SESSION_KEY = "skycafe_password_auth";
-      const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
-      function isSessionValid() {
-        const session = localStorage.getItem(SESSION_KEY);
-        if (!session) return false;
-        try {
-          const data = JSON.parse(session);
-          const now = Date.now();
-          return data.password === PASSWORD && (now - data.timestamp < SESSION_TIMEOUT_MS);
-        } catch {
-          return false;
+      const SESSION_TIMEOUT_MS = 10*60*1000;
+      function valid(){ try{ const s=JSON.parse(localStorage.getItem(SESSION_KEY)||"null"); return s && s.password===PASSWORD && (Date.now()-s.timestamp<SESSION_TIMEOUT_MS);}catch{return false;} }
+      function gate(){
+        let n=0; while(n<3){
+          const v = prompt("Enter password to access SkyCafeTrucks:");
+          if(v===PASSWORD){ localStorage.setItem(SESSION_KEY, JSON.stringify({password:PASSWORD,timestamp:Date.now()})); return; }
+          alert("Incorrect password. Try again."); n++;
         }
+        alert("Too many incorrect attempts. Access denied."); document.documentElement.innerHTML=""; throw new Error("Access denied");
       }
-
-      async function promptPassword() {
-        let attempts = 0;
-        while (attempts < 3) {
-          const entered = prompt("Enter password to access SkyCafeTrucks:");
-          if (entered === PASSWORD) {
-            localStorage.setItem(SESSION_KEY, JSON.stringify({ password: PASSWORD, timestamp: Date.now() }));
-            return true;
-          } else {
-            alert("Incorrect password. Try again.");
-            attempts++;
-          }
-        }
-        alert("Too many incorrect attempts. Access denied.");
-        document.documentElement.innerHTML = "";
-        throw new Error("Access denied due to wrong password.");
-      }
-
-      if (!isSessionValid()) {
-        promptPassword();
-      } else {
-        // Refresh timestamp to extend session on page load
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ password: PASSWORD, timestamp: Date.now() }));
-      }
+      if(!valid()) gate(); else localStorage.setItem(SESSION_KEY, JSON.stringify({password:PASSWORD,timestamp:Date.now()}));
     })();
   </script>
 
   <!-- Header -->
-  <header class="sticky top-0 z-40 p-4 shadow-md flex items-center backdrop-blur bg-gradient-to-r from-[#d9eaf8]/90 to-[#3b82f6]/90">
-    <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png"
-         alt="Sky Café Trucks" class="h-10" />
-    <h1 class="ml-4 text-2xl font-semibold text-white">Sky Café Trucks Dashboard</h1>
+  <header class="sticky top-0 z-40 backdrop-blur bg-gradient-to-r from-[#d9eaf8]/90 to-[#3b82f6]/90 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <img src="https://peterberkeley.github.io/inalgesco-dashboard/logo_v2_hex_d9eaf8.png" alt="Sky Café Trucks" class="h-9" />
+      <div class="text-white">
+        <div class="text-xl font-semibold">Sky Café Trucks</div>
+        <div class="text-xs opacity-90">Dashboard</div>
+      </div>
 
-    <div class="ml-auto">
-      <label class="text-white font-medium">
-        Device:
-        <select id="deviceSelect" class="ml-2 p-1 rounded"></select>
-      </label>
-    </div>
-
-    <div class="ml-4 flex items-center gap-2">
-      <span id="deviceStatusPill" class="hidden px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Online</span>
-      <button id="adminBtn" class="px-3 py-1 rounded bg-white/20 text-white hover:bg-white/30 border border-white/30">
-        Admin
-      </button>
-      <button id="themeToggle" class="px-2 py-1 rounded bg-white/10 text-white hover:bg-white/20 border border-white/20" title="Toggle theme">🌓</button>
+      <div class="ml-auto flex items-center gap-3">
+        <div class="text-white text-sm">
+          Device:
+          <select id="deviceSelect" class="ml-2 px-2 py-1 rounded bg-white/20 text-white border border-white/30"></select>
+        </div>
+        <span id="deviceStatusPill" class="hidden px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Online</span>
+        <button id="adminBtn" class="px-3 py-1 rounded bg-white/20 text-white hover:bg-white/30 border border-white/30">Admin</button>
+        <button id="tripsBtn" class="px-3 py-1 rounded bg-white/10 text-white hover:bg-white/20 border border-white/20">Trips</button>
+      </div>
     </div>
   </header>
 
-  <!-- Header actions script -->
   <script>
-    // Admin click
     document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html'; };
+    // Placeholder – can hook trip UI later
+    document.getElementById('tripsBtn').onclick = () => { alert('Trips UI coming next.'); };
 
-    // Theme toggle (simple: flips data-theme on <html>)
-    document.getElementById('themeToggle').onclick = () => {
-      const html = document.documentElement;
-      html.dataset.theme = (html.dataset.theme === 'light') ? 'dark' : 'light';
-    };
-
-    // Called by dashboard.js after dropdown build to reflect online/offline
+    // Called from dashboard.js to reflect online/offline
     window.__setDeviceStatus = function(isOnline) {
       const pill = document.getElementById('deviceStatusPill');
       if (!pill) return;
+      pill.classList.remove('hidden');
       if (isOnline) {
-        pill.textContent = "Online";
-        pill.classList.remove("hidden","bg-gray-100","text-gray-700");
-        pill.classList.add("bg-green-100","text-green-700");
+        pill.textContent = 'Online';
+        pill.className = 'px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700';
       } else {
-        pill.textContent = "Offline";
-        pill.classList.remove("hidden","bg-green-100","text-green-700");
-        pill.classList.add("bg-gray-100","text-gray-700");
+        pill.textContent = 'Offline';
+        pill.className = 'px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-700';
       }
     };
   </script>
 
-  <main class="container mx-auto max-w-7xl p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
-    <!-- LEFT SIDEBAR -->
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- LEFT -->
     <section class="lg:col-span-1 space-y-6">
+      <!-- KPI STRIP -->
+      <div class="kpi">
+        <div class="tile">
+          <div class="lab">Truck</div>
+          <div class="val" id="kpiTruck">—</div>
+          <div class="sub" id="kpiSeen">—</div>
+        </div>
+        <div class="tile">
+          <div class="lab">Avg Temp</div>
+          <div class="val" id="kpiAvg">—</div>
+          <div class="sub" id="kpiAvgSub">last readings</div>
+        </div>
+        <div class="tile">
+          <div class="lab">Speed</div>
+          <div class="val"><span id="kpiSpeed">—</span> <span class="text-sm text-gray-400">km/h</span></div>
+          <div class="sub" id="kpiSpeedSub">last fix</div>
+        </div>
+        <div class="tile">
+          <div class="lab">Signal</div>
+          <div class="val flex items-center gap-2">
+            <span id="kpiSigText">—</span>
+            <span id="kpiSigBars" class="sig"><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><i class="l5"></i></span>
+          </div>
+          <div class="sub">radio quality</div>
+        </div>
+      </div>
+
       <!-- LIVE DATA CARD -->
       <div class="card p-4">
         <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
         <table id="latest" class="w-full text-sm"></table>
       </div>
 
-      <!-- CSV EXPORT CARD -->
+      <!-- CSV EXPORT -->
       <div class="card p-4">
         <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
-        <div class="export-controls mb-4">
+        <div class="export-controls mb-3">
           <label class="text-sm text-gray-600">Start</label>
           <input type="date" id="start" class="border p-1 rounded" />
           <label class="text-sm text-gray-600">End</label>
           <input type="date" id="end" class="border p-1 rounded" />
-          <button id="dlBtn" class="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">Download</button>
+          <button id="dlBtn">Download</button>
         </div>
         <div id="expStatus" class="text-sm text-gray-600"></div>
       </div>
 
-      <!-- MAINTENANCE CARD (content filled by JS) -->
+      <!-- MAINTENANCE -->
       <div id="maintenanceBox" class="card p-4">
         <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
         <div class="text-sm text-gray-500">Loading…</div>
       </div>
     </section>
 
-    <!-- RIGHT CONTENT -->
-    <section class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- CHARTS GRID -->
-      <div id="charts" class="col-span-2"></div>
+    <!-- RIGHT -->
+    <section class="lg:col-span-3 space-y-6">
+      <!-- CHARTS -->
+      <div class="card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">Sensors</h2>
+          <div class="flex items-center gap-2 text-sm">
+            <button data-range="50"  class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">1h</button>
+            <button data-range="180" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">3h</button>
+            <button data-range="720" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">12h</button>
+            <button data-range="1440" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">24h</button>
+          </div>
+        </div>
+        <div id="charts"></div>
+      </div>
 
-      <!-- MAP CARD -->
-      <div class="card p-4 col-span-2 md:col-span-2">
-        <h2 class="text-lg font-semibold mb-2">Map View</h2>
-        <div id="map" class="h-72 md:h-80 lg:h-[28rem] rounded-lg"></div>
+      <!-- MAP -->
+      <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-lg font-semibold">Map View</h2>
+          <div class="text-sm text-gray-600">breadcrumb trail</div>
+        </div>
+        <div id="map" class="rounded-lg"></div>
       </div>
     </section>
   </main>
 
-  <!-- spinner overlay -->
   <div id="spinner"></div>
 
-  <!-- main dashboard logic -->
   <script src="dashboard.js" defer></script>
+  <script>
+    // Hook range buttons to dashboard.js (HIST changes)
+    document.addEventListener('click', e=>{
+      const b = e.target.closest('.rangeBtn');
+      if(!b) return;
+      const pts = parseInt(b.dataset.range,10);
+      if(window.__setHistoryPoints) window.__setHistoryPoints(pts);
+      document.querySelectorAll('.rangeBtn').forEach(x=>x.classList.remove('bg-blue-100','text-blue-700'));
+      b.classList.add('bg-blue-100','text-blue-700');
+    });
+  </script>
 </body>
 </html>
