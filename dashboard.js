@@ -13,6 +13,9 @@ const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 let SENSORS = [];                   // [{address,label,calibration,chart,col},...]
 let variableCache = {};             // per-device map: label -> varId
 let sensorMapConfig = {};           // admin mapping/config from Ubidots (context)
+// aliasMap holds friendly display names per truck label. Populated from
+// sensorMapConfig.__aliases and used to override labels in the UI.
+let aliasMap = {};
 
 /* =================== Helpers =================== */
 function onReady(fn){
@@ -28,9 +31,14 @@ async function fetchSensorMapMapping(){
       { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
     const js = await res.json();
     sensorMapConfig = (js.results?.[0]?.context) || {};
+    // Populate aliasMap from config. The alias mapping is stored under
+    // the special key '__aliases' in the sensor_map context. Reset to
+    // empty object if not present to avoid stale values.
+    aliasMap = sensorMapConfig.__aliases || {};
   }catch(e){
     console.error("Failed to fetch sensor_map:", e);
     sensorMapConfig = {};
+    aliasMap = {};
   }
 }
 
@@ -59,6 +67,8 @@ async function fetchSensorMapConfig(){
 
 function buildDeviceDropdownFromConfig(sensorMap){
   const sel = document.getElementById("deviceSelect");
+  // remember the previously selected device so we can restore it after rebuilding
+  const prev = sel.value;
   const now = Math.floor(Date.now()/1000);
   sel.innerHTML = "";
   const entries = Object.entries(sensorMap)
@@ -68,12 +78,33 @@ function buildDeviceDropdownFromConfig(sensorMap){
     const dot = isOnline ? "🟢" : "⚪️";
     const opt = document.createElement("option");
     opt.value = dev;
-    opt.text  = `${dot} ${obj.label} (${isOnline?"Online":"Offline"})`;
+    // Use alias if defined, otherwise fall back to the device's label
+    const displayLabel = aliasMap && aliasMap[dev] ? aliasMap[dev] : obj.label;
+    opt.text  = `${dot} ${displayLabel} (${isOnline?"Online":"Offline"})`;
     sel.appendChild(opt);
   });
-  // prefer an online truck by default
-  for(let i=0;i<sel.options.length;i++){
-    if (sel.options[i].text.includes("Online")) { sel.selectedIndex=i; break; }
+  // try to restore the previously selected device if it still exists
+  let foundPrev=false;
+  for(let i=0; i<sel.options.length; i++){
+    if (sel.options[i].value === prev){
+      sel.selectedIndex = i;
+      foundPrev=true;
+      break;
+    }
+  }
+  // if not found, prefer an online truck
+  if(!foundPrev){
+    for(let i=0; i<sel.options.length; i++){
+      if (sel.options[i].text.includes("Online")){
+        sel.selectedIndex = i;
+        foundPrev=true;
+        break;
+      }
+    }
+  }
+  // fallback to first option if nothing else
+  if(!foundPrev && sel.options.length>0){
+    sel.selectedIndex = 0;
   }
 }
 
@@ -215,7 +246,7 @@ function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,speed,signal,volt,readings} = data;
   ts = ts || Date.now();
 
-  // Average temp KPI
+  // Average temp KPI (from current readings we just fetched)
   const temps = SENSORS
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
     .filter(v=>v!=null && isFinite(v));
@@ -224,7 +255,13 @@ function drawLive(data, SENSORS){
 
   // Truck + last updated
   const devSel = document.getElementById("deviceSelect");
-  document.getElementById("kpiTruck").textContent = devSel.value || "—";
+  const deviceKey = devSel.value;
+  // Derive the display name: prefer alias, else sensorMapConfig label, else the key
+  let displayName = aliasMap && aliasMap[deviceKey];
+  if (!displayName) {
+    displayName = (sensorMapConfig[deviceKey] && sensorMapConfig[deviceKey].label) || deviceKey || "—";
+  }
+  document.getElementById("kpiTruck").textContent = displayName;
   // Show exact last update time in 24h format with seconds
   const updateTime = new Date(ts).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
   document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
@@ -451,19 +488,20 @@ document.getElementById("dlBtn").onclick = async function(){
 function wireRangeButtons(){
   const buttons = document.querySelectorAll(".rangeBtn");
   buttons.forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
+    // use the onclick property to ensure only one handler per button
+    btn.onclick = async function(){
       // reset all range buttons to default colours
       buttons.forEach(b=>{
         b.style.backgroundColor = '';
         b.style.color = '';
       });
       // highlight clicked button in green with white text
-      btn.style.backgroundColor = '#10b981';
-      btn.style.color = '#ffffff';
-      const val = parseInt(btn.getAttribute("data-range"), 10);
+      this.style.backgroundColor = '#10b981';
+      this.style.color = '#ffffff';
+      const val = parseInt(this.getAttribute('data-range'), 10);
       HIST_POINTS = isFinite(val) ? val : 50;
       await updateAll();
-    });
+    };
   });
 }
 
@@ -503,4 +541,6 @@ async function updateAll(){
   }else{
     console.error("Device ID not found for", deviceLabel);
   }
+  // reattach range button handlers after DOM updates to ensure they remain functional
+  wireRangeButtons();
 }
