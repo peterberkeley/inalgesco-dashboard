@@ -49,9 +49,9 @@
     .sig i{ width:5px; background:#e5e7eb; border-radius:2px; display:inline-block }
     .sig i.on{ background:#10b981 }
     .sig i.l1{ height:6px } .sig i.l2{ height:9px } .sig i.l3{ height:12px } .sig i.l4{ height:15px } .sig i.l5{ height:18px }
-    .sig.low  i.on{ background:#ef4444 }  /* red   */
-    .sig.med  i.on{ background:#f59e0b }  /* orange*/
-    .sig.high i.on{ background:#10b981 }  /* green */
+    .sig.low  i.on{ background:#ef4444 }
+    .sig.med  i.on{ background:#f59e0b }
+    .sig.high i.on{ background:#10b981 }
 
     /* Map height */
     #map{ height:22rem }
@@ -87,11 +87,11 @@
       display:inline-block;
       background: inherit;
       background-image: linear-gradient(to right, #d9eaf8 0%, #3b82f6 100%);
-      -webkit-mask-image: url('logo_white_transparent.png');
+      -webkit-mask-image: url('logo_high_resolution_white.png');
       -webkit-mask-repeat: no-repeat;
       -webkit-mask-position: left center;
       -webkit-mask-size: contain;
-      mask-image: url('logo_white_transparent.png');
+      mask-image: url('logo_high_resolution_white.png');
       mask-repeat: no-repeat;
       mask-position: left center;
       mask-size: contain;
@@ -101,33 +101,6 @@
   </style>
 </head>
 <body>
-
-  <!-- Password gate -->
-  <script>
-    (function(){
-      const PASSWORD="Password";
-      const SESSION_KEY="skycafe_password_auth";
-      const TIMEOUT=10*60*1000;
-      function ok(){
-        const s=localStorage.getItem(SESSION_KEY);
-        if(!s) return false;
-        try{ const d=JSON.parse(s); return d.password===PASSWORD && (Date.now()-d.timestamp)<TIMEOUT; }catch{ return false }
-      }
-      async function promptPw(){
-        let tries=0;
-        while(tries<3){
-          const p=prompt("Enter password to access SkyCafeTrucks:");
-          if(p===PASSWORD){
-            localStorage.setItem(SESSION_KEY, JSON.stringify({password:PASSWORD, timestamp:Date.now()}));
-            return true;
-          }
-          alert("Incorrect password. Try again."); tries++;
-        }
-        document.documentElement.innerHTML=""; throw new Error("Access denied");
-      }
-      if(!ok()) promptPw(); else localStorage.setItem(SESSION_KEY, JSON.stringify({password:PASSWORD, timestamp:Date.now()}));
-    })();
-  </script>
 
   <!-- Header -->
   <header class="sticky top-0 z-40 backdrop-blur bg-gradient-to-r from-[#d9eaf8]/90 to-[#3b82f6]/90">
@@ -142,9 +115,7 @@
         <label class="text-white font-medium text-sm">Device:</label>
         <select id="deviceSelect" class="px-2 py-1 rounded border border-white/30 bg-white/90 text-slate-700"></select>
         <span id="deviceStatusPill" class="hidden px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Online</span>
-        <button id="adminBtn" class="px-3 py-1 rounded bg-white/20 text-white hover:bg-white/30 border border-white/30">
-          Admin
-        </button>
+        <button id="adminBtn" class="px-3 py-1 rounded bg-white/20 text-white hover:bg-white/30 border border-white/30">Admin</button>
       </div>
     </div>
   </header>
@@ -162,8 +133,7 @@
 
   <!-- Main -->
   <main class="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
-
-    <!-- Left -->
+    <!-- Left column -->
     <section class="lg:col-span-1 space-y-4">
       <div class="kpi">
         <div class="tile md:col-span-2">
@@ -201,7 +171,7 @@
       </div>
     </section>
 
-    <!-- Right -->
+    <!-- Right column -->
     <section class="lg:col-span-3 grid grid-cols-1 gap-4">
       <div class="card p-4">
         <div class="flex items-center justify-between mb-3">
