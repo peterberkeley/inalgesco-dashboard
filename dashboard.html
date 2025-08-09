@@ -20,7 +20,11 @@
       --color-primary:#3b82f6;
     }
     html,body{ height:100% }
-    body{ background:var(--color-bg); color:var(--color-text); font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol"; }
+    body{
+      background:var(--color-bg);
+      color:var(--color-text);
+      font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+    }
 
     /* Cards */
     .card{ background:var(--color-card); border-radius:1rem; box-shadow:0 6px 28px rgba(15,23,42,.06) }
@@ -82,21 +86,32 @@
       box-shadow:0 2px 4px rgba(0,0,0,0.1);
     }
 
-    /* Logo blend mask */
+    /* Ensure header creates a new stacking context so the mask doesn't clip */
+    header{ isolation:isolate; }
+
+    /* Masked logo (uses exact header gradient) */
     .logoBlend{
-      display:inline-block;
-      background: inherit;
+      display:block;
       background-image: linear-gradient(to right, #d9eaf8 0%, #3b82f6 100%);
+      background-size: 100% 100%;
+      background-position: left center;
+
+      /* PNG mask (white glyphs on transparent bg) */
       -webkit-mask-image: url('logo_high_resolution_white.png');
       -webkit-mask-repeat: no-repeat;
       -webkit-mask-position: left center;
       -webkit-mask-size: contain;
+
       mask-image: url('logo_high_resolution_white.png');
       mask-repeat: no-repeat;
       mask-position: left center;
       mask-size: contain;
-      pointer-events:none;
-      user-select:none;
+    }
+    /* Fallback: show the PNG if mask isn't supported */
+    .no-mask .logoBlend{ display:none; }
+    .no-mask .logoFallback{
+      opacity:1;
+      mix-blend-mode: screen; /* optional */
     }
   </style>
 </head>
@@ -105,7 +120,12 @@
   <!-- Header -->
   <header class="sticky top-0 z-40 backdrop-blur bg-gradient-to-r from-[#d9eaf8]/90 to-[#3b82f6]/90">
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3">
-      <div class="logoBlend h-9 w-44" role="img" aria-label="Inalgesco"></div>
+      <!-- Logo with mask + fallback -->
+      <div class="relative h-9 w-44 select-none pointer-events-none">
+        <div class="logoBlend absolute inset-0" aria-label="Inalgesco"></div>
+        <img src="logo_high_resolution_white.png" alt="Inalgesco" class="logoFallback h-full opacity-0" />
+      </div>
+
       <div class="flex flex-col leading-tight">
         <span class="text-white font-semibold text-lg">Sky Café Trucks</span>
         <span class="text-white/80 text-xs -mt-0.5">Dashboard</span>
@@ -120,19 +140,21 @@
     </div>
   </header>
 
+  <!-- Feature detect for CSS mask support (shows fallback if needed) -->
   <script>
-    document.getElementById('adminBtn').onclick=()=>{ window.location.href='admin.html' };
-    window.__setDeviceStatus = function(isOnline){
-      const p=document.getElementById('deviceStatusPill');
-      if(!p) return;
-      p.classList.remove("hidden");
-      if(isOnline){ p.textContent="Online"; p.className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700"; }
-      else{ p.textContent="Offline"; p.className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-700"; }
-    };
+    (function(){
+      try{
+        var supportsMask = (window.CSS && (CSS.supports('mask-image','url(#)') || CSS.supports('-webkit-mask-image','url(#)')));
+        if(!supportsMask){ document.documentElement.classList.add('no-mask'); }
+      }catch(e){
+        document.documentElement.classList.add('no-mask');
+      }
+    })();
   </script>
 
   <!-- Main -->
   <main class="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
     <!-- Left column -->
     <section class="lg:col-span-1 space-y-4">
       <div class="kpi">
@@ -198,6 +220,20 @@
   </main>
 
   <div id="spinner"></div>
+
+  <script>
+    // Admin navigation
+    document.getElementById('adminBtn').onclick=()=>{ window.location.href='admin.html' };
+    // Set online/offline pill
+    window.__setDeviceStatus = function(isOnline){
+      const p=document.getElementById('deviceStatusPill');
+      if(!p) return;
+      p.classList.remove("hidden");
+      if(isOnline){ p.textContent="Online"; p.className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700"; }
+      else{ p.textContent="Offline"; p.className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-700"; }
+    };
+  </script>
+
   <script src="dashboard.js" defer></script>
 </body>
 </html>
