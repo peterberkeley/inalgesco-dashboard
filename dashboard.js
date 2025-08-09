@@ -217,6 +217,20 @@ async function updateCharts(deviceID, SENSORS){
       if(typeof s.calibration==="number") v += s.calibration;
       return isNaN(v)?null:v;
     });
+
+    // === Dynamic y-scale (never clip top/bottom) ===
+    const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
+    if (vals.length) {
+      const vmin = Math.min(...vals);
+      const vmax = Math.max(...vals);
+      const pad  = Math.max(0.5, (vmax - vmin) * 0.10); // 10% or ≥0.5°
+      s.chart.options.scales.y.min = vmin - pad;
+      s.chart.options.scales.y.max = vmax + pad;
+    } else {
+      delete s.chart.options.scales.y.min;
+      delete s.chart.options.scales.y.max;
+    }
+
     s.chart.update();
   }));
   let minTs = Infinity, maxTs = -Infinity;
@@ -605,9 +619,34 @@ function wireRangeButtons(){
   });
 }
 
+/* =================== Date inputs: instant commit =================== */
+function wireDateInputsCommit(){
+  const startEl = document.getElementById('start');
+  const endEl   = document.getElementById('end');
+  const btn     = document.getElementById('dlBtn');
+
+  if (!startEl || !endEl) return;
+
+  // Blur on selection/typing so the value is committed immediately
+  ['change','input'].forEach(ev => {
+    startEl.addEventListener(ev, () => startEl.blur());
+    endEl.addEventListener(ev,   () => endEl.blur());
+  });
+
+  // Ensure latest value is read even if user clicks Download straight from the date picker
+  if (btn) {
+    btn.addEventListener('pointerdown', () => {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }, { capture:true });
+  }
+}
+
 /* =================== Main update loop =================== */
 onReady(()=>{
   wireRangeButtons();
+  wireDateInputsCommit();   // commit date instantly
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
   document.getElementById("deviceSelect").addEventListener("change", updateAll);
