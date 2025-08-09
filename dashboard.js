@@ -13,19 +13,11 @@ const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
 let SENSORS = [];                   // [{address,label,calibration,chart,col},...]
 let variableCache = {};             // per-device map: label -> varId
 let sensorMapConfig = {};           // admin mapping/config from Ubidots (context)
-// aliasMap holds friendly display names per truck label. Populated from
-// sensorMapConfig.__aliases and used to override labels in the UI.
-let aliasMap = {};
+let aliasMap = {};                  // friendly display names per truck label
 
 // Breadcrumb route configuration
 const SEGMENT_COLORS = [
-  "#dc2626", // red
-  "#16a34a", // green
-  "#2563eb", // blue
-  "#eab308", // yellow
-  "#8b5cf6", // purple
-  "#f97316", // orange
-  "#000000"  // black
+  "#dc2626", "#16a34a", "#2563eb", "#eab308", "#8b5cf6", "#f97316", "#000000"
 ];
 
 // Selected time window in minutes for breadcrumbs and chart history.
@@ -37,12 +29,22 @@ let segmentPolylines = [];
 let segmentMarkers = [];
 let legendControl = null;
 
+// holds the most recent devices context so the CSV click handler can resolve deviceID
+let __deviceMap = {};
+
 /* =================== Helpers =================== */
 function onReady(fn){
   if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(fn,1);
   else document.addEventListener("DOMContentLoaded", fn);
 }
 const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
+
+// Get the *displayed* name seen on the dashboard for a given device label
+function getDisplayName(deviceLabel){
+  return (aliasMap && aliasMap[deviceLabel])
+      || (sensorMapConfig[deviceLabel] && sensorMapConfig[deviceLabel].label)
+      || deviceLabel;
+}
 
 /* =================== Admin mapping (context) =================== */
 async function fetchSensorMapMapping(){
@@ -94,7 +96,7 @@ function buildDeviceDropdownFromConfig(sensorMap){
     const dot = isOnline ? "🟢" : "⚪️";
     const opt = document.createElement("option");
     opt.value = dev;
-    const displayLabel = aliasMap && aliasMap[dev] ? aliasMap[dev] : obj.label;
+    const displayLabel = getDisplayName(dev);
     opt.text  = `${dot} ${displayLabel} (${isOnline?"Online":"Offline"})`;
     sel.appendChild(opt);
   });
@@ -218,7 +220,7 @@ async function updateCharts(deviceID, SENSORS){
       return isNaN(v)?null:v;
     });
 
-    // === Dynamic y-scale (never clip top/bottom) ===
+    // Dynamic y-scale (never clip top/bottom)
     const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
     if (vals.length) {
       const vmin = Math.min(...vals);
@@ -274,18 +276,19 @@ function drawLive(data, SENSORS){
     .filter(v=>v!=null && isFinite(v));
   const avg = temps.length ? (temps.reduce((a,b)=>a+b,0)/temps.length) : null;
   document.getElementById("kpiAvg").textContent = avg!=null ? fmt(avg,1) + "°" : "—";
+
   const devSel = document.getElementById("deviceSelect");
   const deviceKey = devSel.value;
-  let displayName = aliasMap && aliasMap[deviceKey];
-  if (!displayName) {
-    displayName = (sensorMapConfig[deviceKey] && sensorMapConfig[deviceKey].label) || deviceKey || "—";
-  }
+  const displayName = getDisplayName(deviceKey);
+
   document.getElementById("kpiTruck").textContent = displayName;
-  // Use London time zone for last-updated label
+
+  // London time zone for last-updated label
   const updateTime = new Date(ts).toLocaleTimeString('en-GB', {
     hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
   });
   document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
+
   const sigBars = signalBarsFrom(signal);
   const sensorRows = SENSORS.map(s=>[
     s.label,
@@ -462,6 +465,128 @@ async function fetchCsvRows(deviceID, varLabel, start, end){
   }catch{ return []; }
 }
 
+// Build and download CSV for the selected device/date range
+async function downloadCsvForCurrentSelection(){
+  try{
+    const expStatus = document.getElementById('expStatus');
+    const startEl   = document.getElementById('start');
+    const endEl     = document.getElementById('end');
+    const devSel    = document.getElementById('deviceSelect');
+
+    if(!startEl || !endEl || !devSel){ return; }
+
+    const startStr = startEl.value; // "YYYY-MM-DD"
+    const endStr   = endEl.value;
+    if(!startStr || !endStr){
+      if(expStatus) expStatus.textContent = "Pick a start and end date.";
+      return;
+    }
+
+    // [start, end] in ms (end inclusive)
+    const startMs = new Date(startStr+"T00:00:00").getTime();
+    const endMs   = new Date(endStr+"T23:59:59.999").getTime();
+    if(isNaN(startMs) || isNaN(endMs) || endMs < startMs){
+      if(expStatus) expStatus.textContent = "Invalid date range.";
+      return;
+    }
+
+    // Resolve current device and its display name
+    const deviceLabel = devSel.value;
+    const deviceID    = __deviceMap?.[deviceLabel]?.id;
+    const displayName = getDisplayName(deviceLabel);
+    if(!deviceID){
+      if(expStatus) expStatus.textContent = "Device not found.";
+      return;
+    }
+
+    if(expStatus) expStatus.textContent = "Building CSV…";
+
+    // Columns: timestamp ISO, lat, lng, speed, signal, volt, then each temp sensor (by label)
+    const baseCols = ["timestamp", "lat", "lng", "speed", "signal", "volt"];
+    const sensorCols = SENSORS.filter(s => s.address).map(s => s.label || s.address);
+
+    // Fetch series
+    const [gpsRows, signalRows, voltRows] = await Promise.all([
+      fetchCsvRows(deviceID, "gps",    startMs, endMs),
+      fetchCsvRows(deviceID, "signal", startMs, endMs),
+      fetchCsvRows(deviceID, "volt",   startMs, endMs)
+    ]);
+
+    // Fetch temperature sensors
+    const tempSeries = {};
+    await Promise.all(SENSORS.filter(s => s.address).map(async s => {
+      const rows = await fetchCsvRows(deviceID, s.address, startMs, endMs);
+      tempSeries[s.label || s.address] = { rows, calibration: s.calibration||0 };
+    }));
+
+    // Merge by exact timestamp (ms)
+    const rowMap = new Map(); // ts -> object
+    function ensure(ts){ if(!rowMap.has(ts)) rowMap.set(ts, { timestamp: ts }); return rowMap.get(ts); }
+
+    gpsRows.forEach(r=>{
+      const o = ensure(r.timestamp);
+      o.lat   = r.context?.lat ?? null;
+      o.lng   = r.context?.lng ?? null;
+      o.speed = (typeof r.context?.speed === 'number') ? r.context.speed : null;
+    });
+    signalRows.forEach(r=>{ ensure(r.timestamp).signal = (typeof r.value === 'number') ? r.value : null; });
+    voltRows.forEach(r=>{ ensure(r.timestamp).volt   = (typeof r.value === 'number') ? r.value : null; });
+
+    Object.entries(tempSeries).forEach(([label, obj])=>{
+      obj.rows.forEach(r=>{
+        const o = ensure(r.timestamp);
+        let v = parseFloat(r.value);
+        if(!isNaN(v)) v += obj.calibration || 0;
+        o[label] = isNaN(v) ? null : v;
+      });
+    });
+
+    // Sort timestamps
+    const rows = Array.from(rowMap.values()).sort((a,b)=>a.timestamp-b.timestamp);
+
+    // CSV header
+    const headers = baseCols.concat(sensorCols);
+    const toISO = ts => new Date(ts).toISOString();
+
+    // CSV body
+    const csvLines = [];
+    csvLines.push(headers.join(','));
+    rows.forEach(o=>{
+      const line = [
+        toISO(o.timestamp),
+        o.lat ?? "",
+        o.lng ?? "",
+        (o.speed != null ? Number(o.speed).toFixed(1) : ""),
+        (o.signal!= null ? o.signal : ""),
+        (o.volt  != null ? o.volt   : "")
+      ];
+      sensorCols.forEach(lbl=>{
+        line.push(o[lbl] != null ? Number(o[lbl]).toFixed(2) : "");
+      });
+      csvLines.push(line.join(','));
+    });
+    const csv = csvLines.join('\n');
+
+    // Download (filename uses the *display* name)
+    const safeName = String(displayName).replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+    const fname = `${safeName}_${startStr}_to_${endStr}.csv`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    if(expStatus) expStatus.textContent = `Saved ${fname} (${rows.length} rows).`;
+  }catch(err){
+    console.error("downloadCsvForCurrentSelection error:", err);
+    const expStatus = document.getElementById('expStatus');
+    if(expStatus) expStatus.textContent = "Failed to build CSV.";
+  }
+}
+
 /* =================== Breadcrumb route drawing =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   try{
@@ -564,11 +689,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     });
     if(segments.length > 0){
       const allLatLngs = [];
-      segments.forEach(seg => {
-        seg.forEach(pt => {
-          allLatLngs.push([pt.context.lat, pt.context.lng]);
-        });
-      });
+      segments.forEach(seg => { seg.forEach(pt => { allLatLngs.push([pt.context.lat, pt.context.lng]); }); });
       const bounds = L.latLngBounds(allLatLngs);
       map.fitBounds(bounds, { padding: [20,20] });
     }
@@ -624,16 +745,13 @@ function wireDateInputsCommit(){
   const startEl = document.getElementById('start');
   const endEl   = document.getElementById('end');
   const btn     = document.getElementById('dlBtn');
-
   if (!startEl || !endEl) return;
 
-  // Blur on selection/typing so the value is committed immediately
   ['change','input'].forEach(ev => {
     startEl.addEventListener(ev, () => startEl.blur());
     endEl.addEventListener(ev,   () => endEl.blur());
   });
 
-  // Ensure latest value is read even if user clicks Download straight from the date picker
   if (btn) {
     btn.addEventListener('pointerdown', () => {
       if (document.activeElement instanceof HTMLElement) {
@@ -647,6 +765,11 @@ function wireDateInputsCommit(){
 onReady(()=>{
   wireRangeButtons();
   wireDateInputsCommit();   // commit date instantly
+
+  // Hook the Download button
+  const dlBtn = document.getElementById('dlBtn');
+  if (dlBtn) dlBtn.addEventListener('click', downloadCsvForCurrentSelection);
+
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
   document.getElementById("deviceSelect").addEventListener("change", updateAll);
@@ -655,6 +778,7 @@ onReady(()=>{
 async function updateAll(){
   await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
+  __deviceMap = sensorMap; // expose to CSV click handler
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceLabel = document.getElementById("deviceSelect").value;
   const deviceID    = sensorMap[deviceLabel]?.id;
