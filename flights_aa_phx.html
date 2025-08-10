@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AA ↔ PHX (Live Gate → Ops Stand)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background:#f7fafc; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .badge { padding: 0.15rem .45rem; border-radius: .375rem; font-size: .75rem; font-weight: 600; }
+    .ok { background:#dcfce7; color:#166534 }
+    .warn { background:#fef9c3; color:#854d0e }
+    .muted { color:#64748b }
+    .card { background:#fff; border-radius: .9rem; box-shadow: 0 6px 28px rgba(15,23,42,.06) }
+    table thead th { background:#f1f5f9; font-weight:700 }
+    td, th { padding:.5rem .6rem; }
+  </style>
+</head>
+<body>
+
+  <main class="max-w-6xl mx-auto p-4">
+    <div class="flex items-center gap-3 mb-4">
+      <button class="px-3 py-1 rounded bg-slate-200 hover:bg-slate-300" onclick="location.href='dashboard.html'">← Back</button>
+      <h1 class="text-2xl font-bold">American Airlines — Phoenix (PHX)</h1>
+      <span id="status" class="muted ml-auto"></span>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-sm text-slate-600">Date (Phoenix local)</label>
+          <input id="date" type="date" class="border rounded px-2 py-1"/>
+        </div>
+        <div>
+          <label class="block text-sm text-transparent">.</label>
+          <button id="btnRefresh" class="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">Refresh Live</button>
+        </div>
+        <div>
+          <label class="block text-sm text-transparent">.</label>
+          <button id="btnCsv" class="px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700">Download CSV</button>
+        </div>
+        <div class="ml-auto text-sm">
+          <span class="badge ok">Gate→Stand mapped</span>
+          <span class="badge warn">Inferred</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-4">
+      <div class="overflow-x-auto">
+        <table id="tbl" class="min-w-full text-sm">
+          <thead>
+            <tr>
+              <th class="text-left">Type</th>
+              <th class="text-left">Flight</th>
+              <th class="text-left">From</th>
+              <th class="text-left">To</th>
+              <th class="text-left">Terminal</th>
+              <th class="text-left">Gate</th>
+              <th class="text-left">Stand</th>
+              <th class="text-left">Sched (local)</th>
+              <th class="text-left">Est (local)</th>
+              <th class="text-left">Actual (local)</th>
+              <th class="text-left">Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+<script>
+/* ================= Config (set your proxy URL) ================= */
+const FLIGHTS_PROXY = "https://YOUR-WORKER-OR-FUNCTION.example.com"; // <-- change me
+// Endpoint contract (your proxy should expose this):
+//  GET  ${FLIGHTS_PROXY}/aa-phx-live?date=YYYY-MM-DD
+//  → { date, flights: [{ type:'ARR'|'DEP', flight:'AAL123', origin:'KJFK', destination:'KPHX',
+//                        terminal:'4', gate:'B23', sched:epochSec|null, est:epochSec|null, actual:epochSec|null, status:'...' }] }
+
+/* =============== Gate → Stand mapping (PHX) =================== */
+// 1) Exceptions table (edit if PHX has oddball mappings)
+const PHX_GATE_EXCEPTIONS = {
+  // Example of a one-off: "T4.B19": "Stand B21"
+};
+// 2) Basic translator: if gate looks like B23 → Stand B23; if only "23", we keep "Stand 23"
+function normalizeTerminal(term) {
+  // Return canonical like "T4", "T3"
+  const t = String(term||'').trim();
+  const n = (t.match(/\d+/)||[])[0];
+  return n ? `T${n}` : 'T4';
+}
+function gateToStand(terminal, gate) {
+  const T = normalizeTerminal(terminal);
+  const g = String(gate||'').toUpperCase().replace(/\s+/g,'');
+  const key = `${T}.${g}`;
+  if (PHX_GATE_EXCEPTIONS[key]) return { stand: PHX_GATE_EXCEPTIONS[key], mode: "mapped" };
+
+  // Common PHX pattern: A/B concourses → gate already includes letter
+  // e.g., B23 → Stand B23
+  const m = g.match(/^([A-D])(\d{1,2}[A-Z]?)$/);
+  if (m) return { stand: `Stand ${m[1]}${m[2]}`, mode: "mapped" };
+
+  // If API returns just numeric (rare), still provide a readable stand
+  if (g) return { stand: `Stand ${g}`, mode: "inferred" };
+
+  return { stand: "", mode: "inferred" };
+}
+
+/* ================= Helpers ================== */
+const tzPHX = 'America/Phoenix';
+function phoenixTodayISO() {
+  const now = new Date();
+  // Use Intl to get Phoenix date safely
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tzPHX, year:'numeric', month:'2-digit', day:'2-digit' });
+  return fmt.format(now); // YYYY-MM-DD
+}
+function tsLocal(ts) {
+  if (!ts) return "";
+  return new Date(ts * 1000).toLocaleString('en-GB', { timeZone: tzPHX });
+}
+function saveCSV(rows, filename) {
+  const csv = rows.map(r => r.map(v => String(v).replace(/"/g,'""')).join(',')).join('\n');
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ================= Page wiring ================== */
+const elDate = document.getElementById('date');
+const elTblBody = document.querySelector('#tbl tbody');
+const elStatus = document.getElementById('status');
+
+elDate.value = phoenixTodayISO();
+
+document.getElementById('btnRefresh').onclick = loadFlights;
+document.getElementById('btnCsv').onclick = downloadCSV;
+
+async function loadFlights() {
+  const date = elDate.value;
+  elStatus.textContent = 'Loading…';
+  elTblBody.innerHTML = '';
+  try {
+    const res = await fetch(`${FLIGHTS_PROXY}/aa-phx-live?date=${encodeURIComponent(date)}`);
+    if (!res.ok) throw new Error(await res.text());
+    const js = await res.json();
+    const flights = (js.flights || []).filter(f => /^AAL/i.test(String(f.flight||'')));
+
+    flights.sort((a,b) => (a.actual||a.est||a.sched||0) - (b.actual||b.est||b.sched||0));
+
+    for (const f of flights) {
+      const { stand, mode } = gateToStand(f.terminal, f.gate);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${f.type||''}</td>
+        <td><strong>${f.flight||''}</strong></td>
+        <td>${f.origin||''}</td>
+        <td>${f.destination||''}</td>
+        <td>${f.terminal||''}</td>
+        <td>${f.gate||''}</td>
+        <td>${stand ? stand + (mode==='inferred' ? ' <span class="badge warn">inferred</span>' : ' <span class="badge ok">mapped</span>') : ''}</td>
+        <td>${tsLocal(f.sched)}</td>
+        <td>${tsLocal(f.est)}</td>
+        <td>${tsLocal(f.actual)}</td>
+        <td>${f.status||''}</td>
+      `;
+      elTblBody.appendChild(tr);
+    }
+
+    elStatus.textContent = `${flights.length} AA flights on ${date}`;
+  } catch (e) {
+    console.error(e);
+    elStatus.textContent = 'Failed to load. Set FLIGHTS_PROXY.';
+  }
+}
+
+function downloadCSV() {
+  // Build CSV from the currently displayed table
+  const rows = [];
+  rows.push(["type","flight","from","to","terminal","gate","stand","sched_local","est_local","actual_local","status"]);
+  document.querySelectorAll('#tbl tbody tr').forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    const clean = s => s.replace(/<[^>]+>/g,'').trim();
+    rows.push(Array.from(tds).map(td => clean(td.innerHTML)));
+  });
+  const fname = `AA_PHX_${elDate.value}.csv`;
+  saveCSV(rows, fname);
+}
+
+// Auto load
+loadFlights();
+</script>
+</body>
+</html>
