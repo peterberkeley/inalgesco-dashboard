@@ -119,6 +119,11 @@
   <script>
     // Admin nav
     document.getElementById('adminBtn').onclick=()=>{ window.location.href='admin.html' };
+// AA Flights nav (safe if button missing)
+const flightsBtn = document.getElementById('flightsBtn');
+if (flightsBtn) {
+  flightsBtn.onclick = () => { window.location.href = 'flights_aa_phx.html'; };
+}
 
     // Online/offline pill
     window.__setDeviceStatus = function(isOnline){
