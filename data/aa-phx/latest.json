@@ -1,0 +1,32 @@
+{
+  "date": "2025-08-11",
+  "generated_at": "2025-08-11T12:00:00Z",
+  "flights": [
+    {
+      "type": "ARR",
+      "flight": "AAL123",
+      "reg": "N123AA",
+      "origin": "KDFW",
+      "destination": "KPHX",
+      "terminal": "4",
+      "gate": "B23",
+      "sched": 1723368000,
+      "est": 1723369800,
+      "actual": 1723369800,
+      "status": "Arrived"
+    },
+    {
+      "type": "DEP",
+      "flight": "AAL456",
+      "reg": "N456AA",
+      "origin": "KPHX",
+      "destination": "KLAX",
+      "terminal": "4",
+      "gate": "A7",
+      "sched": 1723373400,
+      "est": 1723374300,
+      "actual": null,
+      "status": "Boarding"
+    }
+  ]
+}
