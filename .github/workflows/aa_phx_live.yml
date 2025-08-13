@@ -1,9 +1,13 @@
 name: Fetch AA @ PHX (AeroDataBox → JSON)
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "*/5 * * * *"   # every 5 minutes
-  workflow_dispatch:
+
+concurrency:
+  group: aa-phx-fetch
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -11,11 +15,16 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
       - name: Pull flights and write JSON
@@ -27,6 +36,7 @@ jobs:
           git add data/aa-phx/*.json || true
           if ! git diff --cached --quiet; then
             git commit -m "AA PHX: update live JSON"
+            git pull --rebase --autostash origin $GITHUB_REF_NAME || true
             git push
           else
             echo "No changes."
