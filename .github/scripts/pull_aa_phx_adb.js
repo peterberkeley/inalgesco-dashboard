@@ -12,11 +12,13 @@ const ICAO = "KPHX";
 const AIRLINE_IATA = "AA";   // American
 const AIRLINE_ICAO = "AAL";
 
-// Build a UTC time window: last 2h .. next 18h (covers most of the day)
+// Build a UTC time window: last 2h .. next 10h (API hard limit = 12h total)
 const now = new Date();
-const from = new Date(now.getTime() - 2 * 3600 * 1000);
-const to   = new Date(now.getTime() + 18 * 3600 * 1000);
-const isoMin = d => d.toISOString().slice(0,16);  // YYYY-MM-DDTHH:MM
+const PAST_HOURS = 2;
+const WINDOW_HOURS = 12;                           // AeroDataBox max span
+const from = new Date(now.getTime() - PAST_HOURS * 3600 * 1000);
+const to   = new Date(from.getTime() + WINDOW_HOURS * 3600 * 1000); // ensures <= 12h span
+const isoMin = d => d.toISOString().slice(0,16);   // YYYY-MM-DDTHH:MM (UTC)
 
 // Use the absolute-time endpoint (arrivals+departures in one call)
 const url =
