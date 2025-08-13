@@ -33,6 +33,56 @@ const toSec = s => {
 };
 
 const apId = ap => (ap?.iata || ap?.icao || null);
+const isAA = f => {
+  // ADB FIDS has airline at f.airline, id at f.number / f.callSign
+  const opIata = (f?.airline?.iata || "").toUpperCase();
+  const opIcao = (f?.airline?.icao || "").toUpperCase();
+  const ident  = (f?.number || f?.callSign || "").toUpperCase().replace(/\s+/g, "");
+  return opIata === "AA" || opIcao === "AAL" || ident.startsWith("AA");
+};
+
+function mapRow(f, type) {
+  const dep = f.departure || {};
+  const arr = f.arrival   || {};
+  const ac  = f.aircraft  || {};
+
+  // ADB FIDS times are nested: *.scheduledTime.utc, *.revisedTime.utc, *.runwayTime.utc
+  const getUtc = (seg, key) => seg?.[key]?.utc || seg?.[key]?.local || null;
+
+  // Choose reasonable priorities
+  const schedISO = type === "DEP"
+    ? getUtc(dep, "scheduledTime")
+    : getUtc(arr, "scheduledTime");
+
+  const estISO = type === "DEP"
+    ? (getUtc(dep, "revisedTime") || getUtc(dep, "estimatedTime"))
+    : (getUtc(arr, "revisedTime") || getUtc(arr, "estimatedTime"));
+
+  const actISO = type === "DEP"
+    ? (getUtc(dep, "runwayTime") || getUtc(dep, "actualTime"))
+    : (getUtc(arr, "runwayTime") || getUtc(arr, "actualTime"));
+
+  // Terminal/gate may appear on dep or arr; use whichever exists
+  const terminal = (type === "DEP" ? dep.terminal : arr.terminal) ?? dep.terminal ?? arr.terminal ?? null;
+  const gate     = (type === "DEP" ? dep.gate     : arr.gate)     ?? dep.gate     ?? arr.gate     ?? null;
+
+  // Flight id: prefer published "number" (e.g. "AA 123") squashed to "AA123"
+  const flightId = (f.number || f.callSign || "").toString().replace(/\s+/g, "");
+
+  return {
+    type, // "ARR" | "DEP"
+    flight: flightId,
+    reg: ac.registration || ac.reg || null,
+    origin: apId(dep.airport),
+    destination: apId(arr.airport),
+    terminal,
+    gate,
+    sched:  toSec(schedISO),
+    est:    toSec(estISO),
+    actual: toSec(actISO),
+    status: f.status || ""
+  };
+}
 
 const isAA = f => {
   const opIata = (f?.airline?.iata || f?.operator?.iata || "").toUpperCase();
