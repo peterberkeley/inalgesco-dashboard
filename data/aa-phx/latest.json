@@ -1,92 +1,14 @@
 {
   "date": "2025-08-13",
-  "generated_at": "2025-08-13T23:33:28.808Z",
+  "generated_at": "2025-08-13T23:46:27.974Z",
   "source": "AeroDataBox via RapidAPI",
   "airport": "PHX",
   "airline_filter": "AA (AAL)",
   "window_utc": {
-    "from": "2025-08-13T21:33",
-    "to": "2025-08-14T09:33"
+    "from": "2025-08-13T21:46",
+    "to": "2025-08-14T09:46"
   },
   "flights": [
-    {
-      "type": "DEP",
-      "flight": "AA1967",
-      "reg": "N341RW",
-      "origin": null,
-      "destination": "EWR",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755120840,
-      "est": 1755120840,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA4015",
-      "reg": null,
-      "origin": "TUS",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755120960,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA3017",
-      "reg": "N331TK",
-      "origin": "DFW",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755121920,
-      "est": 1755121080,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA3846",
-      "reg": null,
-      "origin": null,
-      "destination": "SBA",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755121140,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA554",
-      "reg": null,
-      "origin": "PVR",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755121200,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA1044",
-      "reg": "N195UW",
-      "origin": "CLT",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755122460,
-      "est": 1755121620,
-      "actual": null,
-      "status": "Expected"
-    },
     {
       "type": "ARR",
       "flight": "AA6450",
@@ -99,6 +21,32 @@
       "est": null,
       "actual": null,
       "status": "Unknown"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA1967",
+      "reg": "N341RW",
+      "origin": null,
+      "destination": "EWR",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755120840,
+      "est": 1755121980,
+      "actual": 1755121980,
+      "status": "Departed"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA1044",
+      "reg": "N195UW",
+      "origin": "CLT",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755122460,
+      "est": 1755122220,
+      "actual": 1755122220,
+      "status": "Arrived"
     },
     {
       "type": "DEP",
@@ -122,9 +70,9 @@
       "terminal": "4",
       "gate": null,
       "sched": 1755124380,
-      "est": 1755122580,
-      "actual": null,
-      "status": "Expected"
+      "est": 1755122760,
+      "actual": 1755122580,
+      "status": "Arrived"
     },
     {
       "type": "DEP",
@@ -138,19 +86,6 @@
       "est": null,
       "actual": null,
       "status": "Unknown"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA1332",
-      "reg": "N604AW",
-      "origin": "DEN",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755124140,
-      "est": 1755122700,
-      "actual": null,
-      "status": "Expected"
     },
     {
       "type": "ARR",
@@ -175,34 +110,21 @@
       "gate": null,
       "sched": 1755124140,
       "est": 1755123000,
-      "actual": null,
-      "status": "Expected"
+      "actual": 1755122880,
+      "status": "Arrived"
     },
     {
       "type": "ARR",
-      "flight": "AA2829",
-      "reg": "N321TG",
-      "origin": "JFK",
+      "flight": "AA1622",
+      "reg": "N748UW",
+      "origin": "MCI",
       "destination": null,
       "terminal": "4",
       "gate": null,
-      "sched": 1755123240,
-      "est": 1755123120,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA2180",
-      "reg": "N753US",
-      "origin": "ABQ",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755124500,
+      "sched": 1755124560,
       "est": 1755123180,
-      "actual": null,
-      "status": "Expected"
+      "actual": 1755123180,
+      "status": "Arrived"
     },
     {
       "type": "ARR",
@@ -215,7 +137,7 @@
       "sched": 1755123240,
       "est": null,
       "actual": null,
-      "status": "Unknown"
+      "status": "CanceledUncertain"
     },
     {
       "type": "ARR",
@@ -228,7 +150,7 @@
       "sched": 1755123300,
       "est": null,
       "actual": null,
-      "status": "Unknown"
+      "status": "CanceledUncertain"
     },
     {
       "type": "ARR",
@@ -241,20 +163,20 @@
       "sched": 1755123300,
       "est": null,
       "actual": null,
-      "status": "Unknown"
+      "status": "CanceledUncertain"
     },
     {
       "type": "ARR",
-      "flight": "AA1622",
-      "reg": "N748UW",
-      "origin": "MCI",
+      "flight": "AA2627",
+      "reg": "N819AW",
+      "origin": "IAH",
       "destination": null,
       "terminal": "4",
       "gate": null,
-      "sched": 1755124560,
+      "sched": 1755102180,
       "est": 1755123420,
-      "actual": null,
-      "status": "Expected"
+      "actual": 1755123420,
+      "status": "Arrived"
     },
     {
       "type": "DEP",
@@ -271,6 +193,19 @@
     },
     {
       "type": "ARR",
+      "flight": "AA1332",
+      "reg": "N604AW",
+      "origin": "DEN",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755124140,
+      "est": 1755123600,
+      "actual": 1755123600,
+      "status": "Arrived"
+    },
+    {
+      "type": "ARR",
       "flight": "AA3913",
       "reg": null,
       "origin": "OMA",
@@ -280,7 +215,7 @@
       "sched": 1755123600,
       "est": null,
       "actual": null,
-      "status": "Unknown"
+      "status": "CanceledUncertain"
     },
     {
       "type": "ARR",
@@ -297,55 +232,16 @@
     },
     {
       "type": "ARR",
-      "flight": "AA2627",
-      "reg": "N819AW",
-      "origin": "IAH",
+      "flight": "AA2829",
+      "reg": "N321TG",
+      "origin": "JFK",
       "destination": null,
       "terminal": "4",
       "gate": null,
-      "sched": 1755102180,
-      "est": 1755123780,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA2786",
-      "reg": null,
-      "origin": null,
-      "destination": "ORD",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755123900,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA2646",
-      "reg": null,
-      "origin": "SJD",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755123960,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA832",
-      "reg": null,
-      "origin": null,
-      "destination": "JFK",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755124020,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
+      "sched": 1755123240,
+      "est": 1755123720,
+      "actual": 1755123720,
+      "status": "Arrived"
     },
     {
       "type": "ARR",
@@ -358,33 +254,20 @@
       "sched": 1755124200,
       "est": null,
       "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA2332",
-      "reg": null,
-      "origin": null,
-      "destination": "RDU",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755124200,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
+      "status": "CanceledUncertain"
     },
     {
       "type": "ARR",
-      "flight": "AA408",
-      "reg": "N967NN",
-      "origin": "MSP",
+      "flight": "AA2180",
+      "reg": "N753US",
+      "origin": "ABQ",
       "destination": null,
       "terminal": "4",
       "gate": null,
-      "sched": 1755126000,
-      "est": 1755124260,
-      "actual": null,
-      "status": "Expected"
+      "sched": 1755124500,
+      "est": 1755124320,
+      "actual": 1755124320,
+      "status": "Arrived"
     },
     {
       "type": "ARR",
@@ -401,6 +284,32 @@
     },
     {
       "type": "ARR",
+      "flight": "AA408",
+      "reg": "N967NN",
+      "origin": "MSP",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755126000,
+      "est": 1755124500,
+      "actual": 1755124500,
+      "status": "Arrived"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA2786",
+      "reg": "N157UW",
+      "origin": null,
+      "destination": "ORD",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755123900,
+      "est": 1755124500,
+      "actual": 1755124500,
+      "status": "Departed"
+    },
+    {
+      "type": "ARR",
       "flight": "AA4946",
       "reg": null,
       "origin": "FSD",
@@ -410,7 +319,7 @@
       "sched": 1755124560,
       "est": null,
       "actual": null,
-      "status": "Unknown"
+      "status": "CanceledUncertain"
     },
     {
       "type": "ARR",
@@ -423,46 +332,7 @@
       "sched": 1755124680,
       "est": null,
       "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA653",
-      "reg": "N150UW",
-      "origin": null,
-      "destination": "PHL",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755124680,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA2108",
-      "reg": "N918NN",
-      "origin": "DFW",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755126060,
-      "est": 1755124740,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA1057",
-      "reg": "N466AN",
-      "origin": "BOS",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755125340,
-      "est": 1755124740,
-      "actual": null,
-      "status": "Expected"
+      "status": "CanceledUncertain"
     },
     {
       "type": "ARR",
@@ -479,68 +349,55 @@
     },
     {
       "type": "DEP",
-      "flight": "AA2892",
-      "reg": null,
+      "flight": "AA2332",
+      "reg": "N836NN",
       "origin": null,
-      "destination": "AUS",
+      "destination": "RDU",
       "terminal": "4",
       "gate": null,
-      "sched": 1755124860,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
+      "sched": 1755124200,
+      "est": 1755124860,
+      "actual": 1755124860,
+      "status": "Departed"
     },
     {
       "type": "DEP",
-      "flight": "AA1663",
-      "reg": null,
+      "flight": "AA832",
+      "reg": "N308UK",
       "origin": null,
-      "destination": "DFW",
+      "destination": "JFK",
       "terminal": "4",
       "gate": null,
-      "sched": 1755124980,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
+      "sched": 1755124020,
+      "est": 1755124980,
+      "actual": 1755124980,
+      "status": "Departed"
     },
     {
       "type": "DEP",
       "flight": "AA1835",
-      "reg": null,
+      "reg": "N658AW",
       "origin": null,
       "destination": "MSN",
       "terminal": "4",
       "gate": null,
       "sched": 1755125040,
-      "est": null,
+      "est": 1755125040,
       "actual": null,
-      "status": "Unknown"
+      "status": "Expected"
     },
     {
       "type": "DEP",
-      "flight": "AA1156",
-      "reg": null,
+      "flight": "AA653",
+      "reg": "N441UW",
       "origin": null,
-      "destination": "CMH",
+      "destination": "PHL",
       "terminal": "4",
       "gate": null,
-      "sched": 1755125100,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA567",
-      "reg": null,
-      "origin": null,
-      "destination": "BOS",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755125340,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
+      "sched": 1755124680,
+      "est": 1755125220,
+      "actual": 1755125220,
+      "status": "Departed"
     },
     {
       "type": "DEP",
@@ -556,19 +413,6 @@
       "status": "Unknown"
     },
     {
-      "type": "DEP",
-      "flight": "AA1370",
-      "reg": null,
-      "origin": null,
-      "destination": "BNA",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755125400,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
       "type": "ARR",
       "flight": "AA4981",
       "reg": null,
@@ -579,20 +423,59 @@
       "sched": 1755125520,
       "est": null,
       "actual": null,
-      "status": "Unknown"
+      "status": "CanceledUncertain"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA1057",
+      "reg": "N466AN",
+      "origin": "BOS",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755125340,
+      "est": 1755125640,
+      "actual": 1755125640,
+      "status": "Arrived"
     },
     {
       "type": "DEP",
-      "flight": "AA2121",
-      "reg": null,
+      "flight": "AA1156",
+      "reg": "N953AN",
       "origin": null,
-      "destination": "DTW",
+      "destination": "CMH",
       "terminal": "4",
       "gate": null,
-      "sched": 1755125700,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
+      "sched": 1755125100,
+      "est": 1755125640,
+      "actual": 1755125640,
+      "status": "Departed"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA1663",
+      "reg": "N196UW",
+      "origin": null,
+      "destination": "DFW",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755124980,
+      "est": 1755125700,
+      "actual": 1755125700,
+      "status": "Departed"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA1370",
+      "reg": "N830NN",
+      "origin": null,
+      "destination": "BNA",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755125400,
+      "est": 1755125880,
+      "actual": 1755125880,
+      "status": "Departed"
     },
     {
       "type": "ARR",
@@ -1012,10 +895,10 @@
     },
     {
       "type": "DEP",
-      "flight": "AA3687",
+      "flight": "AA6278",
       "reg": null,
       "origin": null,
-      "destination": "BFL",
+      "destination": "FAT",
       "terminal": "4",
       "gate": null,
       "sched": 1755129900,
@@ -1025,10 +908,10 @@
     },
     {
       "type": "DEP",
-      "flight": "AA6278",
+      "flight": "AA3687",
       "reg": null,
       "origin": null,
-      "destination": "FAT",
+      "destination": "BFL",
       "terminal": "4",
       "gate": null,
       "sched": 1755129900,
@@ -1142,19 +1025,6 @@
     },
     {
       "type": "DEP",
-      "flight": "AA3150",
-      "reg": "N753US",
-      "origin": null,
-      "destination": "SBP",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755129300,
-      "est": 1755130800,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "DEP",
       "flight": "AA6507",
       "reg": null,
       "origin": null,
@@ -1165,6 +1035,19 @@
       "est": null,
       "actual": null,
       "status": "Unknown"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA3150",
+      "reg": "N753US",
+      "origin": null,
+      "destination": "SBP",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755129300,
+      "est": 1755130800,
+      "actual": null,
+      "status": "Expected"
     },
     {
       "type": "DEP",
@@ -1181,19 +1064,6 @@
     },
     {
       "type": "ARR",
-      "flight": "AA2463",
-      "reg": "N428AA",
-      "origin": "SNA",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755132720,
-      "est": 1755131220,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "ARR",
       "flight": "AA2860",
       "reg": "N154UW",
       "origin": "SFO",
@@ -1201,6 +1071,19 @@
       "terminal": "4",
       "gate": "B25",
       "sched": 1755130980,
+      "est": 1755131220,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA2463",
+      "reg": "N428AA",
+      "origin": "SNA",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755132720,
       "est": 1755131220,
       "actual": null,
       "status": "Expected"
@@ -1285,6 +1168,19 @@
     },
     {
       "type": "ARR",
+      "flight": "AA1155",
+      "reg": "N446AN",
+      "origin": "DFW",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755132720,
+      "est": 1755132900,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
       "flight": "AA2016",
       "reg": "N310UM",
       "origin": "RNO",
@@ -1310,15 +1206,15 @@
       "status": "Unknown"
     },
     {
-      "type": "ARR",
-      "flight": "AA1155",
-      "reg": "N446AN",
-      "origin": "DFW",
-      "destination": null,
+      "type": "DEP",
+      "flight": "AA2013",
+      "reg": "N928AM",
+      "origin": null,
+      "destination": "SFO",
       "terminal": "4",
-      "gate": null,
-      "sched": 1755132720,
-      "est": 1755132900,
+      "gate": "B19",
+      "sched": 1755133200,
+      "est": null,
       "actual": null,
       "status": "Expected"
     },
@@ -1334,19 +1230,6 @@
       "est": null,
       "actual": null,
       "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA2013",
-      "reg": "N928AM",
-      "origin": null,
-      "destination": "SFO",
-      "terminal": "4",
-      "gate": "B19",
-      "sched": 1755133200,
-      "est": null,
-      "actual": null,
-      "status": "Expected"
     },
     {
       "type": "ARR",
@@ -1558,19 +1441,6 @@
     },
     {
       "type": "ARR",
-      "flight": "AA2675",
-      "reg": null,
-      "origin": null,
-      "destination": null,
-      "terminal": "3",
-      "gate": null,
-      "sched": 1755136200,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "ARR",
       "flight": "AA339",
       "reg": "N834NN",
       "origin": "DFW",
@@ -1581,6 +1451,19 @@
       "est": 1755136200,
       "actual": null,
       "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA2675",
+      "reg": null,
+      "origin": null,
+      "destination": null,
+      "terminal": "3",
+      "gate": null,
+      "sched": 1755136200,
+      "est": null,
+      "actual": null,
+      "status": "Unknown"
     },
     {
       "type": "DEP",
@@ -1597,10 +1480,10 @@
     },
     {
       "type": "DEP",
-      "flight": "AA1496",
+      "flight": "AA633",
       "reg": null,
       "origin": null,
-      "destination": "IAH",
+      "destination": "DFW",
       "terminal": "4",
       "gate": null,
       "sched": 1755136200,
@@ -1610,10 +1493,10 @@
     },
     {
       "type": "DEP",
-      "flight": "AA633",
+      "flight": "AA1496",
       "reg": null,
       "origin": null,
-      "destination": "DFW",
+      "destination": "IAH",
       "terminal": "4",
       "gate": null,
       "sched": 1755136200,
@@ -1688,32 +1571,6 @@
     },
     {
       "type": "DEP",
-      "flight": "AA3354",
-      "reg": null,
-      "origin": null,
-      "destination": "OMA",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755137400,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA4195",
-      "reg": null,
-      "origin": null,
-      "destination": "CID",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755137400,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
       "flight": "AA3832",
       "reg": null,
       "origin": null,
@@ -1727,10 +1584,36 @@
     },
     {
       "type": "DEP",
+      "flight": "AA3354",
+      "reg": null,
+      "origin": null,
+      "destination": "OMA",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755137400,
+      "est": null,
+      "actual": null,
+      "status": "Unknown"
+    },
+    {
+      "type": "DEP",
       "flight": "AA691",
       "reg": null,
       "origin": null,
       "destination": "AUS",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755137400,
+      "est": null,
+      "actual": null,
+      "status": "Unknown"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA4195",
+      "reg": null,
+      "origin": null,
+      "destination": "CID",
       "terminal": "4",
       "gate": null,
       "sched": 1755137400,
