@@ -112,8 +112,9 @@ const from = new Date(now.getTime() - PAST_HOURS * 3600 * 1000);
 const to   = new Date(from.getTime() + WINDOW_HOURS * 3600 * 1000);
 
 const url =
-  `${BASE_URL}/flights/airports/icao/${ICAO}/${isoMin(from)}/${isoMin(to)}` +
-  `?withLeg=true&direction=Both&withCancelled=true&withCodeshared=true&withCargo=false`;
+  `${BASE_URL}/flights/airports/icao/${ICAO}` +
+  `?offsetMinutes=-120&durationMinutes=600&direction=Both` +
+  `&withLeg=true&withCancelled=true&withCodeshared=true&withCargo=false&withPrivate=true`;
 
 const headers = {
   "X-RapidAPI-Key": RAPID_KEY,
