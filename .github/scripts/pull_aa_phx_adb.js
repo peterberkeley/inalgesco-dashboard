@@ -7,6 +7,7 @@ const path = require("path");
 const RAPID_KEY = process.env.RAPIDAPI_KEY;
 if (!RAPID_KEY) { console.error("Missing RAPIDAPI_KEY"); process.exit(1); }
 
+const BASE = "https://aerodatabox.p.rapidapi.com";
 const ICAO = "KPHX";
 const AIRLINE_IATA = "AA";   // American
 const AIRLINE_ICAO = "AAL";
@@ -17,13 +18,15 @@ const from = new Date(now.getTime() - 2 * 3600 * 1000);
 const to   = new Date(now.getTime() + 18 * 3600 * 1000);
 const isoMin = d => d.toISOString().slice(0,16);  // YYYY-MM-DDTHH:MM
 
+// Use the absolute-time endpoint (arrivals+departures in one call)
 const url =
-  `https://aerodatabox.p.rapidapi.com/flights/airports/icao/${ICAO}/${isoMin(from)}/${isoMin(to)}` +
+  `${BASE}/flights/airports/icao/${ICAO}/${isoMin(from)}/${isoMin(to)}` +
   `?withLeg=true&direction=Both&withCancelled=true&withCodeshared=true&withCargo=false`;
 
 const headers = {
   "X-RapidAPI-Key": RAPID_KEY,
-  "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com"
+  "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com",
+  "Accept": "application/json"
 };
 
 const toSec = iso => {
@@ -45,7 +48,7 @@ function mapRow(f, type){
   const arr = f.arrival   || {};
   const ac  = f.aircraft  || {};
 
-  // prefer *Utc props if present, else local/unsuffixed
+  // Prefer *Utc props if present
   const schedISO = type === "DEP" ? (dep.scheduledTimeUtc || dep.scheduledTime) : (arr.scheduledTimeUtc || arr.scheduledTime);
   const estISO   = type === "DEP" ? (dep.estimatedTimeUtc || dep.estimatedTime) : (arr.estimatedTimeUtc || arr.estimatedTime);
   const actISO   = type === "DEP" ? (dep.actualTimeUtc    || dep.actualTime)    : (arr.actualTimeUtc    || arr.actualTime);
@@ -67,10 +70,20 @@ function mapRow(f, type){
 
 (async ()=>{
   try{
+    console.log("Requesting:", url);
     const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`.slice(0,300));
-    const js = await res.json();
+    const raw = await res.text(); // read once for better errors
+    if (!res.ok) {
+      console.error("AeroDataBox error", res.status, raw.slice(0,400));
+      process.exit(2);
+    }
+    let js;
+    try { js = JSON.parse(raw); } catch(e) {
+      console.error("JSON parse error:", e.message, raw.slice(0,400));
+      process.exit(2);
+    }
 
+    // Expect { arrivals:[...], departures:[...] }
     const arrivals   = Array.isArray(js.arrivals)   ? js.arrivals   : [];
     const departures = Array.isArray(js.departures) ? js.departures : [];
 
@@ -78,7 +91,7 @@ function mapRow(f, type){
     const aaDep = departures.filter(isAA).map(f => mapRow(f, "DEP"));
 
     const flights = [...aaArr, ...aaDep]
-      .filter(r => r.sched || r.est || r.actual)   // keep rows with some timing
+      .filter(r => r.sched || r.est || r.actual)
       .sort((a,b) => (a.actual||a.est||a.sched||0) - (b.actual||b.est||b.sched||0));
 
     const out = {
@@ -92,7 +105,7 @@ function mapRow(f, type){
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "latest.json"), JSON.stringify(out, null, 2));
     fs.writeFileSync(path.join(dir, `${out.date}.json`), JSON.stringify(out, null, 2));
-    console.log(`Saved ${flights.length} AA flights.`);
+    console.log(`Saved ${flights.length} AA flights to data/aa-phx/latest.json`);
   } catch (e) {
     console.error("pull_aa_phx_adb failed:", e.message);
     process.exit(2);
