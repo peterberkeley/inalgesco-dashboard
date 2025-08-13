@@ -1,12 +1,12 @@
 {
   "date": "2025-08-13",
-  "generated_at": "2025-08-13T20:39:17.747Z",
+  "generated_at": "2025-08-13T20:44:26.509Z",
   "source": "AeroDataBox via RapidAPI",
   "airport": "PHX",
   "airline_filter": "AA (AAL)",
   "window_utc": {
-    "from": "2025-08-13T18:39",
-    "to": "2025-08-14T06:39"
+    "from": "2025-08-13T18:44",
+    "to": "2025-08-14T06:44"
   },
   "flights": []
 }
