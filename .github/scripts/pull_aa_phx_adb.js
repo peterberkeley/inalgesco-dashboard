@@ -111,8 +111,9 @@ const WINDOW_HOURS = 12; // hard limit
 const from = new Date(now.getTime() - PAST_HOURS * 3600 * 1000);
 const to   = new Date(from.getTime() + WINDOW_HOURS * 3600 * 1000);
 
+// Use IATA endpoint (PHX); this often returns more complete FIDS data
 const url =
-  `${BASE_URL}/flights/airports/icao/${ICAO}` +
+  `${BASE_URL}/flights/airports/iata/PHX` +
   `?offsetMinutes=-120&durationMinutes=600&direction=Both` +
   `&withLeg=true&withCancelled=true&withCodeshared=true&withCargo=false&withPrivate=true`;
 
