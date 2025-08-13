@@ -128,7 +128,18 @@ const headers = {
 (async () => {
   try {
     console.log("Requesting:", url);
-    const js = await fetchWithRetry(url, headers);
+  const js = await fetchWithRetry(url, headers);
+
+// DEBUG: write the raw response so we can see the exact shape
+try {
+  const dbgDir = path.join(process.cwd(), "data", "aa-phx");
+  fs.mkdirSync(dbgDir, { recursive: true });
+  fs.writeFileSync(path.join(dbgDir, "_last_raw.json"), JSON.stringify(js, null, 2));
+  console.log("Wrote data/aa-phx/_last_raw.json");
+} catch (e) {
+  console.warn("debug write failed:", e.message);
+}
+
 
     const arrivals   = Array.isArray(js.arrivals)   ? js.arrivals   : [];
     const departures = Array.isArray(js.departures) ? js.departures : [];
