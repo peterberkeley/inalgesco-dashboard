@@ -1,6 +1,6 @@
 // .github/scripts/pull_aa_phx_adb.js
 // Fetch live American Airlines flights at PHX from AeroDataBox (RapidAPI)
-// Writes: data/aa-phx/latest.json (+ dated copy)
+// Write to data/aa-phx/latest.json (+ dated copy)
 // Requires repo secret: RAPIDAPI_KEY
 
 const fs = require("node:fs");
@@ -14,79 +14,85 @@ if (!RAPID_KEY) {
 
 const BASE_HOST = "aerodatabox.p.rapidapi.com";
 const BASE_URL  = `https://${BASE_HOST}`;
-const AIRPORT_IATA = "PHX";      // Phoenix (IATA path works best)
-const AIRLINE_IATA = "AA";       // American
+const HOME_IATA = "PHX";
+const AIRLINE_IATA = "AA";
 const AIRLINE_ICAO = "AAL";
 
-// ----------------- helpers -----------------
-
+// helpers
 const isoMin = d => d.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM (UTC)
-
-// Parse strings like:
-// "2025-08-13 18:52Z" / "2025-08-13 18:52-07:00" / ISO strings -> epoch seconds
 const toSec = s => {
   if (!s) return null;
-  if (typeof s === "string") {
-    let str = s.trim();
-    // Coerce "YYYY-MM-DD HH:mmZ" or "YYYY-MM-DD HH:mm±HH:MM" to ISO
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(Z|[+-]\d{2}:\d{2})?$/.test(str)) {
-      str = str.replace(" ", "T");
-    }
-    const t1 = Date.parse(str);
-    return Number.isFinite(t1) ? Math.floor(t1 / 1000) : null;
+  let t = Date.parse(s);
+  if (!Number.isFinite(t) && typeof s === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
+    t = Date.parse(s.replace(" ", "T") + ":00Z");
   }
-  const t = Date.parse(s);
   return Number.isFinite(t) ? Math.floor(t / 1000) : null;
 };
-
 const apId = ap => (ap?.iata || ap?.icao || null);
-
-// Keep only American flights
-const isAA = f => {
-  // In FIDS, airline is at f.airline; id at f.number / f.callSign
-  const opIata = (f?.airline?.iata || "").toUpperCase();
-  const opIcao = (f?.airline?.icao || "").toUpperCase();
-  const ident  = (f?.number || f?.callSign || "").toUpperCase().replace(/\s+/g, "");
-  return opIata === AIRLINE_IATA || opIcao === AIRLINE_ICAO || ident.startsWith("AA");
+const normalizeGate = g => {
+  if (!g) return null;
+  return String(g).toUpperCase().trim().replace(/^GATE\s+/, "");
 };
 
-// Map one FIDS record to our simplified row
+// Tighter AA filter (operator OR flight number OR codeshare containing AA)
+const isAA = (f) => {
+  const opIata = (f?.airline?.iata || f?.operator?.iata || "").toUpperCase();
+  const opIcao = (f?.airline?.icao || f?.operator?.icao || "").toUpperCase();
+
+  const nums = []
+    .concat(f?.number || [])
+    .concat(f?.callSign || [])
+    .concat(f?.flight?.iata || [])
+    .concat(f?.flight?.icao || [])
+    .map(x => String(x).toUpperCase().replace(/\s+/g, ""));
+
+  // Some responses don’t expose explicit codeshare arrays, so number prefix is the safest
+  const aaNumber = nums.some(n => n.startsWith("AA"));
+
+  return opIata === AIRLINE_IATA || opIcao === AIRLINE_ICAO || aaNumber;
+};
+
 function mapRow(f, type) {
   const dep = f.departure || {};
   const arr = f.arrival   || {};
   const ac  = f.aircraft  || {};
 
-  // ADB FIDS times are nested: *.scheduledTime.utc, *.revisedTime.utc, *.runwayTime.utc
+  // FIDS-style nested times
   const getUtc = (seg, key) => seg?.[key]?.utc || seg?.[key]?.local || null;
 
-  // Priority for each column
   const schedISO = type === "DEP" ? getUtc(dep, "scheduledTime") : getUtc(arr, "scheduledTime");
-  const estISO   = type === "DEP"
-    ? (getUtc(dep, "revisedTime") || getUtc(dep, "estimatedTime"))
-    : (getUtc(arr, "revisedTime") || getUtc(arr, "estimatedTime"));
-  const actISO   = type === "DEP"
-    ? (getUtc(dep, "runwayTime") || getUtc(dep, "actualTime"))
-    : (getUtc(arr, "runwayTime") || getUtc(arr, "actualTime"));
+  const estISO   = type === "DEP" ? (getUtc(dep, "revisedTime")  || getUtc(dep, "estimatedTime"))
+                                  : (getUtc(arr, "revisedTime")  || getUtc(arr, "estimatedTime"));
+  const actISO   = type === "DEP" ? (getUtc(dep, "runwayTime")   || getUtc(dep, "actualTime"))
+                                  : (getUtc(arr, "runwayTime")   || getUtc(arr, "actualTime"));
 
-  // Terminal/gate may appear on dep or arr; use whichever exists
-  const terminal = (type === "DEP" ? dep.terminal : arr.terminal) ?? dep.terminal ?? arr.terminal ?? null;
-  const gate     = (type === "DEP" ? dep.gate     : arr.gate)     ?? dep.gate     ?? arr.gate     ?? null;
+  // Terminal & gate (prefer the side we’re rendering; fall back to other side)
+  let terminal = (type === "DEP" ? dep.terminal : arr.terminal) ?? dep.terminal ?? arr.terminal ?? null;
+  let gate     = normalizeGate((type === "DEP" ? dep.gate : arr.gate) || dep.gate || arr.gate);
 
-  // Flight id: use published "number" (e.g., "AA 123") squashed to "AA123"
-  const flightId = (f.number || f.callSign || "").toString().replace(/\s+/g, "");
+  // Local PHX rules: AA uses T4 → default to "4" if missing
+  if (!terminal && isAA(f)) terminal = "4";
+
+  // Origin/Destination fill to PHX if missing (based on side)
+  const origin      = apId(dep.airport) || (type === "DEP" ? HOME_IATA : null);
+  const destination = apId(arr.airport) || (type === "ARR" ? HOME_IATA : null);
+
+  // Flight id: prefer published "number" (e.g., "AA 123") squashed to "AA123"
+  const flightId = (f.number || f.callSign || f?.flight?.iata || f?.flight?.icao || "")
+    .toString().replace(/\s+/g, "");
 
   return {
-    type, // "ARR" | "DEP"
+    type, // ARR | DEP
     flight: flightId,
     reg: ac.registration || ac.reg || null,
-    origin: apId(dep.airport),
-    destination: apId(arr.airport),
+    origin,
+    destination,
     terminal,
     gate,
     sched:  toSec(schedISO),
     est:    toSec(estISO),
     actual: toSec(actISO),
-    status: f.status || ""
+    status: f.status || f.statusText || ""
   };
 }
 
@@ -109,19 +115,18 @@ async function fetchWithRetry(url, headers, tries = 3) {
   throw lastErr;
 }
 
-// -------------- request window (<=12h per API) --------------
-
+// request window (<=12h hard limit)
 const now = new Date();
 const PAST_HOURS   = 2;
 const WINDOW_HOURS = 12;
 const from = new Date(now.getTime() - PAST_HOURS * 3600 * 1000);
 const to   = new Date(from.getTime() + WINDOW_HOURS * 3600 * 1000);
 
-// Use IATA endpoint (PHX) with relative window
+// IATA endpoint tends to carry better FIDS-like fields
 const url =
-  `${BASE_URL}/flights/airports/iata/${AIRPORT_IATA}` +
-  `?offsetMinutes=-120&durationMinutes=600&direction=Both` +
-  `&withLeg=true&withCancelled=true&withCodeshared=true&withCargo=false&withPrivate=true`;
+  `${BASE_URL}/flights/airports/iata/${HOME_IATA}` +
+  `?offsetMinutes=-${PAST_HOURS*60}&durationMinutes=${WINDOW_HOURS*60}` +
+  `&direction=Both&withLeg=true&withCancelled=true&withCodeshared=true&withCargo=false&withPrivate=true`;
 
 const headers = {
   "X-RapidAPI-Key": RAPID_KEY,
@@ -129,48 +134,37 @@ const headers = {
   "Accept": "application/json"
 };
 
-// ------------------ main ------------------
-
 (async () => {
   try {
     console.log("Requesting:", url);
     const js = await fetchWithRetry(url, headers);
 
-    // DEBUG: write the raw shape so we can inspect fields anytime
+    // Debug raw (helps when ADB fields change)
     try {
       const dbgDir = path.join(process.cwd(), "data", "aa-phx");
       fs.mkdirSync(dbgDir, { recursive: true });
       fs.writeFileSync(path.join(dbgDir, "_last_raw.json"), JSON.stringify(js, null, 2));
-      console.log("Wrote data/aa-phx/_last_raw.json");
-    } catch (e) {
-      console.warn("debug write failed:", e.message);
-    }
+    } catch {}
 
     const arrivals   = Array.isArray(js.arrivals)   ? js.arrivals   : [];
     const departures = Array.isArray(js.departures) ? js.departures : [];
-    console.log(`ADB returned ${arrivals.length} arrivals + ${departures.length} departures`);
 
     let aaArr = arrivals.filter(isAA);
     let aaDep = departures.filter(isAA);
-    console.log(`Filtered AA: ${aaArr.length} arrivals, ${aaDep.length} departures`);
 
-    let flights = [...aaArr.map(f => mapRow(f, "ARR")), ...aaDep.map(f => mapRow(f, "DEP"))]
+    // Map + sort
+    let flights = [
+      ...aaArr.map(f => mapRow(f, "ARR")),
+      ...aaDep.map(f => mapRow(f, "DEP"))
+    ]
       .filter(r => r.sched || r.est || r.actual)
       .sort((a, b) => (a.actual || a.est || a.sched || 0) - (b.actual || b.est || b.sched || 0));
-
-    // Fallback for visibility while tuning
-    if (flights.length === 0) {
-      console.log("AA filter produced 0 rows — writing ALL carriers for inspection.");
-      flights = [...arrivals.map(f => mapRow(f, "ARR")), ...departures.map(f => mapRow(f, "DEP"))]
-        .filter(r => r.sched || r.est || r.actual)
-        .sort((a, b) => (a.actual || a.est || a.sched || 0) - (b.actual || b.est || b.sched || 0));
-    }
 
     const out = {
       date: new Date().toISOString().slice(0, 10),
       generated_at: new Date().toISOString(),
       source: "AeroDataBox via RapidAPI",
-      airport: AIRPORT_IATA,
+      airport: HOME_IATA,
       airline_filter: "AA (AAL)",
       window_utc: { from: isoMin(from), to: isoMin(to) },
       flights
@@ -180,7 +174,8 @@ const headers = {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "latest.json"), JSON.stringify(out, null, 2));
     fs.writeFileSync(path.join(dir, `${out.date}.json`), JSON.stringify(out, null, 2));
-    console.log(`Saved ${flights.length} rows to data/aa-phx/latest.json`);
+
+    console.log(`Saved ${flights.length} AA rows to data/aa-phx/latest.json`);
   } catch (e) {
     console.error("pull_aa_phx_adb failed:", e.message);
     process.exit(2);
