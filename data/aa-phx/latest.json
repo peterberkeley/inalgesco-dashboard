@@ -1,53 +1,14 @@
 {
   "date": "2025-08-14",
-  "generated_at": "2025-08-14T04:42:11.980Z",
+  "generated_at": "2025-08-14T04:59:06.725Z",
   "source": "AeroDataBox via RapidAPI",
   "airport": "PHX",
   "airline_filter": "AA (AAL)",
   "window_utc": {
-    "from": "2025-08-14T02:42",
-    "to": "2025-08-14T14:42"
+    "from": "2025-08-14T02:59",
+    "to": "2025-08-14T14:59"
   },
   "flights": [
-    {
-      "type": "DEP",
-      "flight": "AA3599",
-      "reg": null,
-      "origin": null,
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755139800,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA6451",
-      "reg": null,
-      "origin": null,
-      "destination": "LBB",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755139980,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
-    {
-      "type": "DEP",
-      "flight": "AA4892",
-      "reg": null,
-      "origin": null,
-      "destination": "MAF",
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755140040,
-      "est": null,
-      "actual": null,
-      "status": "Unknown"
-    },
     {
       "type": "DEP",
       "flight": "AA4815",
@@ -343,6 +304,19 @@
       "terminal": "4",
       "gate": null,
       "sched": 1755174600,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA6431",
+      "reg": null,
+      "origin": "GJT",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755175380,
       "est": null,
       "actual": null,
       "status": "Expected"
