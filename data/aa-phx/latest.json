@@ -1,12 +1,12 @@
 {
   "date": "2025-08-14",
-  "generated_at": "2025-08-14T05:47:20.879Z",
+  "generated_at": "2025-08-14T05:58:17.021Z",
   "source": "AeroDataBox via RapidAPI",
   "airport": "PHX",
   "airline_filter": "AA (AAL)",
   "window_utc": {
-    "from": "2025-08-14T03:47",
-    "to": "2025-08-14T15:47"
+    "from": "2025-08-14T03:58",
+    "to": "2025-08-14T15:58"
   },
   "flights": [
     {
@@ -193,10 +193,10 @@
     },
     {
       "type": "DEP",
-      "flight": "AA1655",
+      "flight": "AA3009",
       "reg": null,
       "origin": null,
-      "destination": "DFW",
+      "destination": "CLT",
       "terminal": "4",
       "gate": null,
       "sched": 1755172800,
@@ -206,10 +206,10 @@
     },
     {
       "type": "DEP",
-      "flight": "AA3009",
+      "flight": "AA1655",
       "reg": null,
       "origin": null,
-      "destination": "CLT",
+      "destination": "DFW",
       "terminal": "4",
       "gate": null,
       "sched": 1755172800,
@@ -408,6 +408,32 @@
       "terminal": "4",
       "gate": null,
       "sched": 1755178980,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA432",
+      "reg": null,
+      "origin": "OGG",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755179400,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA3316",
+      "reg": null,
+      "origin": "IND",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755179400,
       "est": null,
       "actual": null,
       "status": "Expected"
