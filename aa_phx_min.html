@@ -18,12 +18,13 @@
 </head>
 <body>
   <h1>American Airlines — Phoenix (PHX) • minimal test</h1>
-  <div class="row">
-    <label class="muted">Date (Phoenix):</label>
-    <input id="date" type="date" />
-    <button id="btn">Refresh</button>
-    <span id="status" class="muted"></span>
-  </div>
+ <div class="row">
+  <button id="backBtn" style="margin-right:12px">← Dashboard</button>
+  <label class="muted">Date (Phoenix):</label>
+  <input id="date" type="date" />
+  <button id="btn">Refresh</button>
+  <span id="status" class="muted"></span>
+</div>
 
   <table>
     <thead>
@@ -96,6 +97,9 @@
     // wire UI
     document.getElementById('btn').onclick = load;
     document.getElementById('date').value = todayPhoenixISO();
+    const back = document.getElementById('backBtn');
+if (back) back.onclick = () => { window.location.href = 'dashboard.html'; };
+
 
     // initial + auto refresh every 30s
     load();
