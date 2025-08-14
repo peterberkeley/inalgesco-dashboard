@@ -45,45 +45,6 @@
           "utc": "2025-08-14 12:00Z",
           "local": "2025-08-14 05:00-07:00"
         },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KCLT",
-          "iata": "CLT",
-          "name": "Charlotte",
-          "timeZone": "America/New_York"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:13Z",
-          "local": "2025-08-14 12:13-04:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 3009",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A321"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 12:00Z",
-          "local": "2025-08-14 05:00-07:00"
-        },
         "revisedTime": {
           "utc": "2025-08-14 12:00Z",
           "local": "2025-08-14 05:00-07:00"
@@ -129,6 +90,45 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 12:00Z",
+          "local": "2025-08-14 05:00-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KCLT",
+          "iata": "CLT",
+          "name": "Charlotte",
+          "timeZone": "America/New_York"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:13Z",
+          "local": "2025-08-14 12:13-04:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 3009",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A321"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -978,6 +978,46 @@
           "utc": "2025-08-14 13:00Z",
           "local": "2025-08-14 06:00-07:00"
         },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KIAH",
+          "iata": "IAH",
+          "name": "Houston",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 15:43Z",
+          "local": "2025-08-14 10:43-05:00"
+        },
+        "terminal": "C",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "UA 2181",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-900"
+      },
+      "airline": {
+        "name": "United",
+        "iata": "UA",
+        "icao": "UAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 13:00Z",
+          "local": "2025-08-14 06:00-07:00"
+        },
         "quality": [
           "Basic"
         ]
@@ -1048,46 +1088,6 @@
         "name": "Delta Air Lines",
         "iata": "DL",
         "icao": "DAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 13:00Z",
-          "local": "2025-08-14 06:00-07:00"
-        },
-        "terminal": "3",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KIAH",
-          "iata": "IAH",
-          "name": "Houston",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 15:43Z",
-          "local": "2025-08-14 10:43-05:00"
-        },
-        "terminal": "C",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "UA 2181",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-900"
-      },
-      "airline": {
-        "name": "United",
-        "iata": "UA",
-        "icao": "UAL"
       }
     },
     {
@@ -1481,24 +1481,25 @@
           "timeZone": "America/Los_Angeles"
         },
         "scheduledTime": {
-          "utc": "2025-08-14 14:58Z",
-          "local": "2025-08-14 07:58-07:00"
+          "utc": "2025-08-14 14:55Z",
+          "local": "2025-08-14 07:55-07:00"
         },
+        "terminal": "1",
         "quality": [
           "Basic"
         ]
       },
-      "number": "AA 2233",
+      "number": "WN 346",
       "status": "Unknown",
       "codeshareStatus": "Unknown",
       "isCargo": false,
       "aircraft": {
-        "model": "Boeing 737-800"
+        "model": "Boeing 737"
       },
       "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
       }
     },
     {
@@ -1520,25 +1521,24 @@
           "timeZone": "America/Los_Angeles"
         },
         "scheduledTime": {
-          "utc": "2025-08-14 14:55Z",
-          "local": "2025-08-14 07:55-07:00"
+          "utc": "2025-08-14 14:58Z",
+          "local": "2025-08-14 07:58-07:00"
         },
-        "terminal": "1",
         "quality": [
           "Basic"
         ]
       },
-      "number": "WN 346",
+      "number": "AA 2233",
       "status": "Unknown",
       "codeshareStatus": "Unknown",
       "isCargo": false,
       "aircraft": {
-        "model": "Boeing 737"
+        "model": "Boeing 737-800"
       },
       "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -1587,46 +1587,6 @@
           "utc": "2025-08-14 13:40Z",
           "local": "2025-08-14 06:40-07:00"
         },
-        "terminal": "3",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KLAX",
-          "iata": "LAX",
-          "name": "Los Angeles",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 14:34Z",
-          "local": "2025-08-14 07:34-07:00"
-        },
-        "terminal": "1",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "DL 4057",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
-      },
-      "airline": {
-        "name": "Delta Air Lines",
-        "iata": "DL",
-        "icao": "DAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 13:40Z",
-          "local": "2025-08-14 06:40-07:00"
-        },
         "terminal": "4",
         "quality": [
           "Basic"
@@ -1659,6 +1619,46 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 13:40Z",
+          "local": "2025-08-14 06:40-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KLAX",
+          "iata": "LAX",
+          "name": "Los Angeles",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 14:34Z",
+          "local": "2025-08-14 07:34-07:00"
+        },
+        "terminal": "1",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "DL 4057",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "Delta Air Lines",
+        "iata": "DL",
+        "icao": "DAL"
       }
     },
     {
@@ -1753,45 +1753,6 @@
       },
       "arrival": {
         "airport": {
-          "icao": "KDFW",
-          "iata": "DFW",
-          "name": "Dallas-Fort Worth",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:34Z",
-          "local": "2025-08-14 11:34-05:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 1139",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A320"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:00Z",
-          "local": "2025-08-14 07:00-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
           "icao": "KMDW",
           "iata": "MDW",
           "name": "Chicago",
@@ -1816,6 +1777,45 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:00Z",
+          "local": "2025-08-14 07:00-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KDFW",
+          "iata": "DFW",
+          "name": "Dallas-Fort Worth",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:34Z",
+          "local": "2025-08-14 11:34-05:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 1139",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -1864,45 +1864,6 @@
           "utc": "2025-08-14 14:05Z",
           "local": "2025-08-14 07:05-07:00"
         },
-        "terminal": "3",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KSEA",
-          "iata": "SEA",
-          "name": "Seattle",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 17:09Z",
-          "local": "2025-08-14 10:09-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AS 645",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-900"
-      },
-      "airline": {
-        "name": "Alaska",
-        "iata": "AS",
-        "icao": "ASA"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:05Z",
-          "local": "2025-08-14 07:05-07:00"
-        },
         "terminal": "4",
         "quality": [
           "Basic"
@@ -1937,6 +1898,45 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:05Z",
+          "local": "2025-08-14 07:05-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSEA",
+          "iata": "SEA",
+          "name": "Seattle",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 17:09Z",
+          "local": "2025-08-14 10:09-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AS 645",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-900"
+      },
+      "airline": {
+        "name": "Alaska",
+        "iata": "AS",
+        "icao": "ASA"
       }
     },
     {
@@ -2110,6 +2110,45 @@
       },
       "arrival": {
         "airport": {
+          "icao": "KSNA",
+          "iata": "SNA",
+          "name": "Santa Ana",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 15:35Z",
+          "local": "2025-08-14 08:35-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 1462",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:15Z",
+          "local": "2025-08-14 07:15-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
           "icao": "KSJC",
           "iata": "SJC",
           "name": "San Jose",
@@ -2135,84 +2174,6 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:15Z",
-          "local": "2025-08-14 07:15-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KMRY",
-          "iata": "MRY",
-          "name": "Monterey",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:14Z",
-          "local": "2025-08-14 09:14-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 3347",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:15Z",
-          "local": "2025-08-14 07:15-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KSNA",
-          "iata": "SNA",
-          "name": "Santa Ana",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 15:35Z",
-          "local": "2025-08-14 08:35-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 1462",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -2297,6 +2258,45 @@
       "number": "AA 4081",
       "status": "Unknown",
       "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:15Z",
+          "local": "2025-08-14 07:15-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KMRY",
+          "iata": "MRY",
+          "name": "Monterey",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:14Z",
+          "local": "2025-08-14 09:14-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 3347",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
       "isCargo": false,
       "aircraft": {
         "model": "Embraer 175"
@@ -2437,46 +2437,6 @@
       },
       "arrival": {
         "airport": {
-          "icao": "KATL",
-          "iata": "ATL",
-          "name": "Atlanta",
-          "timeZone": "America/New_York"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 18:10Z",
-          "local": "2025-08-14 14:10-04:00"
-        },
-        "terminal": "S",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "DL 901",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A321"
-      },
-      "airline": {
-        "name": "Delta Air Lines",
-        "iata": "DL",
-        "icao": "DAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:25Z",
-          "local": "2025-08-14 07:25-07:00"
-        },
-        "terminal": "3",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
           "icao": "KIAH",
           "iata": "IAH",
           "name": "Houston",
@@ -2502,6 +2462,46 @@
         "name": "Frontier",
         "iata": "F9",
         "icao": "FFT"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:25Z",
+          "local": "2025-08-14 07:25-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KATL",
+          "iata": "ATL",
+          "name": "Atlanta",
+          "timeZone": "America/New_York"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 18:10Z",
+          "local": "2025-08-14 14:10-04:00"
+        },
+        "terminal": "S",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "DL 901",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A321"
+      },
+      "airline": {
+        "name": "Delta Air Lines",
+        "iata": "DL",
+        "icao": "DAL"
       }
     },
     {
@@ -2639,6 +2639,45 @@
           "utc": "2025-08-14 14:30Z",
           "local": "2025-08-14 07:30-07:00"
         },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KBUR",
+          "iata": "BUR",
+          "name": "Burbank",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:00Z",
+          "local": "2025-08-14 09:00-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 143",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-700"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:30Z",
+          "local": "2025-08-14 07:30-07:00"
+        },
         "terminal": "3",
         "quality": [
           "Basic"
@@ -2696,45 +2735,6 @@
       },
       "airline": {
         "name": "Unknown/Private owner"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:30Z",
-          "local": "2025-08-14 07:30-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KBUR",
-          "iata": "BUR",
-          "name": "Burbank",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:00Z",
-          "local": "2025-08-14 09:00-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 143",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-700"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -3163,6 +3163,86 @@
       },
       "arrival": {
         "airport": {
+          "icao": "KSMF",
+          "iata": "SMF",
+          "name": "Sacramento",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:55Z",
+          "local": "2025-08-14 09:55-07:00"
+        },
+        "terminal": "B",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 2100",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-800"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSMF",
+          "iata": "SMF",
+          "name": "Sacramento",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:55Z",
+          "local": "2025-08-14 09:55-07:00"
+        },
+        "terminal": "B",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 2100",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-800"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
           "icao": "KPDX",
           "iata": "PDX",
           "name": "Portland",
@@ -3226,106 +3306,6 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KASE",
-          "iata": "ASE",
-          "name": "Aspen",
-          "timeZone": "America/Denver"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:14Z",
-          "local": "2025-08-14 10:14-06:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 16:14Z",
-          "local": "2025-08-14 10:14-06:00"
-        },
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "number": "LXJ 390",
-      "callSign": "LXJ390",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "reg": "N390FX",
-        "modeS": "A4835C",
-        "model": "Embraer Phenom 300"
-      },
-      "airline": {
-        "name": "Flexjet",
-        "icao": "LXJ"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KASE",
-          "iata": "ASE",
-          "name": "Aspen",
-          "timeZone": "America/Denver"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:14Z",
-          "local": "2025-08-14 10:14-06:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 16:14Z",
-          "local": "2025-08-14 10:14-06:00"
-        },
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "number": "LXJ 390",
-      "callSign": "LXJ390",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "reg": "N390FX",
-        "modeS": "A4835C",
-        "model": "Embraer Phenom 300"
-      },
-      "airline": {
-        "name": "Flexjet",
-        "icao": "LXJ"
       }
     },
     {
@@ -3405,86 +3385,6 @@
       "aircraft": {
         "modeS": "AC5066",
         "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KSMF",
-          "iata": "SMF",
-          "name": "Sacramento",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:55Z",
-          "local": "2025-08-14 09:55-07:00"
-        },
-        "terminal": "B",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 2100",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-800"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KSMF",
-          "iata": "SMF",
-          "name": "Sacramento",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 16:55Z",
-          "local": "2025-08-14 09:55-07:00"
-        },
-        "terminal": "B",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 2100",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-800"
       },
       "airline": {
         "name": "Southwest",
@@ -3652,6 +3552,106 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KASE",
+          "iata": "ASE",
+          "name": "Aspen",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:14Z",
+          "local": "2025-08-14 10:14-06:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 16:14Z",
+          "local": "2025-08-14 10:14-06:00"
+        },
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "number": "LXJ 390",
+      "callSign": "LXJ390",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "reg": "N390FX",
+        "modeS": "A4835C",
+        "model": "Embraer Phenom 300"
+      },
+      "airline": {
+        "name": "Flexjet",
+        "icao": "LXJ"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KASE",
+          "iata": "ASE",
+          "name": "Aspen",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:14Z",
+          "local": "2025-08-14 10:14-06:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 16:14Z",
+          "local": "2025-08-14 10:14-06:00"
+        },
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "number": "LXJ 390",
+      "callSign": "LXJ390",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "reg": "N390FX",
+        "modeS": "A4835C",
+        "model": "Embraer Phenom 300"
+      },
+      "airline": {
+        "name": "Flexjet",
+        "icao": "LXJ"
       }
     },
     {
@@ -5633,6 +5633,46 @@
       },
       "arrival": {
         "airport": {
+          "icao": "MMUN",
+          "iata": "CUN",
+          "name": "Cancún",
+          "timeZone": "America/Cancun"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 20:05Z",
+          "local": "2025-08-14 15:05-05:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 515",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A321"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 15:50Z",
+          "local": "2025-08-14 08:50-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
           "icao": "KSLC",
           "iata": "SLC",
           "name": "Salt Lake City",
@@ -5730,46 +5770,6 @@
       "isCargo": false,
       "aircraft": {
         "model": "Canadair reg jet 700"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 15:50Z",
-          "local": "2025-08-14 08:50-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "MMUN",
-          "iata": "CUN",
-          "name": "Cancún",
-          "timeZone": "America/Cancun"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 20:05Z",
-          "local": "2025-08-14 15:05-05:00"
-        },
-        "terminal": "3",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 515",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A321"
       },
       "airline": {
         "name": "American",
@@ -7146,7 +7146,7 @@
         ]
       },
       "number": "WN 4123",
-      "status": "Expected",
+      "status": "Unknown",
       "codeshareStatus": "Unknown",
       "isCargo": false,
       "aircraft": {
@@ -7759,6 +7759,45 @@
       },
       "arrival": {
         "airport": {
+          "icao": "PHLI",
+          "iata": "LIH",
+          "name": "Lihue",
+          "timeZone": "Pacific/Honolulu"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 23:56Z",
+          "local": "2025-08-14 13:56-10:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 697",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 17:15Z",
+          "local": "2025-08-14 10:15-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
           "icao": "MMMX",
           "iata": "MEX",
           "name": "Mexico City",
@@ -7857,45 +7896,6 @@
       "isCargo": false,
       "aircraft": {
         "model": "Boeing 737-800"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 17:15Z",
-          "local": "2025-08-14 10:15-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "PHLI",
-          "iata": "LIH",
-          "name": "Lihue",
-          "timeZone": "Pacific/Honolulu"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 23:56Z",
-          "local": "2025-08-14 13:56-10:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 697",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A320"
       },
       "airline": {
         "name": "American",
@@ -9156,6 +9156,45 @@
       },
       "arrival": {
         "airport": {
+          "icao": "KAUS",
+          "iata": "AUS",
+          "name": "Austin",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 20:10Z",
+          "local": "2025-08-14 15:10-05:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 3249",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 17:50Z",
+          "local": "2025-08-14 10:50-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
           "icao": "KATL",
           "iata": "ATL",
           "name": "Atlanta",
@@ -9206,45 +9245,6 @@
       "isCargo": false,
       "aircraft": {
         "model": "Boeing 737-800"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 17:50Z",
-          "local": "2025-08-14 10:50-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KAUS",
-          "iata": "AUS",
-          "name": "Austin",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 20:10Z",
-          "local": "2025-08-14 15:10-05:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 3249",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
       },
       "airline": {
         "name": "Southwest",
@@ -10464,36 +10464,6 @@
       },
       "arrival": {
         "airport": {
-          "name": "Provo"
-        },
-        "quality": []
-      },
-      "number": "AA 4918",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Canadair reg jet 700"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:15Z",
-          "local": "2025-08-14 12:15-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
           "icao": "KELP",
           "iata": "ELP",
           "name": "El Paso",
@@ -10601,6 +10571,36 @@
     {
       "departure": {
         "scheduledTime": {
+          "utc": "2025-08-14 19:15Z",
+          "local": "2025-08-14 12:15-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "name": "Provo"
+        },
+        "quality": []
+      },
+      "number": "AA 4918",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Canadair reg jet 700"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
           "utc": "2025-08-14 19:16Z",
           "local": "2025-08-14 12:16-07:00"
         },
@@ -10690,45 +10690,6 @@
       },
       "arrival": {
         "airport": {
-          "icao": "KCLT",
-          "iata": "CLT",
-          "name": "Charlotte",
-          "timeZone": "America/New_York"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 23:35Z",
-          "local": "2025-08-14 19:35-04:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 1823",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A320"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:20Z",
-          "local": "2025-08-14 12:20-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
           "icao": "KDEN",
           "iata": "DEN",
           "name": "Denver",
@@ -10753,6 +10714,45 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:20Z",
+          "local": "2025-08-14 12:20-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KCLT",
+          "iata": "CLT",
+          "name": "Charlotte",
+          "timeZone": "America/New_York"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 23:35Z",
+          "local": "2025-08-14 19:35-04:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 1823",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -10927,6 +10927,45 @@
       },
       "arrival": {
         "airport": {
+          "icao": "KTEX",
+          "iata": "TEX",
+          "name": "Telluride",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 21:00Z",
+          "local": "2025-08-14 15:00-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "KG 3710",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Dornier 328"
+      },
+      "airline": {
+        "name": "Denver Air Connection",
+        "iata": "KG",
+        "icao": "LYM"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:30Z",
+          "local": "2025-08-14 12:30-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
           "icao": "KDFW",
           "iata": "DFW",
           "name": "Dallas-Fort Worth",
@@ -10957,40 +10996,40 @@
     {
       "departure": {
         "scheduledTime": {
-          "utc": "2025-08-14 19:30Z",
-          "local": "2025-08-14 12:30-07:00"
+          "utc": "2025-08-14 19:35Z",
+          "local": "2025-08-14 12:35-07:00"
         },
-        "terminal": "3",
+        "terminal": "4",
         "quality": [
           "Basic"
         ]
       },
       "arrival": {
         "airport": {
-          "icao": "KTEX",
-          "iata": "TEX",
-          "name": "Telluride",
-          "timeZone": "America/Denver"
+          "icao": "KSEA",
+          "iata": "SEA",
+          "name": "Seattle",
+          "timeZone": "America/Los_Angeles"
         },
         "scheduledTime": {
-          "utc": "2025-08-14 21:00Z",
-          "local": "2025-08-14 15:00-06:00"
+          "utc": "2025-08-14 22:35Z",
+          "local": "2025-08-14 15:35-07:00"
         },
         "quality": [
           "Basic"
         ]
       },
-      "number": "KG 3710",
+      "number": "WN 1860",
       "status": "Expected",
-      "codeshareStatus": "IsOperator",
+      "codeshareStatus": "Unknown",
       "isCargo": false,
       "aircraft": {
-        "model": "Dornier 328"
+        "model": "Boeing 737-700"
       },
       "airline": {
-        "name": "Denver Air Connection",
-        "iata": "KG",
-        "icao": "LYM"
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
       }
     },
     {
@@ -11060,45 +11099,6 @@
         ]
       },
       "number": "WN 196",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-700"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:35Z",
-          "local": "2025-08-14 12:35-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KSEA",
-          "iata": "SEA",
-          "name": "Seattle",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 22:35Z",
-          "local": "2025-08-14 15:35-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 1860",
       "status": "Expected",
       "codeshareStatus": "Unknown",
       "isCargo": false,
@@ -11595,6 +11595,85 @@
           "utc": "2025-08-14 20:00Z",
           "local": "2025-08-14 13:00-07:00"
         },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSAN",
+          "iata": "SAN",
+          "name": "San Diego",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 21:13Z",
+          "local": "2025-08-14 14:13-07:00"
+        },
+        "terminal": "1",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "F9 1571",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320 NEO"
+      },
+      "airline": {
+        "name": "Frontier",
+        "iata": "F9",
+        "icao": "FFT"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:00Z",
+          "local": "2025-08-14 13:00-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KIPL",
+          "iata": "IPL",
+          "name": "Imperial",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 21:15Z",
+          "local": "2025-08-14 14:15-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "9X 810",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Pilatus PC-12"
+      },
+      "airline": {
+        "name": "Southern  Express",
+        "iata": "9X",
+        "icao": "FDY"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:00Z",
+          "local": "2025-08-14 13:00-07:00"
+        },
         "terminal": "4",
         "quality": [
           "Basic"
@@ -11673,80 +11752,40 @@
     {
       "departure": {
         "scheduledTime": {
-          "utc": "2025-08-14 20:00Z",
-          "local": "2025-08-14 13:00-07:00"
+          "utc": "2025-08-14 20:10Z",
+          "local": "2025-08-14 13:10-07:00"
         },
-        "terminal": "3",
+        "terminal": "4",
         "quality": [
           "Basic"
         ]
       },
       "arrival": {
         "airport": {
-          "icao": "KSAN",
-          "iata": "SAN",
-          "name": "San Diego",
-          "timeZone": "America/Los_Angeles"
+          "icao": "KHOU",
+          "iata": "HOU",
+          "name": "Houston",
+          "timeZone": "America/Chicago"
         },
         "scheduledTime": {
-          "utc": "2025-08-14 21:13Z",
-          "local": "2025-08-14 14:13-07:00"
+          "utc": "2025-08-14 22:45Z",
+          "local": "2025-08-14 17:45-05:00"
         },
-        "terminal": "1",
         "quality": [
           "Basic"
         ]
       },
-      "number": "F9 1571",
+      "number": "WN 2254",
       "status": "Expected",
-      "codeshareStatus": "IsOperator",
+      "codeshareStatus": "Unknown",
       "isCargo": false,
       "aircraft": {
-        "model": "Airbus A320 NEO"
+        "model": "Boeing 737"
       },
       "airline": {
-        "name": "Frontier",
-        "iata": "F9",
-        "icao": "FFT"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 20:00Z",
-          "local": "2025-08-14 13:00-07:00"
-        },
-        "terminal": "3",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KIPL",
-          "iata": "IPL",
-          "name": "Imperial",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 21:15Z",
-          "local": "2025-08-14 14:15-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "9X 810",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Pilatus PC-12"
-      },
-      "airline": {
-        "name": "Southern  Express",
-        "iata": "9X",
-        "icao": "FDY"
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
       }
     },
     {
@@ -11793,45 +11832,6 @@
         "name": "WestJet",
         "iata": "WS",
         "icao": "WJA"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 20:10Z",
-          "local": "2025-08-14 13:10-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
-          "icao": "KHOU",
-          "iata": "HOU",
-          "name": "Houston",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 22:45Z",
-          "local": "2025-08-14 17:45-05:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 2254",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -12004,45 +12004,6 @@
       },
       "arrival": {
         "airport": {
-          "icao": "KBOI",
-          "iata": "BOI",
-          "name": "Boise",
-          "timeZone": "America/Boise"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 22:45Z",
-          "local": "2025-08-14 16:45-06:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 6242",
-      "status": "Expected",
-      "codeshareStatus": "IsCodeshared",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "scheduledTime": {
-          "utc": "2025-08-14 20:35Z",
-          "local": "2025-08-14 13:35-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "airport": {
           "icao": "KTUS",
           "iata": "TUS",
           "name": "Tucson",
@@ -12151,6 +12112,45 @@
     {
       "departure": {
         "scheduledTime": {
+          "utc": "2025-08-14 20:35Z",
+          "local": "2025-08-14 13:35-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KBOI",
+          "iata": "BOI",
+          "name": "Boise",
+          "timeZone": "America/Boise"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 22:45Z",
+          "local": "2025-08-14 16:45-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 6242",
+      "status": "Expected",
+      "codeshareStatus": "IsCodeshared",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
           "utc": "2025-08-14 20:36Z",
           "local": "2025-08-14 13:36-07:00"
         },
@@ -12225,6 +12225,399 @@
         "name": "Delta Air Lines",
         "iata": "DL",
         "icao": "DAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:40Z",
+          "local": "2025-08-14 13:40-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSTS",
+          "iata": "STS",
+          "name": "Santa Rosa",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 22:47Z",
+          "local": "2025-08-14 15:47-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 3757",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:40Z",
+          "local": "2025-08-14 13:40-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSMF",
+          "iata": "SMF",
+          "name": "Sacramento",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 22:38Z",
+          "local": "2025-08-14 15:38-07:00"
+        },
+        "terminal": "A",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 1628",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:40Z",
+          "local": "2025-08-14 13:40-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSEA",
+          "iata": "SEA",
+          "name": "Seattle",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 23:41Z",
+          "local": "2025-08-14 16:41-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "DL 2447",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-800"
+      },
+      "airline": {
+        "name": "Delta Air Lines",
+        "iata": "DL",
+        "icao": "DAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:40Z",
+          "local": "2025-08-14 13:40-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KBWI",
+          "iata": "BWI",
+          "name": "Baltimore",
+          "timeZone": "America/New_York"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-15 01:05Z",
+          "local": "2025-08-14 21:05-04:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 3409",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:41Z",
+          "local": "2025-08-14 13:41-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSEA",
+          "iata": "SEA",
+          "name": "Seattle",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 23:48Z",
+          "local": "2025-08-14 16:48-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 3934",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:41Z",
+          "local": "2025-08-14 13:41-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KRNO",
+          "iata": "RNO",
+          "name": "Reno",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 22:33Z",
+          "local": "2025-08-14 15:33-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 2016",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:45Z",
+          "local": "2025-08-14 13:45-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KSTL",
+          "iata": "STL",
+          "name": "Saint Louis",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 23:40Z",
+          "local": "2025-08-14 18:40-05:00"
+        },
+        "terminal": "2",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 653",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:45Z",
+          "local": "2025-08-14 13:45-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KMSP",
+          "iata": "MSP",
+          "name": "Minneapolis",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 23:51Z",
+          "local": "2025-08-14 18:51-05:00"
+        },
+        "terminal": "1",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "DL 2274",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 757"
+      },
+      "airline": {
+        "name": "Delta Air Lines",
+        "iata": "DL",
+        "icao": "DAL"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:45Z",
+          "local": "2025-08-14 13:45-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KMCI",
+          "iata": "MCI",
+          "name": "Kansas City",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 23:15Z",
+          "local": "2025-08-14 18:15-05:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 1979",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:48Z",
+          "local": "2025-08-14 13:48-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "airport": {
+          "icao": "KLAX",
+          "iata": "LAX",
+          "name": "Los Angeles",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 22:11Z",
+          "local": "2025-08-14 15:11-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 1362",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     }
   ],
@@ -12339,18 +12732,18 @@
       },
       "location": {
         "pressureAltitude": {
-          "meter": 10972.8,
-          "km": 10.97,
-          "mile": 6.82,
-          "nm": 5.92,
-          "feet": 36000
+          "meter": 11277.6,
+          "km": 11.28,
+          "mile": 7.01,
+          "nm": 6.09,
+          "feet": 37000
         },
         "altitude": {
-          "meter": 10969.75,
-          "km": 10.97,
-          "mile": 6.82,
-          "nm": 5.92,
-          "feet": 35990
+          "meter": 11274.55,
+          "km": 11.27,
+          "mile": 7.01,
+          "nm": 6.09,
+          "feet": 36990
         },
         "pressure": {
           "hPa": 1012.87,
@@ -12358,18 +12751,18 @@
           "mmHg": 759.71
         },
         "groundSpeed": {
-          "kt": 496,
-          "kmPerHour": 919,
-          "miPerHour": 571,
-          "meterPerSecond": 255
+          "kt": 499,
+          "kmPerHour": 924,
+          "miPerHour": 574,
+          "meterPerSecond": 257
         },
         "trueTrack": {
-          "deg": 76,
-          "rad": 1.3264502315156903
+          "deg": 77,
+          "rad": 1.3439035240356338
         },
-        "reportedAtUtc": "2025-08-14 10:38Z",
-        "lat": 32.684048,
-        "lon": -121.997734
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 33.04152,
+        "lon": -120.22026
       }
     },
     {
@@ -12502,40 +12895,6 @@
         "name": "Alaska",
         "iata": "AS",
         "icao": "ASA"
-      },
-      "location": {
-        "pressureAltitude": {
-          "meter": 10668,
-          "km": 10.67,
-          "mile": 6.63,
-          "nm": 5.76,
-          "feet": 35000
-        },
-        "altitude": {
-          "meter": 10701.53,
-          "km": 10.7,
-          "mile": 6.65,
-          "nm": 5.78,
-          "feet": 35110
-        },
-        "pressure": {
-          "hPa": 1016.93,
-          "inHg": 30.03,
-          "mmHg": 762.76
-        },
-        "groundSpeed": {
-          "kt": 471,
-          "kmPerHour": 872,
-          "miPerHour": 542,
-          "meterPerSecond": 242
-        },
-        "trueTrack": {
-          "deg": 156,
-          "rad": 2.722713633111154
-        },
-        "reportedAtUtc": "2025-08-14 10:36Z",
-        "lat": 43.429733,
-        "lon": -118.96443
       }
     },
     {
@@ -12651,30 +13010,30 @@
           "feet": 36000
         },
         "altitude": {
-          "meter": 10997.18,
-          "km": 11,
-          "mile": 6.83,
+          "meter": 11009.38,
+          "km": 11.01,
+          "mile": 6.84,
           "nm": 5.94,
-          "feet": 36080
+          "feet": 36120
         },
         "pressure": {
-          "hPa": 1015.92,
-          "inHg": 30,
-          "mmHg": 762
+          "hPa": 1017.27,
+          "inHg": 30.04,
+          "mmHg": 763.01
         },
         "groundSpeed": {
-          "kt": 459,
-          "kmPerHour": 850,
-          "miPerHour": 528,
-          "meterPerSecond": 236
+          "kt": 483,
+          "kmPerHour": 895,
+          "miPerHour": 556,
+          "meterPerSecond": 248
         },
         "trueTrack": {
-          "deg": 240,
-          "rad": 4.1887902047863905
+          "deg": 236,
+          "rad": 4.118977034706617
         },
-        "reportedAtUtc": "2025-08-14 10:39Z",
-        "lat": 40.952656,
-        "lon": -91.12629
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 40.340424,
+        "lon": -92.78186
       }
     },
     {
@@ -12733,58 +13092,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KMCI",
-          "iata": "MCI",
-          "name": "Kansas City",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 10:50Z",
-          "local": "2025-08-14 05:50-05:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 10:50Z",
-          "local": "2025-08-14 05:50-05:00"
-        },
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 13:36Z",
-          "local": "2025-08-14 06:36-07:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 13:11Z",
-          "local": "2025-08-14 06:11-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "number": "AA 2645",
-      "callSign": "AAL2645",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "reg": "N902AN",
-        "modeS": "AC76A7",
-        "model": "Boeing 737-800"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KCMH",
           "iata": "CMH",
           "name": "Columbus",
@@ -12837,6 +13144,58 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KMCI",
+          "iata": "MCI",
+          "name": "Kansas City",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 10:50Z",
+          "local": "2025-08-14 05:50-05:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 10:50Z",
+          "local": "2025-08-14 05:50-05:00"
+        },
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 13:36Z",
+          "local": "2025-08-14 06:36-07:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 13:11Z",
+          "local": "2025-08-14 06:11-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "number": "AA 2645",
+      "callSign": "AAL2645",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "reg": "N902AN",
+        "modeS": "AC76A7",
+        "model": "Boeing 737-800"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -13027,37 +13386,37 @@
       },
       "location": {
         "pressureAltitude": {
-          "meter": 9044.94,
-          "km": 9.04,
-          "mile": 5.62,
-          "nm": 4.88,
-          "feet": 29675
+          "meter": 9753.6,
+          "km": 9.75,
+          "mile": 6.06,
+          "nm": 5.27,
+          "feet": 32000
         },
         "altitude": {
-          "meter": 9069.32,
-          "km": 9.07,
-          "mile": 5.64,
-          "nm": 4.9,
-          "feet": 29755
+          "meter": 9781.03,
+          "km": 9.78,
+          "mile": 6.08,
+          "nm": 5.28,
+          "feet": 32090
         },
         "pressure": {
-          "hPa": 1015.92,
-          "inHg": 30,
-          "mmHg": 762
+          "hPa": 1016.26,
+          "inHg": 30.01,
+          "mmHg": 762.25
         },
         "groundSpeed": {
-          "kt": 459,
-          "kmPerHour": 850,
-          "miPerHour": 528,
-          "meterPerSecond": 236
+          "kt": 454,
+          "kmPerHour": 841,
+          "miPerHour": 522,
+          "meterPerSecond": 234
         },
         "trueTrack": {
-          "deg": 262,
-          "rad": 4.572762640225144
+          "deg": 261,
+          "rad": 4.5553093477052
         },
-        "reportedAtUtc": "2025-08-14 10:39Z",
-        "lat": 39.415455,
-        "lon": -87.94043
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 39.209473,
+        "lon": -89.69101
       }
     },
     {
@@ -13098,6 +13457,40 @@
         "name": "SkyWest Airlines",
         "iata": "OO",
         "icao": "SKW"
+      },
+      "location": {
+        "pressureAltitude": {
+          "meter": 6377.94,
+          "km": 6.38,
+          "mile": 3.96,
+          "nm": 3.44,
+          "feet": 20925
+        },
+        "altitude": {
+          "meter": 6417.56,
+          "km": 6.42,
+          "mile": 3.99,
+          "nm": 3.47,
+          "feet": 21055
+        },
+        "pressure": {
+          "hPa": 1017.61,
+          "inHg": 30.05,
+          "mmHg": 763.27
+        },
+        "groundSpeed": {
+          "kt": 380,
+          "kmPerHour": 704,
+          "miPerHour": 437,
+          "meterPerSecond": 195
+        },
+        "trueTrack": {
+          "deg": 202,
+          "rad": 3.5255650890285457
+        },
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 40.561848,
+        "lon": -94.07917
       }
     },
     {
@@ -13191,76 +13584,37 @@
       },
       "location": {
         "pressureAltitude": {
-          "meter": 10370.82,
-          "km": 10.37,
-          "mile": 6.44,
-          "nm": 5.6,
-          "feet": 34025
+          "meter": 10355.58,
+          "km": 10.36,
+          "mile": 6.43,
+          "nm": 5.59,
+          "feet": 33975
         },
         "altitude": {
-          "meter": 10379.96,
-          "km": 10.38,
-          "mile": 6.45,
-          "nm": 5.6,
-          "feet": 34055
+          "meter": 10361.68,
+          "km": 10.36,
+          "mile": 6.44,
+          "nm": 5.59,
+          "feet": 33995
         },
         "pressure": {
-          "hPa": 1014.22,
-          "inHg": 29.95,
-          "mmHg": 760.73
+          "hPa": 1013.89,
+          "inHg": 29.94,
+          "mmHg": 760.47
         },
         "groundSpeed": {
-          "kt": 422,
-          "kmPerHour": 782,
-          "miPerHour": 486,
-          "meterPerSecond": 217
+          "kt": 418,
+          "kmPerHour": 774,
+          "miPerHour": 481,
+          "meterPerSecond": 215
         },
         "trueTrack": {
-          "deg": 271,
-          "rad": 4.729842272904633
+          "deg": 270,
+          "rad": 4.71238898038469
         },
-        "reportedAtUtc": "2025-08-14 10:39Z",
-        "lat": 36.059875,
-        "lon": -88.83447
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KDRO",
-          "iata": "DRO",
-          "name": "Durango",
-          "timeZone": "America/Denver"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 11:55Z",
-          "local": "2025-08-14 05:55-06:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 13:28Z",
-          "local": "2025-08-14 06:28-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 6328",
-      "status": "Unknown",
-      "codeshareStatus": "IsCodeshared",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 36.079147,
+        "lon": -90.38835
       }
     },
     {
@@ -13308,6 +13662,85 @@
     {
       "departure": {
         "airport": {
+          "icao": "KDRO",
+          "iata": "DRO",
+          "name": "Durango",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 11:55Z",
+          "local": "2025-08-14 05:55-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 13:28Z",
+          "local": "2025-08-14 06:28-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 6328",
+      "status": "Unknown",
+      "codeshareStatus": "IsCodeshared",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KONT",
+          "iata": "ONT",
+          "name": "Ontario",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 12:20Z",
+          "local": "2025-08-14 05:20-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 13:30Z",
+          "local": "2025-08-14 06:30-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 2408",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KOKC",
           "iata": "OKC",
           "name": "Oklahoma City",
@@ -13350,46 +13783,6 @@
         "reg": "N962WN",
         "modeS": "AD6595",
         "model": "Boeing 737-700"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KONT",
-          "iata": "ONT",
-          "name": "Ontario",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 12:20Z",
-          "local": "2025-08-14 05:20-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 13:30Z",
-          "local": "2025-08-14 06:30-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 2408",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
       },
       "airline": {
         "name": "Southwest",
@@ -13551,6 +13944,40 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      },
+      "location": {
+        "pressureAltitude": {
+          "meter": 4137.66,
+          "km": 4.14,
+          "mile": 2.57,
+          "nm": 2.23,
+          "feet": 13575
+        },
+        "altitude": {
+          "meter": 4168.14,
+          "km": 4.17,
+          "mile": 2.59,
+          "nm": 2.25,
+          "feet": 13675
+        },
+        "pressure": {
+          "hPa": 1016.59,
+          "inHg": 30.02,
+          "mmHg": 762.51
+        },
+        "groundSpeed": {
+          "kt": 336,
+          "kmPerHour": 622,
+          "miPerHour": 387,
+          "meterPerSecond": 173
+        },
+        "trueTrack": {
+          "deg": 270.5,
+          "rad": 4.721115626644662
+        },
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 41.794052,
+        "lon": -88.256805
       }
     },
     {
@@ -13857,6 +14284,58 @@
     {
       "departure": {
         "airport": {
+          "icao": "KOMA",
+          "iata": "OMA",
+          "name": "Omaha",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 11:30Z",
+          "local": "2025-08-14 06:30-05:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 11:30Z",
+          "local": "2025-08-14 06:30-05:00"
+        },
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:15Z",
+          "local": "2025-08-14 07:15-07:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 13:50Z",
+          "local": "2025-08-14 06:50-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "number": "WN 1405",
+      "callSign": "SWA1405",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "reg": "N8828L",
+        "modeS": "AC28BE",
+        "model": "Boeing 737 MAX 8"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KRNO",
           "iata": "RNO",
           "name": "Reno",
@@ -13930,58 +14409,6 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KOMA",
-          "iata": "OMA",
-          "name": "Omaha",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 11:30Z",
-          "local": "2025-08-14 06:30-05:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 11:30Z",
-          "local": "2025-08-14 06:30-05:00"
-        },
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:15Z",
-          "local": "2025-08-14 07:15-07:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 13:50Z",
-          "local": "2025-08-14 06:50-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "number": "WN 1405",
-      "callSign": "SWA1405",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "reg": "N8828L",
-        "modeS": "AC28BE",
-        "model": "Boeing 737 MAX 8"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -14196,6 +14623,46 @@
     {
       "departure": {
         "airport": {
+          "icao": "KLAX",
+          "iata": "LAX",
+          "name": "Los Angeles",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 13:05Z",
+          "local": "2025-08-14 06:05-07:00"
+        },
+        "terminal": "1",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:15Z",
+          "local": "2025-08-14 07:15-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 2278",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-700"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KSMF",
           "iata": "SMF",
           "name": "Sacramento",
@@ -14267,46 +14734,6 @@
       "isCargo": false,
       "aircraft": {
         "model": "Boeing 737-800"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KLAX",
-          "iata": "LAX",
-          "name": "Los Angeles",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 13:05Z",
-          "local": "2025-08-14 06:05-07:00"
-        },
-        "terminal": "1",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:15Z",
-          "local": "2025-08-14 07:15-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 2278",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-700"
       },
       "airline": {
         "name": "Southwest",
@@ -14657,37 +15084,37 @@
       },
       "location": {
         "pressureAltitude": {
-          "meter": 7962.9,
-          "km": 7.96,
-          "mile": 4.95,
-          "nm": 4.3,
-          "feet": 26125
+          "meter": 9753.6,
+          "km": 9.75,
+          "mile": 6.06,
+          "nm": 5.27,
+          "feet": 32000
         },
         "altitude": {
-          "meter": 7956.8,
-          "km": 7.96,
-          "mile": 4.94,
-          "nm": 4.3,
-          "feet": 26105
+          "meter": 9750.55,
+          "km": 9.75,
+          "mile": 6.06,
+          "nm": 5.26,
+          "feet": 31990
         },
         "pressure": {
-          "hPa": 1012.53,
-          "inHg": 29.9,
-          "mmHg": 759.46
+          "hPa": 1012.87,
+          "inHg": 29.91,
+          "mmHg": 759.71
         },
         "groundSpeed": {
-          "kt": 410,
-          "kmPerHour": 759,
-          "miPerHour": 472,
-          "meterPerSecond": 211
+          "kt": 414,
+          "kmPerHour": 767,
+          "miPerHour": 476,
+          "meterPerSecond": 213
         },
         "trueTrack": {
-          "deg": 252.2,
-          "rad": 4.401720320266477
+          "deg": 280.4,
+          "rad": 4.8939031160656565
         },
-        "reportedAtUtc": "2025-08-14 10:39Z",
-        "lat": 40.72032,
-        "lon": -76.01849
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 40.86754,
+        "lon": -77.63464
       }
     },
     {
@@ -14993,45 +15420,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KTUS",
-          "iata": "TUS",
-          "name": "Tucson",
-          "timeZone": "America/Phoenix"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 13:51Z",
-          "local": "2025-08-14 06:51-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:46Z",
-          "local": "2025-08-14 07:46-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 6298",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Canadair reg jet 700"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KBWI",
           "iata": "BWI",
           "name": "Baltimore",
@@ -15079,6 +15467,45 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KTUS",
+          "iata": "TUS",
+          "name": "Tucson",
+          "timeZone": "America/Phoenix"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 13:51Z",
+          "local": "2025-08-14 06:51-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:46Z",
+          "local": "2025-08-14 07:46-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 6298",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Canadair reg jet 700"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -15170,45 +15597,40 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KPSC",
-          "iata": "PSC",
-          "name": "Pasco",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 12:00Z",
-          "local": "2025-08-14 05:00-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
       },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:48Z",
-          "local": "2025-08-14 07:48-07:00"
+      "location": {
+        "pressureAltitude": {
+          "meter": 0,
+          "km": 0,
+          "mile": 0,
+          "nm": 0,
+          "feet": 0
         },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 5007",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
+        "altitude": {
+          "meter": 27.43,
+          "km": 0.03,
+          "mile": 0.02,
+          "nm": 0.01,
+          "feet": 90
+        },
+        "pressure": {
+          "hPa": 1016.26,
+          "inHg": 30.01,
+          "mmHg": 762.25
+        },
+        "groundSpeed": {
+          "kt": 126,
+          "kmPerHour": 233,
+          "miPerHour": 145,
+          "meterPerSecond": 65
+        },
+        "trueTrack": {
+          "deg": 182,
+          "rad": 3.1764992386296798
+        },
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 27.98536,
+        "lon": -82.531525
       }
     },
     {
@@ -15244,6 +15666,45 @@
       "isCargo": false,
       "aircraft": {
         "model": "Airbus A321"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KPSC",
+          "iata": "PSC",
+          "name": "Pasco",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 12:00Z",
+          "local": "2025-08-14 05:00-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:48Z",
+          "local": "2025-08-14 07:48-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 5007",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
       },
       "airline": {
         "name": "American",
@@ -15425,6 +15886,45 @@
     {
       "departure": {
         "airport": {
+          "icao": "KBOI",
+          "iata": "BOI",
+          "name": "Boise",
+          "timeZone": "America/Boise"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 12:35Z",
+          "local": "2025-08-14 06:35-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 14:53Z",
+          "local": "2025-08-14 07:53-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 6439",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KELP",
           "iata": "ELP",
           "name": "El Paso",
@@ -15494,45 +15994,6 @@
       "isCargo": false,
       "aircraft": {
         "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KBOI",
-          "iata": "BOI",
-          "name": "Boise",
-          "timeZone": "America/Boise"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 12:35Z",
-          "local": "2025-08-14 06:35-06:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 14:53Z",
-          "local": "2025-08-14 07:53-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 6439",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
       },
       "airline": {
         "name": "American",
@@ -15789,6 +16250,46 @@
     {
       "departure": {
         "airport": {
+          "icao": "MMGL",
+          "iata": "GDL",
+          "name": "Guadalajara",
+          "timeZone": "America/Mexico_City"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 12:17Z",
+          "local": "2025-08-14 06:17-06:00"
+        },
+        "terminal": "1",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 15:01Z",
+          "local": "2025-08-14 08:01-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "Y4 1882",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320 NEO"
+      },
+      "airline": {
+        "name": "Volaris",
+        "iata": "Y4",
+        "icao": "VOI"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KMFR",
           "iata": "MFR",
           "name": "Medford",
@@ -15868,41 +16369,40 @@
     {
       "departure": {
         "airport": {
-          "icao": "MMGL",
-          "iata": "GDL",
-          "name": "Guadalajara",
-          "timeZone": "America/Mexico_City"
+          "icao": "KFAT",
+          "iata": "FAT",
+          "name": "Fresno",
+          "timeZone": "America/Los_Angeles"
         },
         "scheduledTime": {
-          "utc": "2025-08-14 12:17Z",
-          "local": "2025-08-14 06:17-06:00"
+          "utc": "2025-08-14 13:14Z",
+          "local": "2025-08-14 06:14-07:00"
         },
-        "terminal": "1",
         "quality": [
           "Basic"
         ]
       },
       "arrival": {
         "scheduledTime": {
-          "utc": "2025-08-14 15:01Z",
-          "local": "2025-08-14 08:01-07:00"
+          "utc": "2025-08-14 15:04Z",
+          "local": "2025-08-14 08:04-07:00"
         },
         "terminal": "4",
         "quality": [
           "Basic"
         ]
       },
-      "number": "Y4 1882",
+      "number": "AA 6275",
       "status": "Unknown",
-      "codeshareStatus": "Unknown",
+      "codeshareStatus": "IsCodeshared",
       "isCargo": false,
       "aircraft": {
-        "model": "Airbus A320 NEO"
+        "model": "Canadair reg jet 700"
       },
       "airline": {
-        "name": "Volaris",
-        "iata": "Y4",
-        "icao": "VOI"
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -15937,45 +16437,6 @@
       "isCargo": false,
       "aircraft": {
         "model": "Airbus A320"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KFAT",
-          "iata": "FAT",
-          "name": "Fresno",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 13:14Z",
-          "local": "2025-08-14 06:14-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 15:04Z",
-          "local": "2025-08-14 08:04-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 6275",
-      "status": "Unknown",
-      "codeshareStatus": "IsCodeshared",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Canadair reg jet 700"
       },
       "airline": {
         "name": "American",
@@ -16073,6 +16534,40 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
+      },
+      "location": {
+        "pressureAltitude": {
+          "meter": 3733.8,
+          "km": 3.73,
+          "mile": 2.32,
+          "nm": 2.02,
+          "feet": 12250
+        },
+        "altitude": {
+          "meter": 3709.42,
+          "km": 3.71,
+          "mile": 2.3,
+          "nm": 2,
+          "feet": 12170
+        },
+        "pressure": {
+          "hPa": 1010.5,
+          "inHg": 29.84,
+          "mmHg": 757.93
+        },
+        "groundSpeed": {
+          "kt": 377,
+          "kmPerHour": 698,
+          "miPerHour": 434,
+          "meterPerSecond": 194
+        },
+        "trueTrack": {
+          "deg": 303.7,
+          "rad": 5.300565151359666
+        },
+        "reportedAtUtc": "2025-08-14 10:49Z",
+        "lat": 42.57321,
+        "lon": -70.84741
       }
     },
     {
@@ -16507,6 +17002,58 @@
     {
       "departure": {
         "airport": {
+          "icao": "KPGA",
+          "iata": "PGA",
+          "name": "Page",
+          "timeZone": "America/Phoenix"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 16:15Z",
+          "local": "2025-08-14 09:15-07:00"
+        },
+        "revisedTime": {
+          "utc": "2025-08-14 15:38Z",
+          "local": "2025-08-14 08:38-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic",
+          "Live"
+        ]
+      },
+      "number": "LF 3301",
+      "callSign": "VTE3301",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "reg": "N16525",
+        "modeS": "A106FD",
+        "model": "Embraer 135"
+      },
+      "airline": {
+        "name": "Contour Aviation",
+        "iata": "LF",
+        "icao": "VTE"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KDCA",
           "iata": "DCA",
           "name": "Washington",
@@ -16555,58 +17102,6 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KPGA",
-          "iata": "PGA",
-          "name": "Page",
-          "timeZone": "America/Phoenix"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 16:15Z",
-          "local": "2025-08-14 09:15-07:00"
-        },
-        "revisedTime": {
-          "utc": "2025-08-14 15:38Z",
-          "local": "2025-08-14 08:38-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic",
-          "Live"
-        ]
-      },
-      "number": "LF 3301",
-      "callSign": "VTE3301",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "reg": "N16525",
-        "modeS": "A106FD",
-        "model": "Embraer 135"
-      },
-      "airline": {
-        "name": "Contour Aviation",
-        "iata": "LF",
-        "icao": "VTE"
       }
     },
     {
@@ -17078,6 +17573,44 @@
     {
       "departure": {
         "airport": {
+          "icao": "KSAD",
+          "iata": "SAD",
+          "name": "Safford",
+          "timeZone": "America/Phoenix"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 15:00Z",
+          "local": "2025-08-14 08:00-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 16:00Z",
+          "local": "2025-08-14 09:00-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "YR 3001",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Cessna"
+      },
+      "airline": {
+        "name": "Scenic",
+        "iata": "YR",
+        "icao": "SCE"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KLAS",
           "iata": "LAS",
           "name": "Las Vegas",
@@ -17158,44 +17691,6 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KSAD",
-          "iata": "SAD",
-          "name": "Safford",
-          "timeZone": "America/Phoenix"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 15:00Z",
-          "local": "2025-08-14 08:00-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 16:00Z",
-          "local": "2025-08-14 09:00-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "YR 3001",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Cessna"
-      },
-      "airline": {
-        "name": "Scenic",
-        "iata": "YR",
-        "icao": "SCE"
       }
     },
     {
@@ -17606,6 +18101,48 @@
     {
       "departure": {
         "airport": {
+          "icao": "KSEA",
+          "iata": "SEA",
+          "name": "Seattle",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 13:30Z",
+          "local": "2025-08-14 06:30-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 16:20Z",
+          "local": "2025-08-14 09:20-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 967",
+      "callSign": "SWA967",
+      "status": "Unknown",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "reg": "N7860A",
+        "modeS": "AAA929",
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KORD",
           "iata": "ORD",
           "name": "Chicago",
@@ -17644,48 +18181,6 @@
         "name": "United",
         "iata": "UA",
         "icao": "UAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KSEA",
-          "iata": "SEA",
-          "name": "Seattle",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 13:30Z",
-          "local": "2025-08-14 06:30-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 16:20Z",
-          "local": "2025-08-14 09:20-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 967",
-      "callSign": "SWA967",
-      "status": "Unknown",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "reg": "N7860A",
-        "modeS": "AAA929",
-        "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -17812,45 +18307,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KTUL",
-          "iata": "TUL",
-          "name": "Tulsa",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 13:45Z",
-          "local": "2025-08-14 08:45-05:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 16:25Z",
-          "local": "2025-08-14 09:25-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 3434",
-      "status": "Unknown",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KABQ",
           "iata": "ABQ",
           "name": "The Duke City",
@@ -17919,6 +18375,45 @@
       "isCargo": false,
       "aircraft": {
         "model": "Canadair reg jet 700"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KTUL",
+          "iata": "TUL",
+          "name": "Tulsa",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 13:45Z",
+          "local": "2025-08-14 08:45-05:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 16:25Z",
+          "local": "2025-08-14 09:25-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 3434",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
       },
       "airline": {
         "name": "American",
@@ -18362,45 +18857,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KTUS",
-          "iata": "TUS",
-          "name": "Tucson",
-          "timeZone": "America/Phoenix"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 15:41Z",
-          "local": "2025-08-14 08:41-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 16:40Z",
-          "local": "2025-08-14 09:40-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 6514",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Embraer 175"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KHOU",
           "iata": "HOU",
           "name": "Houston",
@@ -18425,7 +18881,7 @@
         ]
       },
       "number": "WN 3695",
-      "status": "Expected",
+      "status": "Unknown",
       "codeshareStatus": "Unknown",
       "isCargo": false,
       "aircraft": {
@@ -18435,6 +18891,45 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KTUS",
+          "iata": "TUS",
+          "name": "Tucson",
+          "timeZone": "America/Phoenix"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 15:41Z",
+          "local": "2025-08-14 08:41-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 16:40Z",
+          "local": "2025-08-14 09:40-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 6514",
+      "status": "Unknown",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Embraer 175"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
       }
     },
     {
@@ -18464,7 +18959,7 @@
         ]
       },
       "number": "AS 1239",
-      "status": "Expected",
+      "status": "Unknown",
       "codeshareStatus": "Unknown",
       "isCargo": false,
       "aircraft": {
@@ -18721,6 +19216,84 @@
     {
       "departure": {
         "airport": {
+          "icao": "KBUR",
+          "iata": "BUR",
+          "name": "Burbank",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 15:30Z",
+          "local": "2025-08-14 08:30-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 17:05Z",
+          "local": "2025-08-14 10:05-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 453",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-700"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KSNA",
+          "iata": "SNA",
+          "name": "Santa Ana",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 15:50Z",
+          "local": "2025-08-14 08:50-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 17:05Z",
+          "local": "2025-08-14 10:05-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 4090",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KOAK",
           "iata": "OAK",
           "name": "Oakland",
@@ -18803,45 +19376,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KBUR",
-          "iata": "BUR",
-          "name": "Burbank",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 15:30Z",
-          "local": "2025-08-14 08:30-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 17:05Z",
-          "local": "2025-08-14 10:05-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 453",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-700"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KIAD",
           "iata": "IAD",
           "name": "Washington",
@@ -18876,45 +19410,6 @@
         "name": "United",
         "iata": "UA",
         "icao": "UAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KSNA",
-          "iata": "SNA",
-          "name": "Santa Ana",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 15:50Z",
-          "local": "2025-08-14 08:50-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 17:05Z",
-          "local": "2025-08-14 10:05-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 4090",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -20187,45 +20682,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KPHL",
-          "iata": "PHL",
-          "name": "Philadelphia",
-          "timeZone": "America/New_York"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 13:37Z",
-          "local": "2025-08-14 09:37-04:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 18:29Z",
-          "local": "2025-08-14 11:29-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 357",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A320"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KFLG",
           "iata": "FLG",
           "name": "Flagstaff",
@@ -20255,6 +20711,45 @@
       "isCargo": false,
       "aircraft": {
         "model": "Canadair reg jet 700"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KPHL",
+          "iata": "PHL",
+          "name": "Philadelphia",
+          "timeZone": "America/New_York"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 13:37Z",
+          "local": "2025-08-14 09:37-04:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 18:29Z",
+          "local": "2025-08-14 11:29-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 357",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
       },
       "airline": {
         "name": "American",
@@ -20545,45 +21040,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KABQ",
-          "iata": "ABQ",
-          "name": "The Duke City",
-          "timeZone": "America/Denver"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 17:25Z",
-          "local": "2025-08-14 11:25-06:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 18:45Z",
-          "local": "2025-08-14 11:45-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 210",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-700"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KMEM",
           "iata": "MEM",
           "name": "Memphis",
@@ -20608,6 +21064,45 @@
         ]
       },
       "number": "WN 3717",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-700"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KABQ",
+          "iata": "ABQ",
+          "name": "The Duke City",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 17:25Z",
+          "local": "2025-08-14 11:25-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 18:45Z",
+          "local": "2025-08-14 11:45-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 210",
       "status": "Expected",
       "codeshareStatus": "Unknown",
       "isCargo": false,
@@ -21097,6 +21592,45 @@
     {
       "departure": {
         "airport": {
+          "icao": "KDEN",
+          "iata": "DEN",
+          "name": "Denver",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 17:15Z",
+          "local": "2025-08-14 11:15-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:10Z",
+          "local": "2025-08-14 12:10-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 2872",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-700"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KDAL",
           "iata": "DAL",
           "name": "Dallas",
@@ -21122,45 +21656,6 @@
         ]
       },
       "number": "WN 1877",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-700"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KDEN",
-          "iata": "DEN",
-          "name": "Denver",
-          "timeZone": "America/Denver"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 17:15Z",
-          "local": "2025-08-14 11:15-06:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:10Z",
-          "local": "2025-08-14 12:10-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 2872",
       "status": "Expected",
       "codeshareStatus": "Unknown",
       "isCargo": false,
@@ -21254,6 +21749,45 @@
     {
       "departure": {
         "airport": {
+          "icao": "KLGB",
+          "iata": "LGB",
+          "name": "Long Beach",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 17:50Z",
+          "local": "2025-08-14 10:50-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:15Z",
+          "local": "2025-08-14 12:15-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 656",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-800"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KDCA",
           "iata": "DCA",
           "name": "Washington",
@@ -21289,45 +21823,6 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KLGB",
-          "iata": "LGB",
-          "name": "Long Beach",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 17:50Z",
-          "local": "2025-08-14 10:50-07:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:15Z",
-          "local": "2025-08-14 12:15-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 656",
-      "status": "Expected",
-      "codeshareStatus": "IsOperator",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-800"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -21495,45 +21990,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KAUS",
-          "iata": "AUS",
-          "name": "Austin",
-          "timeZone": "America/Chicago"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 17:05Z",
-          "local": "2025-08-14 12:05-05:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:27Z",
-          "local": "2025-08-14 12:27-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 2042",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737-800"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KDEN",
           "iata": "DEN",
           "name": "Denver",
@@ -21616,6 +22072,45 @@
     {
       "departure": {
         "airport": {
+          "icao": "KAUS",
+          "iata": "AUS",
+          "name": "Austin",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 17:05Z",
+          "local": "2025-08-14 12:05-05:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:27Z",
+          "local": "2025-08-14 12:27-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 2042",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-800"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KATL",
           "iata": "ATL",
           "name": "Atlanta",
@@ -21654,45 +22149,6 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KABQ",
-          "iata": "ABQ",
-          "name": "The Duke City",
-          "timeZone": "America/Denver"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 18:12Z",
-          "local": "2025-08-14 12:12-06:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:33Z",
-          "local": "2025-08-14 12:33-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 1352",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A320"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
       }
     },
     {
@@ -21741,6 +22197,45 @@
     {
       "departure": {
         "airport": {
+          "icao": "KABQ",
+          "iata": "ABQ",
+          "name": "The Duke City",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 18:12Z",
+          "local": "2025-08-14 12:12-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:33Z",
+          "local": "2025-08-14 12:33-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 1352",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KCOS",
           "iata": "COS",
           "name": "Colorado Springs",
@@ -21775,45 +22270,6 @@
         "name": "Southwest",
         "iata": "WN",
         "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KPHL",
-          "iata": "PHL",
-          "name": "Philadelphia",
-          "timeZone": "America/New_York"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 14:45Z",
-          "local": "2025-08-14 10:45-04:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:40Z",
-          "local": "2025-08-14 12:40-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AA 478",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A320"
-      },
-      "airline": {
-        "name": "American",
-        "iata": "AA",
-        "icao": "AAL"
       }
     },
     {
@@ -21858,6 +22314,45 @@
     {
       "departure": {
         "airport": {
+          "icao": "KPHL",
+          "iata": "PHL",
+          "name": "Philadelphia",
+          "timeZone": "America/New_York"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 14:45Z",
+          "local": "2025-08-14 10:45-04:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:40Z",
+          "local": "2025-08-14 12:40-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 478",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A320"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KTUS",
           "iata": "TUS",
           "name": "Tucson",
@@ -21892,86 +22387,6 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "LFPG",
-          "iata": "CDG",
-          "name": "Paris",
-          "timeZone": "Europe/Paris"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 08:45Z",
-          "local": "2025-08-14 10:45+02:00"
-        },
-        "terminal": "2E",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:50Z",
-          "local": "2025-08-14 12:50-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "AF 68",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Airbus A350-900"
-      },
-      "airline": {
-        "name": "Air France",
-        "iata": "AF",
-        "icao": "AFR"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KLAX",
-          "iata": "LAX",
-          "name": "Los Angeles",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 18:25Z",
-          "local": "2025-08-14 11:25-07:00"
-        },
-        "terminal": "1",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:50Z",
-          "local": "2025-08-14 12:50-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 1411",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -22020,6 +22435,86 @@
     {
       "departure": {
         "airport": {
+          "icao": "KLAX",
+          "iata": "LAX",
+          "name": "Los Angeles",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 18:25Z",
+          "local": "2025-08-14 11:25-07:00"
+        },
+        "terminal": "1",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:50Z",
+          "local": "2025-08-14 12:50-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 1411",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "LFPG",
+          "iata": "CDG",
+          "name": "Paris",
+          "timeZone": "Europe/Paris"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 08:45Z",
+          "local": "2025-08-14 10:45+02:00"
+        },
+        "terminal": "2E",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:50Z",
+          "local": "2025-08-14 12:50-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AF 68",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Airbus A350-900"
+      },
+      "airline": {
+        "name": "Air France",
+        "iata": "AF",
+        "icao": "AFR"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
           "icao": "KSLC",
           "iata": "SLC",
           "name": "Salt Lake City",
@@ -22054,6 +22549,46 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KSMF",
+          "iata": "SMF",
+          "name": "Sacramento",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 18:00Z",
+          "local": "2025-08-14 11:00-07:00"
+        },
+        "terminal": "B",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 19:55Z",
+          "local": "2025-08-14 12:55-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 1793",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
       }
     },
     {
@@ -22132,46 +22667,6 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
-          "icao": "KSMF",
-          "iata": "SMF",
-          "name": "Sacramento",
-          "timeZone": "America/Los_Angeles"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 18:00Z",
-          "local": "2025-08-14 11:00-07:00"
-        },
-        "terminal": "B",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 19:55Z",
-          "local": "2025-08-14 12:55-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 1793",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
       }
     },
     {
@@ -22412,45 +22907,6 @@
     {
       "departure": {
         "airport": {
-          "icao": "KELP",
-          "iata": "ELP",
-          "name": "El Paso",
-          "timeZone": "America/Denver"
-        },
-        "scheduledTime": {
-          "utc": "2025-08-14 18:40Z",
-          "local": "2025-08-14 12:40-06:00"
-        },
-        "quality": [
-          "Basic"
-        ]
-      },
-      "arrival": {
-        "scheduledTime": {
-          "utc": "2025-08-14 20:05Z",
-          "local": "2025-08-14 13:05-07:00"
-        },
-        "terminal": "4",
-        "quality": [
-          "Basic"
-        ]
-      },
-      "number": "WN 136",
-      "status": "Expected",
-      "codeshareStatus": "Unknown",
-      "isCargo": false,
-      "aircraft": {
-        "model": "Boeing 737"
-      },
-      "airline": {
-        "name": "Southwest",
-        "iata": "WN",
-        "icao": "SWA"
-      }
-    },
-    {
-      "departure": {
-        "airport": {
           "icao": "KHOU",
           "iata": "HOU",
           "name": "Houston",
@@ -22480,6 +22936,45 @@
       "isCargo": false,
       "aircraft": {
         "model": "Boeing 737-700"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KELP",
+          "iata": "ELP",
+          "name": "El Paso",
+          "timeZone": "America/Denver"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 18:40Z",
+          "local": "2025-08-14 12:40-06:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:05Z",
+          "local": "2025-08-14 13:05-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 136",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
       },
       "airline": {
         "name": "Southwest",
@@ -22807,6 +23302,165 @@
         "name": "American",
         "iata": "AA",
         "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KONT",
+          "iata": "ONT",
+          "name": "Ontario",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 19:22Z",
+          "local": "2025-08-14 12:22-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:39Z",
+          "local": "2025-08-14 13:39-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AA 2661",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "American",
+        "iata": "AA",
+        "icao": "AAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KMSP",
+          "iata": "MSP",
+          "name": "Minneapolis",
+          "timeZone": "America/Chicago"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 17:25Z",
+          "local": "2025-08-14 12:25-05:00"
+        },
+        "terminal": "2",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:40Z",
+          "local": "2025-08-14 13:40-07:00"
+        },
+        "terminal": "4",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "WN 947",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737"
+      },
+      "airline": {
+        "name": "Southwest",
+        "iata": "WN",
+        "icao": "SWA"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KDTW",
+          "iata": "DTW",
+          "name": "Detroit",
+          "timeZone": "America/Detroit"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 16:43Z",
+          "local": "2025-08-14 12:43-04:00"
+        },
+        "terminal": "M",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:43Z",
+          "local": "2025-08-14 13:43-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "DL 813",
+      "status": "Expected",
+      "codeshareStatus": "Unknown",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 757"
+      },
+      "airline": {
+        "name": "Delta Air Lines",
+        "iata": "DL",
+        "icao": "DAL"
+      }
+    },
+    {
+      "departure": {
+        "airport": {
+          "icao": "KPAE",
+          "iata": "PAE",
+          "name": "Everett",
+          "timeZone": "America/Los_Angeles"
+        },
+        "scheduledTime": {
+          "utc": "2025-08-14 17:40Z",
+          "local": "2025-08-14 10:40-07:00"
+        },
+        "quality": [
+          "Basic"
+        ]
+      },
+      "arrival": {
+        "scheduledTime": {
+          "utc": "2025-08-14 20:43Z",
+          "local": "2025-08-14 13:43-07:00"
+        },
+        "terminal": "3",
+        "quality": [
+          "Basic"
+        ]
+      },
+      "number": "AS 385",
+      "status": "Expected",
+      "codeshareStatus": "IsOperator",
+      "isCargo": false,
+      "aircraft": {
+        "model": "Boeing 737-900"
+      },
+      "airline": {
+        "name": "Alaska",
+        "iata": "AS",
+        "icao": "ASA"
       }
     }
   ]
