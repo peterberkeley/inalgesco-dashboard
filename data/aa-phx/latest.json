@@ -1,40 +1,14 @@
 {
   "date": "2025-08-14",
-  "generated_at": "2025-08-14T05:29:53.640Z",
+  "generated_at": "2025-08-14T05:47:20.879Z",
   "source": "AeroDataBox via RapidAPI",
   "airport": "PHX",
   "airline_filter": "AA (AAL)",
   "window_utc": {
-    "from": "2025-08-14T03:29",
-    "to": "2025-08-14T15:29"
+    "from": "2025-08-14T03:47",
+    "to": "2025-08-14T15:47"
   },
   "flights": [
-    {
-      "type": "ARR",
-      "flight": "AA1222",
-      "reg": "N405AN",
-      "origin": "DFW",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755141660,
-      "est": 1755143100,
-      "actual": null,
-      "status": "Expected"
-    },
-    {
-      "type": "ARR",
-      "flight": "AA3220",
-      "reg": "N559UW",
-      "origin": "CLT",
-      "destination": null,
-      "terminal": "4",
-      "gate": null,
-      "sched": 1755142440,
-      "est": 1755143100,
-      "actual": null,
-      "status": "Expected"
-    },
     {
       "type": "ARR",
       "flight": "AA1675",
@@ -369,6 +343,71 @@
       "terminal": "4",
       "gate": null,
       "sched": 1755178080,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA2233",
+      "reg": null,
+      "origin": null,
+      "destination": "LAX",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755178200,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA2645",
+      "reg": null,
+      "origin": "MCI",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755178560,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA1309",
+      "reg": null,
+      "origin": "ORD",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755178680,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "DEP",
+      "flight": "AA2765",
+      "reg": null,
+      "origin": null,
+      "destination": "ORD",
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755178800,
+      "est": null,
+      "actual": null,
+      "status": "Expected"
+    },
+    {
+      "type": "ARR",
+      "flight": "AA6358",
+      "reg": null,
+      "origin": "DSM",
+      "destination": null,
+      "terminal": "4",
+      "gate": null,
+      "sched": 1755178980,
       "est": null,
       "actual": null,
       "status": "Expected"
