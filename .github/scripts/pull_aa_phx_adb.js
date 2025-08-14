@@ -57,6 +57,26 @@ const isAA = f => {
   return opIata === "AA" || opIcao === "AAL" || num.startsWith("AA") || hasAAshare;
 };
 
+// Normalize gate/stand from many possible keys
+function getGateOrStand(seg) {
+  if (!seg) return { gate: null, stand: null };
+  const first = (obj, keys) => {
+    for (const k of keys) {
+      if (obj[k] != null && obj[k] !== "") return String(obj[k]);
+    }
+    return null;
+  };
+  const gateKeys  = ["gate", "gateNumber", "gate_name"];
+  const standKeys = ["stand", "standName", "parkingPosition", "parkingStand", "parking", "position", "bay"];
+
+  let gate  = first(seg, gateKeys);
+  let stand = first(seg, standKeys);
+
+  const norm = v => v && v.toUpperCase().replace(/^GATE\s+|^STAND\s+/,"").replace(/\s+(GATE|STAND)$/,"").trim();
+
+  return { gate: norm(gate), stand: norm(stand) };
+}
+
 function mapRow(f, type) {
   const dep = f.departure || {};
   const arr = f.arrival   || {};
@@ -72,11 +92,16 @@ function mapRow(f, type) {
     ? (getUtc(dep, "runwayTime")  || getUtc(dep, "actualTime"))
     : (getUtc(arr, "runwayTime")  || getUtc(arr, "actualTime"));
 
-  // Terminal & gate from either side; leave gate blank if none published
+  // Terminal
   let terminal = (type === "DEP" ? dep.terminal : arr.terminal) ?? dep.terminal ?? arr.terminal ?? null;
-  let gate     = (type === "DEP" ? dep.gate     : arr.gate)     ?? dep.gate     ?? arr.gate     ?? null;
 
-  // From/To with PHX fallbacks so table always shows home airport
+  // Gate/Stand: check both sides, prefer the side relevant to the row, fall back to any
+  const gDep = getGateOrStand(dep);
+  const gArr = getGateOrStand(arr);
+  let gate = (type === "DEP" ? (gDep.gate || gDep.stand) : (gArr.gate || gArr.stand))
+          || gDep.gate || gArr.gate || gDep.stand || gArr.stand || null;
+
+  // From/To with PHX fallbacks so table always shows the home airport
   let origin      = apId(dep.airport);
   let destination = apId(arr.airport);
   if (!origin && type === "DEP")       origin = "PHX";
@@ -86,6 +111,9 @@ function mapRow(f, type) {
   const flightId = (f.number || f.flight?.iata || f.flight?.icao || f.callSign || "")
     .toString().replace(/\s+/g, "");
 
+  // Default AA terminal at PHX when absent
+  if (!terminal) terminal = "4";
+
   return {
     type,
     flight: flightId,
@@ -93,7 +121,8 @@ function mapRow(f, type) {
     origin,
     destination,
     terminal,
-    gate: gate || null,
+    gate: gate || null,        // UI uses this; set to gate or stand
+    stand: gDep.stand || gArr.stand || null, // keep for future mapping
     sched:  toSec(schedISO),
     est:    toSec(estISO),
     actual: toSec(actISO),
@@ -110,24 +139,27 @@ async function getJson(url) {
   }
 }
 
-// Prefer the record that has more detail (gate/reg/times)
+// Prefer the record that has more detail (gate/stand/reg/times)
 function better(a, b, type) {
   if (!a) return b;
   if (!b) return a;
+
+  const hasGateStand = r => !!(r?.departure?.gate || r?.arrival?.gate || r?.departure?.stand || r?.arrival?.stand);
+  const timeScore = r => (type === "DEP"
+    ? (r?.departure?.runwayTime?.utc || r?.departure?.estimatedTime?.utc || r?.departure?.revisedTime?.utc ? 1 : 0)
+    : (r?.arrival?.runwayTime?.utc   || r?.arrival?.estimatedTime?.utc   || r?.arrival?.revisedTime?.utc   ? 1 : 0)
+  );
   const score = r =>
-    (r?.departure?.gate || r?.arrival?.gate ? 4 : 0) +
+    (hasGateStand(r) ? 4 : 0) +
     (r?.aircraft?.reg || r?.aircraft?.registration ? 3 : 0) +
-    (r?.status ? 1 : 0) +
-    (type === "DEP"
-      ? (r?.departure?.runwayTime?.utc || r?.departure?.estimatedTime?.utc || r?.departure?.revisedTime?.utc ? 1 : 0)
-      : (r?.arrival?.runwayTime?.utc   || r?.arrival?.estimatedTime?.utc   || r?.arrival?.revisedTime?.utc   ? 1 : 0)
-    );
+    (r?.status ? 1 : 0) + timeScore(r);
+
   return score(a) >= score(b) ? a : b;
 }
 
-// Backfill missing reg/gate via "Flight status (specific date)"
+// Backfill missing reg/gate/terminal via "Flight status (specific date)"
 async function backfill(rows) {
-  const targets = rows.filter(r => !r.reg || !r.gate);
+  const targets = rows.filter(r => !r.reg || !r.gate || !r.terminal);
   if (!targets.length) return rows;
 
   const seen = new Set();
@@ -168,9 +200,18 @@ async function backfill(rows) {
 
     const dep = d.departure || {};
     const arr = d.arrival || {};
+
     if (!r.reg)  r.reg  = d?.aircraft?.registration || d?.aircraft?.reg || r.reg || null;
-    if (!r.gate) r.gate = (r.type === "DEP" ? dep.gate : arr.gate) || r.gate || null;
-    if (!r.terminal) r.terminal = (r.type === "DEP" ? dep.terminal : arr.terminal) || r.terminal || null;
+
+    if (!r.gate) {
+      const gFromDep = dep.gate || dep.stand || dep.parkingPosition || dep.position || null;
+      const gFromArr = arr.gate || arr.stand || arr.parkingPosition || arr.position || null;
+      r.gate = (r.type === "DEP" ? gFromDep : gFromArr) || r.gate || null;
+    }
+
+    if (!r.terminal) {
+      r.terminal = (r.type === "DEP" ? dep.terminal : arr.terminal) || r.terminal || "4";
+    }
   });
 
   return rows;
@@ -185,7 +226,7 @@ async function backfill(rows) {
     const from = new Date(now.getTime() - PAST_HOURS * 3600 * 1000);
     const to   = new Date(from.getTime() + WINDOW_HOURS * 3600 * 1000);
 
-    // Ask BOTH feeds; include withLocation=true to maximize gate data
+    // Ask BOTH feeds; include withLocation=true to maximize gate/stand data
     const common = `offsetMinutes=-${PAST_HOURS*60}&durationMinutes=${WINDOW_HOURS*60}`
                  + `&direction=Both&withLeg=true&withCancelled=true&withCodeshared=true`
                  + `&withCargo=false&withPrivate=true&withLocation=true`;
@@ -228,7 +269,7 @@ async function backfill(rows) {
       .filter(r => r.sched || r.est || r.actual)
       .sort((a, b) => (a.actual || a.est || a.sched || 0) - (b.actual || b.est || b.sched || 0));
 
-    // Backfill missing reg/gate (limited to protect quota)
+    // Backfill missing reg/gate/terminal (limited to protect quota)
     flights = await backfill(flights);
 
     const out = {
