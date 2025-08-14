@@ -18,13 +18,14 @@
 </head>
 <body>
   <h1>American Airlines — Phoenix (PHX) • minimal test</h1>
- <div class="row">
-  <button id="backBtn" style="margin-right:12px">← Dashboard</button>
-  <label class="muted">Date (Phoenix):</label>
-  <input id="date" type="date" />
-  <button id="btn">Refresh</button>
-  <span id="status" class="muted"></span>
-</div>
+
+  <div class="row">
+    <button id="backBtn" style="margin-right:12px">← Dashboard</button>
+    <label class="muted">Date (Phoenix):</label>
+    <input id="date" type="date" />
+    <button id="btn">Refresh</button>
+    <span id="status" class="muted"></span>
+  </div>
 
   <table>
     <thead>
@@ -42,12 +43,13 @@
     function fmt(ts){
       if(!ts && ts!==0) return "";
       const d = new Date(ts*1000);
-      return d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:tzPHX});
+      return d.toLocaleTimeString('en-GB',{
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:tzPHX
+      });
     }
 
     function todayPhoenixISO(){
       const d = new Date();
-      // format as YYYY-MM-DD in Phoenix time
       const y = new Intl.DateTimeFormat('en-CA',{timeZone:tzPHX,year:'numeric'}).format(d);
       const m = new Intl.DateTimeFormat('en-CA',{timeZone:tzPHX,month:'2-digit'}).format(d);
       const day = new Intl.DateTimeFormat('en-CA',{timeZone:tzPHX,day:'2-digit'}).format(d);
@@ -60,16 +62,19 @@
       const status = document.getElementById('status');
 
       const date = dateEl.value || todayPhoenixISO();
-      let res = await fetch(`data/aa-phx/${date}.json`, { cache: "no-store" });
+      const bust = `?t=${Date.now()}`; // cache-buster to avoid stale CDN/browser caches
+
+      let res = await fetch(`data/aa-phx/${date}.json${bust}`, { cache: "no-store" });
       if(!res.ok){
         // fallback to latest.json
-        res = await fetch(`data/aa-phx/latest.json`, { cache: "no-store" });
+        res = await fetch(`data/aa-phx/latest.json${bust}`, { cache: "no-store" });
       }
       if(!res.ok){
         status.textContent = "No JSON found.";
         tbody.innerHTML = "";
         return;
       }
+
       const js = await res.json();
       const flights = Array.isArray(js.flights) ? js.flights.slice() : [];
       flights.sort((a,b)=> (a.actual||a.est||a.sched||0) - (b.actual||b.est||b.sched||0));
@@ -90,16 +95,19 @@
         </tr>
       `).join("");
 
-      const updated = js.generated_at ? new Date(js.generated_at).toLocaleString('en-GB',{timeZone:tzPHX}) : "—";
+      const updated = js.generated_at
+        ? new Date(js.generated_at).toLocaleString('en-GB',{timeZone:tzPHX})
+        : "—";
       status.textContent = `${flights.length} flights • Last update: ${updated}`;
     }
 
     // wire UI
     document.getElementById('btn').onclick = load;
-    document.getElementById('date').value = todayPhoenixISO();
-    const back = document.getElementById('backBtn');
-if (back) back.onclick = () => { window.location.href = 'dashboard.html'; };
+    const dateEl = document.getElementById('date');
+    if (!dateEl.value) dateEl.value = todayPhoenixISO();
 
+    const back = document.getElementById('backBtn');
+    if (back) back.onclick = () => { window.location.href = 'dashboard.html'; };
 
     // initial + auto refresh every 30s
     load();
