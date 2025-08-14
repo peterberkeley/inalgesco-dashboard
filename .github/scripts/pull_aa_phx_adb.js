@@ -1,6 +1,6 @@
 // Fetch live American Airlines flights at PHX from AeroDataBox (RapidAPI)
 // Write to: data/aa-phx/latest.json and data/aa-phx/YYYY-MM-DD.json
-// Requires: repo Secret RAPIDAPI_KEY
+// Requires repo secret: RAPIDAPI_KEY
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -22,7 +22,7 @@ const H = {
   "Accept": "application/json"
 };
 
-// ---------- small utils ----------
+// ---------- utils ----------
 const isoMin = d => d.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
 const toSec = s => {
   if (!s) return null;
@@ -65,16 +65,23 @@ function mapRow(f, type) {
   const terminal = (type === "DEP" ? dep.terminal : arr.terminal) ?? dep.terminal ?? arr.terminal ?? null;
   const gate     = (type === "DEP" ? dep.gate     : arr.gate)     ?? dep.gate     ?? arr.gate     ?? null;
 
-  const flightId = (f.number || f.flight?.iata || f.flight?.icao || f.callSign || "").toString().replace(/\s+/g, "");
+  // From/To with PHX fallbacks so the table always shows the home airport
+  let origin      = apId(dep.airport);
+  let destination = apId(arr.airport);
+  if (!origin && type === "DEP")       origin = "PHX";
+  if (!destination && type === "ARR")  destination = "PHX";
+
+  const flightId = (f.number || f.flight?.iata || f.flight?.icao || f.callSign || "")
+    .toString().replace(/\s+/g, "");
 
   return {
     type,
     flight: flightId,
     reg: ac.registration || ac.reg || null,
-    origin: apId(dep.airport),
-    destination: apId(arr.airport),
+    origin,
+    destination,
     terminal,
-    gate,
+    gate: gate || null,
     sched:  toSec(schedISO),
     est:    toSec(estISO),
     actual: toSec(actISO),
@@ -83,7 +90,7 @@ function mapRow(f, type) {
 }
 
 async function getJson(url) {
-  const res = await fetch(url, { headers: H });
+  const res  = await fetch(url, { headers: H });
   const text = await res.text();
   if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 400)}`);
   try { return JSON.parse(text); } catch (e) {
@@ -106,43 +113,37 @@ function better(a, b, type) {
   return score(a) >= score(b) ? a : b;
 }
 
-// ---------- main ----------
 (async () => {
   try {
     const now = new Date();
-    const PAST_HOURS   = 2;   // look 2h back
-    const WINDOW_HOURS = 12;  // 12h span (API hard limit)
+    const PAST_HOURS   = 2;   // 2h back
+    const WINDOW_HOURS = 12;  // 12h span (API limit)
     const from = new Date(now.getTime() - PAST_HOURS * 3600 * 1000);
     const to   = new Date(from.getTime() + WINDOW_HOURS * 3600 * 1000);
 
-    // Query BOTH feeds, then merge:
-    const urlIata =
-      `${BASE}/flights/airports/iata/${IATA}`
-      + `?offsetMinutes=-${PAST_HOURS*60}&durationMinutes=${WINDOW_HOURS*60}`
-      + `&direction=Both&withLeg=true&withCancelled=true&withCodeshared=true&withCargo=false&withPrivate=true`;
+    // Ask BOTH feeds for location info (helps with gates)
+    const common = `offsetMinutes=-${PAST_HOURS*60}&durationMinutes=${WINDOW_HOURS*60}`
+                 + `&direction=Both&withLeg=true&withCancelled=true&withCodeshared=true`
+                 + `&withCargo=false&withPrivate=true&withLocation=true`;
 
-    const urlIcao =
-      `${BASE}/flights/airports/icao/${ICAO}`
-      + `?offsetMinutes=-${PAST_HOURS*60}&durationMinutes=${WINDOW_HOURS*60}`
-      + `&direction=Both&withLeg=true&withCancelled=true&withCodeshared=true&withCargo=false&withPrivate=true&withLocation=true`;
+    const urlIata = `${BASE}/flights/airports/iata/${IATA}?${common}`;
+    const urlIcao = `${BASE}/flights/airports/icao/${ICAO}?${common}`;
 
     console.log("Requesting:", urlIata);
     const jsIata = await getJson(urlIata);
     console.log("Requesting:", urlIcao);
     const jsIcao = await getJson(urlIcao);
 
-    // Build a keyed map and keep the richer record per flight/time
+    // Merge keeping the richer record
     const byKey = (arr, type) => {
       const map = new Map();
       for (const f of arr || []) {
-        // key by type + squashed flight number + scheduled time (UTC) to reduce collisions
         const num = (f.number || f.flight?.iata || f.callSign || "").toString().replace(/\s+/g, "");
         const sched = type === "DEP"
           ? (f?.departure?.scheduledTime?.utc || f?.departure?.scheduledTime || "")
           : (f?.arrival?.scheduledTime?.utc   || f?.arrival?.scheduledTime   || "");
         const k = `${type}|${num}|${sched}`;
-        const current = map.get(k);
-        map.set(k, better(current, f, type));
+        map.set(k, better(map.get(k), f, type));
       }
       return map;
     };
@@ -150,21 +151,18 @@ function better(a, b, type) {
     const depMap = byKey([...(jsIata.departures||[]), ...(jsIcao.departures||[])], "DEP");
     const arrMap = byKey([...(jsIata.arrivals||[]),   ...(jsIcao.arrivals||[])],   "ARR");
 
-    // Flatten back out and AA-filter
     let deps = Array.from(depMap.values()).filter(isAA);
     let arrs = Array.from(arrMap.values()).filter(isAA);
 
     console.log(`Merged AA rows → ARR ${arrs.length} + DEP ${deps.length}`);
 
-    // Map to compact rows
     let flights = [
       ...arrs.map(f => mapRow(f, "ARR")),
       ...deps.map(f => mapRow(f, "DEP")),
     ]
-    .filter(r => r.sched || r.est || r.actual)  // need some time
+    .filter(r => r.sched || r.est || r.actual)
     .sort((a, b) => (a.actual || a.est || a.sched || 0) - (b.actual || b.est || b.sched || 0));
 
-    // If still zero, dump all carriers for inspection (shouldn’t happen often)
     if (flights.length === 0) {
       const all = [
         ...Array.from(arrMap.values()).map(f => mapRow(f, "ARR")),
@@ -189,7 +187,7 @@ function better(a, b, type) {
     fs.writeFileSync(path.join(dir, "latest.json"), JSON.stringify(out, null, 2));
     fs.writeFileSync(path.join(dir, `${out.date}.json`), JSON.stringify(out, null, 2));
 
-    // Keep the raw of the second source for debugging (optional)
+    // optional debugging
     try {
       fs.writeFileSync(path.join(dir, "_last_raw_iata.json"), JSON.stringify(jsIata, null, 2));
       fs.writeFileSync(path.join(dir, "_last_raw_icao.json"), JSON.stringify(jsIcao, null, 2));
