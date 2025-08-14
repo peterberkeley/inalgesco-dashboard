@@ -18,6 +18,7 @@
 </head>
 <body>
   <h1>American Airlines — Phoenix (PHX) • minimal test</h1>
+
   <div class="row">
     <button id="backBtn" style="margin-right:12px">← Dashboard</button>
     <label class="muted">Date (Phoenix):</label>
@@ -42,7 +43,9 @@
     function fmt(ts){
       if(!ts && ts!==0) return "";
       const d = new Date(ts*1000);
-      return d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:tzPHX});
+      return d.toLocaleTimeString('en-GB',{
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:tzPHX
+      });
     }
 
     function todayPhoenixISO(){
@@ -59,31 +62,45 @@
       const status = document.getElementById('status');
 
       const date = dateEl.value || todayPhoenixISO();
-      let res = await fetch(`data/aa-phx/${date}.json`, { cache: "no-store" });
+      const bust = `?t=${Date.now()}`; // cache-buster to avoid stale CDN/browser caches
+
+      // Try the dated file first, fall back to latest.json
+      let res = await fetch(`data/aa-phx/${date}.json${bust}`, { cache: "no-store" });
       if(!res.ok){
-        res = await fetch(`data/aa-phx/latest.json`, { cache: "no-store" });
+        res = await fetch(`data/aa-phx/latest.json${bust}`, { cache: "no-store" });
       }
       if(!res.ok){
         status.textContent = "No JSON found.";
         tbody.innerHTML = "";
         return;
       }
+
       const js = await res.json();
       const flights = Array.isArray(js.flights) ? js.flights.slice() : [];
       flights.sort((a,b)=> (a.actual||a.est||a.sched||0) - (b.actual||b.est||b.sched||0));
 
       tbody.innerHTML = flights.map(f => {
-        const fromPHX = (f.type === "DEP") && !f.origin ? "PHX" : (f.origin || "");
-        const toPHX   = (f.type === "ARR") && !f.destination ? "PHX" : (f.destination || "");
+        // Always show PHX on the local side:
+        const from = (f.type === "DEP")
+          ? (f.origin || "PHX")
+          : (f.origin || "");                 // ARR keeps origin as-is
+        const to   = (f.type === "ARR")
+          ? (f.destination || "PHX")
+          : (f.destination || "");            // DEP keeps destination as-is
+
+        // Terminal fallback to "4" for AA at PHX if missing:
+        const term = f.terminal || "4";
+        const gate = f.gate || "";            // gate may legitimately be blank
+
         return `
           <tr>
             <td>${f.type||""}</td>
             <td><strong>${f.flight||""}</strong></td>
             <td>${f.reg||""}</td>
-            <td>${fromPHX}</td>
-            <td>${toPHX}</td>
-            <td>${f.terminal||""}</td>
-            <td>${f.gate||""}</td>
+            <td>${from}</td>
+            <td>${to}</td>
+            <td>${term}</td>
+            <td>${gate}</td>
             <td>${fmt(f.sched)}</td>
             <td>${fmt(f.est)}</td>
             <td>${fmt(f.actual)}</td>
@@ -91,17 +108,21 @@
           </tr>`;
       }).join("");
 
-      const updated = js.generated_at ? new Date(js.generated_at).toLocaleString('en-GB',{timeZone:tzPHX}) : "—";
+      const updated = js.generated_at
+        ? new Date(js.generated_at).toLocaleString('en-GB',{timeZone:tzPHX})
+        : "—";
       status.textContent = `${flights.length} flights • Last update: ${updated}`;
     }
 
-    // UI wiring
+    // wire UI
     document.getElementById('btn').onclick = load;
-    document.getElementById('date').value = todayPhoenixISO();
+    const dateEl = document.getElementById('date');
+    if (!dateEl.value) dateEl.value = todayPhoenixISO();
+
     const back = document.getElementById('backBtn');
     if (back) back.onclick = () => { window.location.href = 'dashboard.html'; };
 
-    // initial + auto refresh
+    // initial + auto refresh every 30s
     load();
     setInterval(load, 30_000);
   </script>
