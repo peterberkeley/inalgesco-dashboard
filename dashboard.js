@@ -766,12 +766,6 @@ onReady(()=>{
   wireRangeButtons();
   wireDateInputsCommit();   // commit date instantly
 
-  // Hook the Download button
-   const aaBtn = document.getElementById('aaFlightsBtn');
-  if (aaBtn) aaBtn.addEventListener('click', () => {
-    window.location.href = 'aa_phx_min.html'; // change to 'flights_aa_phx.html' if you prefer the full page
-  });
-
 
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
