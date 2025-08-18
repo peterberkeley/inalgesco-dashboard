@@ -1,3 +1,4 @@
+//Part 1
 let _maintenanceLogged = false;
 
 /* =================== Config =================== */
@@ -7,7 +8,7 @@ const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
 let REFRESH_INTERVAL = 60_000;      // poll live every 60s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 
-const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981"];
+const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981", "#f97316"];
 
 /* =================== State =================== */
 let SENSORS = [];                   // [{address,label,calibration,chart,col},...]
@@ -145,7 +146,7 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
     return [];
   }
 }
-
+// Part2 
 /* =================== Dallas addresses =================== */
 async function fetchDallasAddresses(deviceID){
   try{
@@ -165,13 +166,16 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
   const adminMap = sensorMapConfig[deviceLabel]||{};
   const addrs = [...liveDallas.slice(0,5)];
   while(addrs.length<5) addrs.push(null);
-  return addrs.map((addr,idx)=>{
+  const slots = addrs.map((addr,idx)=>{
     if(!addr) return { id:`empty${idx}`, label:"", col:SENSOR_COLORS[idx], chart:null, address:null, calibration:0 };
     const label = adminMap[addr]?.label?.trim() || mapped[addr]?.label?.trim() || addr;
     const offset = typeof adminMap[addr]?.offset==="number" ? adminMap[addr].offset
                  : typeof mapped[addr]?.offset==="number" ? mapped[addr].offset : 0;
     return { id:addr, label, col:SENSOR_COLORS[idx], chart:null, address:addr, calibration:offset };
   });
+  // prepend synthetic average slot
+  slots.unshift({ id:"avg", label:"Chillrail Avg", col:SENSOR_COLORS[5], chart:null, address:null, calibration:0 });
+  return slots;
 }
 
 /* =================== Charts =================== */
@@ -204,57 +208,80 @@ function initCharts(SENSORS){
 }
 
 async function updateCharts(deviceID, SENSORS){
-  await Promise.all(SENSORS.map(async s=>{
-    if(!s.address || !s.chart) return;
+  // fetch all sensor series first
+  const seriesData = {};
+  let allTimestamps = new Set();
+
+  await Promise.all(SENSORS.filter(s=>s.address).map(async s=>{
     const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
     if(!rows.length) return;
     const ordered = rows.slice().reverse();
-    s.chart.data.labels = ordered.map(r=>
-      new Date(r.timestamp).toLocaleTimeString('en-GB', {
-        hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London'
-      })
-    );
-    s.chart.data.datasets[0].data = ordered.map(r=>{
+    seriesData[s.id] = ordered.map(r=>{
       let v = parseFloat(r.value);
       if(typeof s.calibration==="number") v += s.calibration;
-      return isNaN(v)?null:v;
+      return { ts:r.timestamp, v:isNaN(v)?null:v };
     });
+    ordered.forEach(r=>allTimestamps.add(r.timestamp));
+  }));
 
-    // Dynamic y-scale (never clip top/bottom)
-    const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
-    if (vals.length) {
-      const vmin = Math.min(...vals);
-      const vmax = Math.max(...vals);
-      const pad  = Math.max(0.5, (vmax - vmin) * 0.10); // 10% or ≥0.5°
-      s.chart.options.scales.y.min = vmin - pad;
-      s.chart.options.scales.y.max = vmax + pad;
-    } else {
+  // unify timestamp axis
+  const timestamps = Array.from(allTimestamps).sort((a,b)=>a-b);
+
+  // build per-sensor aligned series
+  SENSORS.forEach(s=>{
+    if(!s.chart) return;
+    if(s.id==="avg"){
+      // compute average across all other sensors
+      const avgSeries = timestamps.map(ts=>{
+        const vals = SENSORS.filter(ss=>ss.address).map(ss=>{
+          const row = seriesData[ss.id]?.find(r=>r.ts===ts);
+          return row ? row.v : null;
+        }).filter(v=>v!=null && isFinite(v));
+        if(!vals.length) return null;
+        return vals.reduce((a,b)=>a+b,0)/vals.length;
+      });
+      s.chart.data.labels = timestamps.map(t=>
+        new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
+      );
+      s.chart.data.datasets[0].data = avgSeries;
+    }else if(s.address){
+      const aligned = timestamps.map(ts=>{
+        const row = seriesData[s.id]?.find(r=>r.ts===ts);
+        return row ? row.v : null;
+      });
+      s.chart.data.labels = timestamps.map(t=>
+        new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
+      );
+      s.chart.data.datasets[0].data = aligned;
+    }
+    // dynamic y-scale
+    const vals = s.chart.data.datasets[0].data.filter(v=>v!=null && isFinite(v));
+    if(vals.length){
+      const vmin=Math.min(...vals), vmax=Math.max(...vals);
+      const pad=Math.max(0.5,(vmax-vmin)*0.10);
+      s.chart.options.scales.y.min=vmin-pad;
+      s.chart.options.scales.y.max=vmax+pad;
+    }else{
       delete s.chart.options.scales.y.min;
       delete s.chart.options.scales.y.max;
     }
-
     s.chart.update();
-  }));
-  let minTs = Infinity, maxTs = -Infinity;
-  await Promise.all(SENSORS.map(async s=>{
-    if(!s.address) return;
-    const peek = await fetchUbidotsVar(deviceID, s.address, Math.min(HIST_POINTS, 10));
-    if(!peek.length) return;
-    const newest = peek[0].timestamp;
-    const oldest = peek[peek.length-1].timestamp;
-    minTs = Math.min(minTs, oldest, newest);
-    maxTs = Math.max(maxTs, oldest, newest);
-  }));
-  const rng = document.getElementById("chartRange");
-  if (rng && isFinite(minTs) && isFinite(maxTs)) {
-    const a=new Date(minTs), b=new Date(maxTs);
-    const same = a.toDateString()===b.toDateString();
-    const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
-    const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-    rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+  });
+
+  // update chart range display
+  if(timestamps.length){
+    const minTs=timestamps[0], maxTs=timestamps[timestamps.length-1];
+    const rng=document.getElementById("chartRange");
+    if(rng){
+      const a=new Date(minTs), b=new Date(maxTs);
+      const same=a.toDateString()===b.toDateString();
+      const fmtD=d=>d.toLocaleDateString('en-GB',{year:'numeric',month:'short',day:'numeric',timeZone:'Europe/London'});
+      const fmtT=d=>d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'});
+      rng.textContent = same?`${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}`:`${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+    }
   }
 }
-
+// Part 3
 /* =================== Live panel + map =================== */
 let map, marker;
 function initMap(){
@@ -272,6 +299,7 @@ function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,speed,signal,volt,readings} = data;
   ts = ts || Date.now();
   const temps = SENSORS
+    .filter(s=>s.address) // exclude avg
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
     .filter(v=>v!=null && isFinite(v));
   const avg = temps.length ? (temps.reduce((a,b)=>a+b,0)/temps.length) : null;
@@ -283,14 +311,13 @@ function drawLive(data, SENSORS){
 
   document.getElementById("kpiTruck").textContent = displayName;
 
-  // London time zone for last-updated label
   const updateTime = new Date(ts).toLocaleTimeString('en-GB', {
     hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
   });
   document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
 
   const sigBars = signalBarsFrom(signal);
-  const sensorRows = SENSORS.map(s=>[
+  const sensorRows = SENSORS.filter(s=>s.address).map(s=>[
     s.label,
     s.address && readings[s.address]!=null ? fmt(readings[s.address] + (s.calibration||0),1) : ""
   ]);
@@ -421,7 +448,7 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID){
   }
   return state;
 }
-
+// Part 4
 async function renderMaintenanceBox(truckLabel, deviceID){
   const box = document.getElementById("maintenanceBox");
   if(!box){ onReady(()=>renderMaintenanceBox(truckLabel,deviceID)); return; }
@@ -465,7 +492,6 @@ async function fetchCsvRows(deviceID, varLabel, start, end){
   }catch{ return []; }
 }
 
-// Build and download CSV for the selected device/date range
 async function downloadCsvForCurrentSelection(){
   try{
     const expStatus = document.getElementById('expStatus');
@@ -475,14 +501,13 @@ async function downloadCsvForCurrentSelection(){
 
     if(!startEl || !endEl || !devSel){ return; }
 
-    const startStr = startEl.value; // "YYYY-MM-DD"
+    const startStr = startEl.value;
     const endStr   = endEl.value;
     if(!startStr || !endStr){
       if(expStatus) expStatus.textContent = "Pick a start and end date.";
       return;
     }
 
-    // [start, end] in ms (end inclusive)
     const startMs = new Date(startStr+"T00:00:00").getTime();
     const endMs   = new Date(endStr+"T23:59:59.999").getTime();
     if(isNaN(startMs) || isNaN(endMs) || endMs < startMs){
@@ -490,7 +515,6 @@ async function downloadCsvForCurrentSelection(){
       return;
     }
 
-    // Resolve current device and its display name
     const deviceLabel = devSel.value;
     const deviceID    = __deviceMap?.[deviceLabel]?.id;
     const displayName = getDisplayName(deviceLabel);
@@ -501,26 +525,22 @@ async function downloadCsvForCurrentSelection(){
 
     if(expStatus) expStatus.textContent = "Building CSV…";
 
-    // Columns: timestamp ISO, lat, lng, speed, signal, volt, then each temp sensor (by label)
     const baseCols = ["timestamp", "lat", "lng", "speed", "signal", "volt"];
-    const sensorCols = SENSORS.filter(s => s.address).map(s => s.label || s.address);
+    const sensorCols = SENSORS.filter(s=>s.address).map(s => s.label || s.address);
 
-    // Fetch series
     const [gpsRows, signalRows, voltRows] = await Promise.all([
       fetchCsvRows(deviceID, "gps",    startMs, endMs),
       fetchCsvRows(deviceID, "signal", startMs, endMs),
       fetchCsvRows(deviceID, "volt",   startMs, endMs)
     ]);
 
-    // Fetch temperature sensors
     const tempSeries = {};
     await Promise.all(SENSORS.filter(s => s.address).map(async s => {
       const rows = await fetchCsvRows(deviceID, s.address, startMs, endMs);
       tempSeries[s.label || s.address] = { rows, calibration: s.calibration||0 };
     }));
 
-    // Merge by exact timestamp (ms)
-    const rowMap = new Map(); // ts -> object
+    const rowMap = new Map();
     function ensure(ts){ if(!rowMap.has(ts)) rowMap.set(ts, { timestamp: ts }); return rowMap.get(ts); }
 
     gpsRows.forEach(r=>{
@@ -541,14 +561,11 @@ async function downloadCsvForCurrentSelection(){
       });
     });
 
-    // Sort timestamps
     const rows = Array.from(rowMap.values()).sort((a,b)=>a.timestamp-b.timestamp);
 
-    // CSV header
     const headers = baseCols.concat(sensorCols);
     const toISO = ts => new Date(ts).toISOString();
 
-    // CSV body
     const csvLines = [];
     csvLines.push(headers.join(','));
     rows.forEach(o=>{
@@ -567,7 +584,6 @@ async function downloadCsvForCurrentSelection(){
     });
     const csv = csvLines.join('\n');
 
-    // Download (filename uses the *display* name)
     const safeName = String(displayName).replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
     const fname = `${safeName}_${startStr}_to_${endStr}.csv`;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -606,114 +622,50 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
       .sort((a,b) => a.timestamp - b.timestamp);
     if(!gpsPoints.length) return;
-    const tempData = {};
-    const tempAvg  = {};
-    for(const s of SENSORS){
-      if(!s.address) continue;
-      const rows = await fetchCsvRows(deviceID, s.address, startTime, nowMs);
-      for(const r of rows){
-        const ts = r.timestamp;
-        let v = parseFloat(r.value);
-        if(isNaN(v)) continue;
-        if(typeof s.calibration === 'number') v += s.calibration;
-        if(!tempData[ts]) tempData[ts] = [];
-        tempData[ts].push(v);
-      }
-    }
-    Object.keys(tempData).forEach(ts => {
-      const vals = tempData[ts];
-      if(vals && vals.length){
-        const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
-        tempAvg[ts] = avg;
-      }
-    });
-    const tempTimestamps = Object.keys(tempAvg).map(t=>+t).sort((a,b)=>a-b);
+
+    let currentSegment = [gpsPoints[0]];
     const segments = [];
-    let currentSeg = [];
-    for(let i=0;i<gpsPoints.length;i++){
-      const pt = gpsPoints[i];
-      if(currentSeg.length === 0){
-        currentSeg.push(pt);
+    for(let i=1; i<gpsPoints.length; i++){
+      const prev = gpsPoints[i-1];
+      const cur  = gpsPoints[i];
+      if ((cur.timestamp - prev.timestamp) > 15*60*1000) {
+        segments.push(currentSegment);
+        currentSegment = [cur];
       } else {
-        const prev = gpsPoints[i-1];
-        if((pt.timestamp - prev.timestamp) > (15 * 60 * 1000)){
-          segments.push(currentSeg);
-          currentSeg = [pt];
-        } else {
-          currentSeg.push(pt);
-        }
+        currentSegment.push(cur);
       }
     }
-    if(currentSeg.length) segments.push(currentSeg);
-    const legendEntries = [];
-    segments.forEach((seg, idx) => {
-      const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
-      const latlngs = seg.map(r => [r.context.lat, r.context.lng]);
-      const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
+    if(currentSegment.length) segments.push(currentSegment);
+
+    const colors = ["#2563eb","#10b981","#f59e0b","#ef4444","#8b5cf6"];
+    segments.forEach((seg, idx)=>{
+      const latlngs = seg.map(p=>[p.context.lat,p.context.lng]);
+      const poly = L.polyline(latlngs,{color:colors[idx%colors.length],weight:4,opacity:0.8}).addTo(map);
       segmentPolylines.push(poly);
-      const startDate = new Date(seg[0].timestamp);
-      const endDate   = new Date(seg[seg.length-1].timestamp);
-      legendEntries.push({ color, start: startDate, end: endDate });
-      seg.forEach(pt => {
-        const latlng = [pt.context.lat, pt.context.lng];
-        let nearestAvg = null;
-        let closestDiff = Infinity;
-        const ts = pt.timestamp;
-        for(const t of tempTimestamps){
-          const diff = Math.abs(ts - t);
-          if(diff < closestDiff && diff <= 5 * 60 * 1000){
-            closestDiff = diff;
-            nearestAvg = tempAvg[t];
-          }
+      seg.forEach((pt,j)=>{
+        if(j===0 || j===seg.length-1){
+          const m = L.circleMarker([pt.context.lat,pt.context.lng],{
+            radius:5,
+            color:colors[idx%colors.length],
+            fillOpacity:1
+          }).addTo(map);
+          m.bindTooltip(new Date(pt.timestamp).toLocaleString('en-GB',{timeZone:'Europe/London'}));
+          segmentMarkers.push(m);
         }
-        const speed = pt.context.speed;
-        const timeStr = new Date(pt.timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
-        let tooltipHtml = `<div>Time: ${timeStr}</div>`;
-        if(speed != null && !isNaN(speed)){
-          tooltipHtml += `<div>Speed: ${speed.toFixed(1)} km/h</div>`;
-        }
-        if(nearestAvg != null && !isNaN(nearestAvg)){
-          tooltipHtml += `<div>Avg Temp: ${nearestAvg.toFixed(1)}°</div>`;
-        }
-        const markerObj = L.circleMarker(latlng, {
-          radius: 4,
-          fillColor: color,
-          color: color,
-          weight: 1,
-          opacity: 0.9,
-          fillOpacity: 0.8
-        }).bindTooltip(tooltipHtml, { className: 'tooltip', direction: 'top', offset: [0,-6] });
-        markerObj.addTo(map);
-        segmentMarkers.push(markerObj);
       });
     });
-    if(segments.length > 0){
-      const allLatLngs = [];
-      segments.forEach(seg => { seg.forEach(pt => { allLatLngs.push([pt.context.lat, pt.context.lng]); }); });
-      const bounds = L.latLngBounds(allLatLngs);
-      map.fitBounds(bounds, { padding: [20,20] });
-    }
-    if(legendEntries.length > 0){
-      legendControl = L.control({ position: 'bottomright' });
-      legendControl.onAdd = function(){
-        const div = L.DomUtil.create('div', 'breadcrumb-legend');
-        div.style.background = 'rgba(255,255,255,0.85)';
-        div.style.padding = '8px 10px';
-        div.style.borderRadius = '6px';
-        div.style.fontSize = '0.75rem';
-        div.style.lineHeight = '1.2';
-        div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-        let html = '<strong>Segments</strong><br>';
-        legendEntries.forEach(entry => {
-          const startT = entry.start.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-          const endT   = entry.end.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-          html += `<span style="display:inline-block;width:12px;height:12px;margin-right:4px;background:${entry.color}"></span>${startT}–${endT}<br>`;
-        });
-        div.innerHTML = html;
-        return div;
-      };
-      legendControl.addTo(map);
-    }
+
+    legendControl = L.control({position:'bottomright'});
+    legendControl.onAdd = function(){
+      const div = L.DomUtil.create('div','info legend');
+      let html = '<b>Segments</b><br>';
+      segments.forEach((s,idx)=>{
+        html += `<span style="display:inline-block;width:12px;height:12px;background:${colors[idx%colors.length]};margin-right:4px"></span>${s.length} pts<br>`;
+      });
+      div.innerHTML = html;
+      return div;
+    };
+    legendControl.addTo(map);
   }catch(err){
     console.error('updateBreadcrumbs error', err);
   }
@@ -740,7 +692,7 @@ function wireRangeButtons(){
   });
 }
 
-/* =================== Date inputs: instant commit =================== */
+/* =================== Date inputs =================== */
 function wireDateInputsCommit(){
   const startEl = document.getElementById('start');
   const endEl   = document.getElementById('end');
@@ -758,15 +710,14 @@ function wireDateInputsCommit(){
         document.activeElement.blur();
       }
     }, { capture:true });
+    btn.onclick = downloadCsvForCurrentSelection;
   }
 }
 
 /* =================== Main update loop =================== */
 onReady(()=>{
   wireRangeButtons();
-  wireDateInputsCommit();   // commit date instantly
-
-
+  wireDateInputsCommit();
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
   document.getElementById("deviceSelect").addEventListener("change", updateAll);
@@ -775,7 +726,7 @@ onReady(()=>{
 async function updateAll(){
   await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
-  __deviceMap = sensorMap; // expose to CSV click handler
+  __deviceMap = sensorMap;
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceLabel = document.getElementById("deviceSelect").value;
   const deviceID    = sensorMap[deviceLabel]?.id;
