@@ -188,9 +188,10 @@ function initCharts(SENSORS){
     box.innerHTML = `<h3>${s.label||""}</h3><canvas></canvas>`;
     ctr.appendChild(box);
     const ctx = box.querySelector("canvas").getContext("2d");
+    ctx.canvas.style.backgroundColor = "#ffffff";
     s.chart = new Chart(ctx,{
       type:"line",
-      data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2 }]},
+      data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, backgroundColor:'transparent', fill:false, spanGaps:false }]},
       options:{
         responsive:true,
         maintainAspectRatio:false,
@@ -449,6 +450,7 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID){
   return state;
 }
 // Part 4
+// ─────────── Part 4 (complete) ───────────
 async function renderMaintenanceBox(truckLabel, deviceID){
   const box = document.getElementById("maintenanceBox");
   if(!box){ onReady(()=>renderMaintenanceBox(truckLabel,deviceID)); return; }
@@ -492,6 +494,7 @@ async function fetchCsvRows(deviceID, varLabel, start, end){
   }catch{ return []; }
 }
 
+// Build and download CSV for the selected device/date range
 async function downloadCsvForCurrentSelection(){
   try{
     const expStatus = document.getElementById('expStatus');
@@ -501,13 +504,14 @@ async function downloadCsvForCurrentSelection(){
 
     if(!startEl || !endEl || !devSel){ return; }
 
-    const startStr = startEl.value;
+    const startStr = startEl.value; // "YYYY-MM-DD"
     const endStr   = endEl.value;
     if(!startStr || !endStr){
       if(expStatus) expStatus.textContent = "Pick a start and end date.";
       return;
     }
 
+    // [start, end] in ms (end inclusive)
     const startMs = new Date(startStr+"T00:00:00").getTime();
     const endMs   = new Date(endStr+"T23:59:59.999").getTime();
     if(isNaN(startMs) || isNaN(endMs) || endMs < startMs){
@@ -515,6 +519,7 @@ async function downloadCsvForCurrentSelection(){
       return;
     }
 
+    // Resolve current device and its display name
     const deviceLabel = devSel.value;
     const deviceID    = __deviceMap?.[deviceLabel]?.id;
     const displayName = getDisplayName(deviceLabel);
@@ -525,22 +530,26 @@ async function downloadCsvForCurrentSelection(){
 
     if(expStatus) expStatus.textContent = "Building CSV…";
 
+    // Columns: timestamp ISO, lat, lng, speed, signal, volt, then each temp sensor (by label)
     const baseCols = ["timestamp", "lat", "lng", "speed", "signal", "volt"];
-    const sensorCols = SENSORS.filter(s=>s.address).map(s => s.label || s.address);
+    const sensorCols = SENSORS.filter(s => s.address).map(s => s.label || s.address);
 
+    // Fetch series
     const [gpsRows, signalRows, voltRows] = await Promise.all([
       fetchCsvRows(deviceID, "gps",    startMs, endMs),
       fetchCsvRows(deviceID, "signal", startMs, endMs),
       fetchCsvRows(deviceID, "volt",   startMs, endMs)
     ]);
 
+    // Fetch temperature sensors
     const tempSeries = {};
     await Promise.all(SENSORS.filter(s => s.address).map(async s => {
       const rows = await fetchCsvRows(deviceID, s.address, startMs, endMs);
       tempSeries[s.label || s.address] = { rows, calibration: s.calibration||0 };
     }));
 
-    const rowMap = new Map();
+    // Merge by exact timestamp (ms)
+    const rowMap = new Map(); // ts -> object
     function ensure(ts){ if(!rowMap.has(ts)) rowMap.set(ts, { timestamp: ts }); return rowMap.get(ts); }
 
     gpsRows.forEach(r=>{
@@ -561,11 +570,14 @@ async function downloadCsvForCurrentSelection(){
       });
     });
 
+    // Sort timestamps
     const rows = Array.from(rowMap.values()).sort((a,b)=>a.timestamp-b.timestamp);
 
+    // CSV header
     const headers = baseCols.concat(sensorCols);
     const toISO = ts => new Date(ts).toISOString();
 
+    // CSV body
     const csvLines = [];
     csvLines.push(headers.join(','));
     rows.forEach(o=>{
@@ -584,6 +596,7 @@ async function downloadCsvForCurrentSelection(){
     });
     const csv = csvLines.join('\n');
 
+    // Download (filename uses the *display* name)
     const safeName = String(displayName).replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
     const fname = `${safeName}_${startStr}_to_${endStr}.csv`;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -604,6 +617,7 @@ async function downloadCsvForCurrentSelection(){
 }
 
 /* =================== Breadcrumb route drawing =================== */
+// Restored verbatim from your original
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   try{
     if(!map) initMap();
@@ -622,50 +636,114 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
       .sort((a,b) => a.timestamp - b.timestamp);
     if(!gpsPoints.length) return;
-
-    let currentSegment = [gpsPoints[0]];
-    const segments = [];
-    for(let i=1; i<gpsPoints.length; i++){
-      const prev = gpsPoints[i-1];
-      const cur  = gpsPoints[i];
-      if ((cur.timestamp - prev.timestamp) > 15*60*1000) {
-        segments.push(currentSegment);
-        currentSegment = [cur];
-      } else {
-        currentSegment.push(cur);
+    const tempData = {};
+    const tempAvg  = {};
+    for(const s of SENSORS){
+      if(!s.address) continue;
+      const rows = await fetchCsvRows(deviceID, s.address, startTime, nowMs);
+      for(const r of rows){
+        const ts = r.timestamp;
+        let v = parseFloat(r.value);
+        if(isNaN(v)) continue;
+        if(typeof s.calibration === 'number') v += s.calibration;
+        if(!tempData[ts]) tempData[ts] = [];
+        tempData[ts].push(v);
       }
     }
-    if(currentSegment.length) segments.push(currentSegment);
-
-    const colors = ["#2563eb","#10b981","#f59e0b","#ef4444","#8b5cf6"];
-    segments.forEach((seg, idx)=>{
-      const latlngs = seg.map(p=>[p.context.lat,p.context.lng]);
-      const poly = L.polyline(latlngs,{color:colors[idx%colors.length],weight:4,opacity:0.8}).addTo(map);
-      segmentPolylines.push(poly);
-      seg.forEach((pt,j)=>{
-        if(j===0 || j===seg.length-1){
-          const m = L.circleMarker([pt.context.lat,pt.context.lng],{
-            radius:5,
-            color:colors[idx%colors.length],
-            fillOpacity:1
-          }).addTo(map);
-          m.bindTooltip(new Date(pt.timestamp).toLocaleString('en-GB',{timeZone:'Europe/London'}));
-          segmentMarkers.push(m);
+    Object.keys(tempData).forEach(ts => {
+      const vals = tempData[ts];
+      if(vals && vals.length){
+        const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+        tempAvg[ts] = avg;
+      }
+    });
+    const tempTimestamps = Object.keys(tempAvg).map(t=>+t).sort((a,b)=>a-b);
+    const segments = [];
+    let currentSeg = [];
+    for(let i=0;i<gpsPoints.length;i++){
+      const pt = gpsPoints[i];
+      if(currentSeg.length === 0){
+        currentSeg.push(pt);
+      } else {
+        const prev = gpsPoints[i-1];
+        if((pt.timestamp - prev.timestamp) > (15 * 60 * 1000)){
+          segments.push(currentSeg);
+          currentSeg = [pt];
+        } else {
+          currentSeg.push(pt);
         }
+      }
+    }
+    if(currentSeg.length) segments.push(currentSeg);
+    const legendEntries = [];
+    segments.forEach((seg, idx) => {
+      const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
+      const latlngs = seg.map(r => [r.context.lat, r.context.lng]);
+      const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
+      segmentPolylines.push(poly);
+      const startDate = new Date(seg[0].timestamp);
+      const endDate   = new Date(seg[seg.length-1].timestamp);
+      legendEntries.push({ color, start: startDate, end: endDate });
+      seg.forEach(pt => {
+        const latlng = [pt.context.lat, pt.context.lng];
+        let nearestAvg = null;
+        let closestDiff = Infinity;
+        const ts = pt.timestamp;
+        for(const t of tempTimestamps){
+          const diff = Math.abs(ts - t);
+          if(diff < closestDiff && diff <= 5 * 60 * 1000){
+            closestDiff = diff;
+            nearestAvg = tempAvg[t];
+          }
+        }
+        const speed = pt.context.speed;
+        const timeStr = new Date(pt.timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
+        let tooltipHtml = `<div>Time: ${timeStr}</div>`;
+        if(speed != null && !isNaN(speed)){
+          tooltipHtml += `<div>Speed: ${speed.toFixed(1)} km/h</div>`;
+        }
+        if(nearestAvg != null && !isNaN(nearestAvg)){
+          tooltipHtml += `<div>Avg Temp: ${nearestAvg.toFixed(1)}°</div>`;
+        }
+        const markerObj = L.circleMarker(latlng, {
+          radius: 4,
+          fillColor: color,
+          color: color,
+          weight: 1,
+          opacity: 0.9,
+          fillOpacity: 0.8
+        }).bindTooltip(tooltipHtml, { className: 'tooltip', direction: 'top', offset: [0,-6] });
+        markerObj.addTo(map);
+        segmentMarkers.push(markerObj);
       });
     });
-
-    legendControl = L.control({position:'bottomright'});
-    legendControl.onAdd = function(){
-      const div = L.DomUtil.create('div','info legend');
-      let html = '<b>Segments</b><br>';
-      segments.forEach((s,idx)=>{
-        html += `<span style="display:inline-block;width:12px;height:12px;background:${colors[idx%colors.length]};margin-right:4px"></span>${s.length} pts<br>`;
-      });
-      div.innerHTML = html;
-      return div;
-    };
-    legendControl.addTo(map);
+    if(segments.length > 0){
+      const allLatLngs = [];
+      segments.forEach(seg => { seg.forEach(pt => { allLatLngs.push([pt.context.lat, pt.context.lng]); }); });
+      const bounds = L.latLngBounds(allLatLngs);
+      map.fitBounds(bounds, { padding: [20,20] });
+    }
+    if(legendEntries.length > 0){
+      legendControl = L.control({ position: 'bottomright' });
+      legendControl.onAdd = function(){
+        const div = L.DomUtil.create('div', 'breadcrumb-legend');
+        div.style.background = 'rgba(255,255,255,0.85)';
+        div.style.padding = '8px 10px';
+        div.style.borderRadius = '6px';
+        div.style.fontSize = '0.75rem';
+        div.style.lineHeight = '1.2';
+        div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        let html = '<strong>Segments</strong><br>';
+        legendEntries.forEach(entry => {
+          const startT = entry.start.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+          const endT   = entry.end.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+          html += `<span style="display:inline-block;width:12px;height:12px;margin-right:4px;background:${entry.color}"></span>${startT}–${endT}<br>`;
+        });
+        div.innerHTML = html;
+        return div;
+      };
+      legendControl.addTo(map);
+    }
   }catch(err){
     console.error('updateBreadcrumbs error', err);
   }
@@ -692,7 +770,7 @@ function wireRangeButtons(){
   });
 }
 
-/* =================== Date inputs =================== */
+/* =================== Date inputs: instant commit =================== */
 function wireDateInputsCommit(){
   const startEl = document.getElementById('start');
   const endEl   = document.getElementById('end');
@@ -710,14 +788,14 @@ function wireDateInputsCommit(){
         document.activeElement.blur();
       }
     }, { capture:true });
-    btn.onclick = downloadCsvForCurrentSelection;
   }
 }
 
 /* =================== Main update loop =================== */
 onReady(()=>{
   wireRangeButtons();
-  wireDateInputsCommit();
+  wireDateInputsCommit();   // commit date instantly
+
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
   document.getElementById("deviceSelect").addEventListener("change", updateAll);
@@ -726,7 +804,7 @@ onReady(()=>{
 async function updateAll(){
   await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
-  __deviceMap = sensorMap;
+  __deviceMap = sensorMap; // expose to CSV click handler
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceLabel = document.getElementById("deviceSelect").value;
   const deviceID    = sensorMap[deviceLabel]?.id;
@@ -752,3 +830,4 @@ async function updateAll(){
   }
   wireRangeButtons();
 }
+
