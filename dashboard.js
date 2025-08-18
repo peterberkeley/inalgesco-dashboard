@@ -40,9 +40,12 @@ function onReady(fn){
 }
 const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
 
-// Get the *displayed* name seen on the dashboard for a given device label
 function getDisplayName(deviceLabel){
-  /* =================== Chart.js plugin: white chart area =================== */
+  return (aliasMap && aliasMap[deviceLabel])
+      || (sensorMapConfig[deviceLabel] && sensorMapConfig[deviceLabel].label)
+      || deviceLabel;
+}
+/* =================== Chart.js plugin: white chart area =================== */
 if (typeof Chart !== 'undefined') {
   const ChartAreaBackground = {
     id: 'chartAreaBackground',
@@ -56,10 +59,6 @@ if (typeof Chart !== 'undefined') {
     }
   };
   Chart.register(ChartAreaBackground);
-}
-  return (aliasMap && aliasMap[deviceLabel])
-      || (sensorMapConfig[deviceLabel] && sensorMapConfig[deviceLabel].label)
-      || deviceLabel;
 }
 
 /* =================== Admin mapping (context) =================== */
@@ -233,12 +232,7 @@ async function updateCharts(deviceID, SENSORS){
   let allTimestamps = new Set();
 
   await Promise.all(SENSORS.filter(s=>s.address).map(async s=>{
-    const seriesMap = {};
-Object.keys(seriesData).forEach(id => {
-  const m = new Map();
-  seriesData[id].forEach(r => m.set(r.ts, r.v));
-  seriesMap[id] = m;
-});
+    
     const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
     if(!rows.length) return;
     const ordered = rows.slice().reverse();
@@ -249,7 +243,13 @@ Object.keys(seriesData).forEach(id => {
     });
     ordered.forEach(r=>allTimestamps.add(r.timestamp));
   }));
-
+  // Build O(1) lookup maps per sensor (ts -> value) AFTER seriesData is populated
+  const seriesMap = {};
+  Object.keys(seriesData).forEach(id => {
+    const m = new Map();
+    (seriesData[id] || []).forEach(r => m.set(r.ts, r.v));
+    seriesMap[id] = m;
+  });
   // unify timestamp axis
   const timestamps = Array.from(allTimestamps).sort((a,b)=>a-b);
 
