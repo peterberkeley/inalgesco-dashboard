@@ -42,6 +42,21 @@ const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
 
 // Get the *displayed* name seen on the dashboard for a given device label
 function getDisplayName(deviceLabel){
+  /* =================== Chart.js plugin: white chart area =================== */
+if (typeof Chart !== 'undefined') {
+  const ChartAreaBackground = {
+    id: 'chartAreaBackground',
+    beforeDraw(chart, args, opts) {
+      const { ctx, chartArea } = chart;
+      if (!chartArea) return;
+      ctx.save();
+      ctx.fillStyle = (opts && opts.color) || '#ffffff';
+      ctx.fillRect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+      ctx.restore();
+    }
+  };
+  Chart.register(ChartAreaBackground);
+}
   return (aliasMap && aliasMap[deviceLabel])
       || (sensorMapConfig[deviceLabel] && sensorMapConfig[deviceLabel].label)
       || deviceLabel;
@@ -202,7 +217,11 @@ function initCharts(SENSORS){
           y:{ beginAtZero:false, ticks:{ callback:v=>Number(v).toFixed(1) }, grid:{ color:'rgba(17,24,39,.06)' } }
         },
         elements:{ line:{ tension:0.22 }, point:{ radius:0 } },
-        plugins:{ legend:{ display:false }, decimation:{ enabled:true, algorithm:'lttb' } }
+       plugins:{
+  legend:{ display:false },
+  decimation:{ enabled:true, algorithm:'lttb' },
+  chartAreaBackground:{ color:'#ffffff' }   // <— forces white plot area
+}
       }
     });
   });
