@@ -269,6 +269,8 @@ Object.keys(seriesData).forEach(id => {
         new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
       );
       s.chart.data.datasets[0].data = avgSeries;
+      s.chart.data.datasets[0].fill = false;
+s.chart.data.datasets[0].backgroundColor = 'transparent';
     }else if(s.address){
   // Use this sensor's own timebase so lines aren't broken by others' timestamps
   const rows = seriesData[s.id] || [];
@@ -276,6 +278,8 @@ Object.keys(seriesData).forEach(id => {
     new Date(r.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
   );
   s.chart.data.datasets[0].data = rows.map(r => r.v);
+      s.chart.data.datasets[0].fill = false;
+s.chart.data.datasets[0].backgroundColor = 'transparent';
 }
     // dynamic y-scale
     const vals = s.chart.data.datasets[0].data.filter(v=>v!=null && isFinite(v));
