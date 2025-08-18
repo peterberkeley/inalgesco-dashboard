@@ -78,26 +78,58 @@ async function fetchSensorMapMapping(){
 
 /* =================== Devices (v2) =================== */
 async function fetchSensorMapConfig(){
-  try{
-    const res = await fetch(`${UBIDOTS_BASE}/devices/`, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
-    if(!res.ok) throw new Error("Failed to fetch devices");
-    const js = await res.json();
-    const context = {};
-    js.results
-      .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
-      .forEach(dev => {
-        const name  = dev.name;
-        const label = dev.label || name.replace("skycafe-", "SkyCafé ");
-        const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
-        const id = dev.id || dev._id || dev["$id"];
-        context[name] = { label, last_seen: Math.floor(lastSeen/1000), id };
-      });
-    return context;
-  }catch(err){
-    console.error("Failed to fetch device list:", err);
-    return {};
+  const context = {};
+  const H = { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN } };
+
+  function add(dev){
+    if(!dev) return;
+    const name = dev.name || dev.label || dev.device || dev["$id"] || "";
+    if(!name || !String(name).startsWith("skycafe-")) return;
+    const label = dev.label || name.replace("skycafe-","SkyCafé ");
+    const lastMs =
+      (dev.lastActivity && Date.parse(dev.lastActivity)) ||
+      (dev.last_activity && Date.parse(dev.last_activity)) ||
+      (dev.lastActivityTime && Date.parse(dev.lastActivityTime)) || 0;
+    const id = dev.id || dev._id || dev["$id"] || (dev.url && dev.url.split("/").pop());
+    context[name] = { label, last_seen: Math.floor((lastMs||0)/1000), id };
   }
+
+  // Try v2.0 first
+  try {
+    const r2 = await fetch(`${UBIDOTS_BASE}/devices/`, H);
+    if (r2.ok) {
+      const js = await r2.json();
+      const arr = Array.isArray(js?.results) ? js.results : (Array.isArray(js) ? js : []);
+      arr.forEach(add);
+      if (Object.keys(context).length) return context;
+    } else {
+      console.error("v2 devices non-OK:", r2.status, r2.statusText);
+    }
+  } catch(e) {
+    console.error("v2 devices fetch failed:", e);
+  }
+
+  // Fallback to v1.6
+  try {
+    const r1 = await fetch(`https://industrial.api.ubidots.com/api/v1.6/devices/`, H);
+    if (r1.ok) {
+      const js = await r1.json();
+      if (Array.isArray(js?.results)) js.results.forEach(add);
+      else if (Array.isArray(js)) js.forEach(add);
+      else if (js && typeof js === "object") Object.keys(js).forEach(k => add(js[k]));
+      if (Object.keys(context).length) return context;
+    } else {
+      console.error("v1.6 devices non-OK:", r1.status, r1.statusText);
+    }
+  } catch(e) {
+    console.error("v1.6 devices fetch failed:", e);
+  }
+
+  console.error("Failed to fetch device list from v2.0 and v1.6.");
+  // Keep previous if we have one (avoids clearing dropdown on transient errors)
+  return Object.keys(__deviceMap||{}).length ? __deviceMap : {};
 }
+
 
 function buildDeviceDropdownFromConfig(sensorMap){
   const sel = document.getElementById("deviceSelect");
@@ -232,7 +264,6 @@ async function updateCharts(deviceID, SENSORS){
   let allTimestamps = new Set();
 
   await Promise.all(SENSORS.filter(s=>s.address).map(async s=>{
-    
     const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
     if(!rows.length) return;
     const ordered = rows.slice().reverse();
@@ -243,44 +274,43 @@ async function updateCharts(deviceID, SENSORS){
     });
     ordered.forEach(r=>allTimestamps.add(r.timestamp));
   }));
-  // Build O(1) lookup maps per sensor (ts -> value) AFTER seriesData is populated
+
+  // Build O(1) lookups AFTER seriesData is populated
   const seriesMap = {};
   Object.keys(seriesData).forEach(id => {
     const m = new Map();
     (seriesData[id] || []).forEach(r => m.set(r.ts, r.v));
     seriesMap[id] = m;
   });
-  // unify timestamp axis
+
+  // union axis for AVG only
   const timestamps = Array.from(allTimestamps).sort((a,b)=>a-b);
 
-  // build per-sensor aligned series
   SENSORS.forEach(s=>{
     if(!s.chart) return;
+
     if(s.id==="avg"){
-      // compute average across all other sensors
       const avgSeries = timestamps.map(ts=>{
-        const vals = SENSORS.filter(ss=>ss.address).map(ss=>{
-         return seriesMap[ss.id]?.get(ts) ?? null;
-        }).filter(v=>v!=null && isFinite(v));
+        const vals = SENSORS.filter(ss=>ss.address)
+          .map(ss => seriesMap[ss.id]?.get(ts) ?? null)
+          .filter(v => v!=null && isFinite(v));
         if(!vals.length) return null;
         return vals.reduce((a,b)=>a+b,0)/vals.length;
       });
-      s.chart.data.labels = timestamps.map(t=>
-        new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
-      );
+      s.chart.data.labels = timestamps.map(t =>
+        new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'}));
       s.chart.data.datasets[0].data = avgSeries;
       s.chart.data.datasets[0].fill = false;
-s.chart.data.datasets[0].backgroundColor = 'transparent';
-    }else if(s.address){
-  // Use this sensor's own timebase so lines aren't broken by others' timestamps
-  const rows = seriesData[s.id] || [];
-  s.chart.data.labels = rows.map(r =>
-    new Date(r.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
-  );
-  s.chart.data.datasets[0].data = rows.map(r => r.v);
+      s.chart.data.datasets[0].backgroundColor = 'transparent';
+    } else if (s.address){
+      const rows = seriesData[s.id] || [];
+      s.chart.data.labels = rows.map(r =>
+        new Date(r.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'}));
+      s.chart.data.datasets[0].data = rows.map(r => r.v);
       s.chart.data.datasets[0].fill = false;
-s.chart.data.datasets[0].backgroundColor = 'transparent';
-}
+      s.chart.data.datasets[0].backgroundColor = 'transparent';
+    }
+
     // dynamic y-scale
     const vals = s.chart.data.datasets[0].data.filter(v=>v!=null && isFinite(v));
     if(vals.length){
@@ -295,7 +325,7 @@ s.chart.data.datasets[0].backgroundColor = 'transparent';
     s.chart.update();
   });
 
-  // update chart range display
+  // range banner
   if(timestamps.length){
     const minTs=timestamps[0], maxTs=timestamps[timestamps.length-1];
     const rng=document.getElementById("chartRange");
@@ -831,6 +861,12 @@ onReady(()=>{
 async function updateAll(){
   await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
+  if (!sensorMap || !Object.keys(sensorMap).length) {
+  console.error("No devices available from Ubidots (v2.0 and v1.6).");
+  const charts = document.getElementById("charts");
+  if (charts) charts.innerHTML = "<div class='text-sm text-gray-600'>No devices found. Check API token/network.</div>";
+  return; // bail early to avoid “Device ID not found” noise
+}
   __deviceMap = sensorMap; // expose to CSV click handler
   buildDeviceDropdownFromConfig(sensorMap);
   const deviceLabel = document.getElementById("deviceSelect").value;
