@@ -7,6 +7,7 @@ const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
 
 let REFRESH_INTERVAL = 60_000;      // poll live every 60s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
+const ONLINE_WINDOW_SEC = 300;      // consider device online if seen within last 5 minutes
 
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981", "#f97316"];
 
@@ -93,7 +94,7 @@ function buildDeviceDropdownFromConfig(sensorMap){
   const entries = Object.entries(sensorMap)
     .sort(([a],[b]) => parseInt(a.replace("skycafe-",""),10)-parseInt(b.replace("skycafe-",""),10));
   entries.forEach(([dev,obj])=>{
-    const isOnline = (now - (obj.last_seen||0)) < 60;
+   const isOnline = (now - (obj.last_seen||0)) < ONLINE_WINDOW_SEC;
     const dot = isOnline ? "🟢" : "⚪️";
     const opt = document.createElement("option");
     opt.value = dev;
@@ -1134,27 +1135,31 @@ async function updateAll(){
   const deviceLabel = document.getElementById("deviceSelect").value;
   const deviceID    = sensorMap[deviceLabel]?.id;
 
-  // Online pill: use device last_seen; fallback to GPS latest timestamp if missing
-  let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
-  if (!lastSeenSec && deviceID) {
-    try {
-      await ensureVarCache(deviceID);
-      const gpsVarId = variableCache[deviceID]?.["gps"];
-      if (gpsVarId) {
-        const vs = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${gpsVarId}/values/?page_size=1`, {
-          headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-        });
-        if (vs.ok) {
-          const vr = await vs.json();
-          const ts = vr?.results?.[0]?.timestamp || 0;
-          if (ts) lastSeenSec = Math.floor(ts / 1000);
-        }
-      }
-    } catch(e) {
-      console.error("last_seen fallback (gps) failed:", e);
+  // Online pill: use device last_seen; fallback to freshest of gps/signal/volt
+let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
+if (!lastSeenSec && deviceID) {
+  try {
+    await ensureVarCache(deviceID);
+    const labelsToCheck = ["gps", "signal", "volt"];
+    let bestTs = 0;
+    for (const lab of labelsToCheck) {
+      const varId = variableCache[deviceID]?.[lab];
+      if (!varId) continue;
+      const vs = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1`, {
+        headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+      });
+      if (!vs.ok) continue;
+      const vr = await vs.json();
+      const ts = vr?.results?.[0]?.timestamp || 0;
+      if (ts > bestTs) bestTs = ts;
     }
+    if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
+  } catch(e) {
+    console.error("last_seen fallback failed:", e);
   }
-  const isOnline    = (Math.floor(Date.now()/1000) - (lastSeenSec||0)) < 60;
+}
+const isOnline = (Math.floor(Date.now()/1000) - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
+
   if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
   const pill = document.getElementById('deviceStatusPill');
   if (pill) {
