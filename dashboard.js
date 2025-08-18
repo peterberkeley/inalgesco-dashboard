@@ -214,6 +214,12 @@ async function updateCharts(deviceID, SENSORS){
   let allTimestamps = new Set();
 
   await Promise.all(SENSORS.filter(s=>s.address).map(async s=>{
+    const seriesMap = {};
+Object.keys(seriesData).forEach(id => {
+  const m = new Map();
+  seriesData[id].forEach(r => m.set(r.ts, r.v));
+  seriesMap[id] = m;
+});
     const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
     if(!rows.length) return;
     const ordered = rows.slice().reverse();
@@ -235,8 +241,7 @@ async function updateCharts(deviceID, SENSORS){
       // compute average across all other sensors
       const avgSeries = timestamps.map(ts=>{
         const vals = SENSORS.filter(ss=>ss.address).map(ss=>{
-          const row = seriesData[ss.id]?.find(r=>r.ts===ts);
-          return row ? row.v : null;
+         return seriesMap[ss.id]?.get(ts) ?? null;
         }).filter(v=>v!=null && isFinite(v));
         if(!vals.length) return null;
         return vals.reduce((a,b)=>a+b,0)/vals.length;
