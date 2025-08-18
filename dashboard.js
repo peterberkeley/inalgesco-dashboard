@@ -191,7 +191,7 @@ function initCharts(SENSORS){
     ctx.canvas.style.backgroundColor = "#ffffff";
     s.chart = new Chart(ctx,{
       type:"line",
-      data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, backgroundColor:'transparent', fill:false, spanGaps:false }]},
+      data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, backgroundColor:'transparent', fill:false, spanGaps:true }]},
       options:{
         responsive:true,
         maintainAspectRatio:false,
@@ -246,15 +246,13 @@ async function updateCharts(deviceID, SENSORS){
       );
       s.chart.data.datasets[0].data = avgSeries;
     }else if(s.address){
-      const aligned = timestamps.map(ts=>{
-        const row = seriesData[s.id]?.find(r=>r.ts===ts);
-        return row ? row.v : null;
-      });
-      s.chart.data.labels = timestamps.map(t=>
-        new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
-      );
-      s.chart.data.datasets[0].data = aligned;
-    }
+  // Use this sensor's own timebase so lines aren't broken by others' timestamps
+  const rows = seriesData[s.id] || [];
+  s.chart.data.labels = rows.map(r =>
+    new Date(r.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'})
+  );
+  s.chart.data.datasets[0].data = rows.map(r => r.v);
+}
     // dynamic y-scale
     const vals = s.chart.data.datasets[0].data.filter(v=>v!=null && isFinite(v));
     if(vals.length){
@@ -332,7 +330,7 @@ function drawLive(data, SENSORS){
       (signal!=null?String(signal):"—")
       + ` <span class="sig ${sigBars>=4?'high':(sigBars>=2?'med':'low')}">`
       + `<i class="l1 ${sigBars>0?'on':''}"></i><i class="l2 ${sigBars>1?'on':''}"></i><i class="l3 ${sigBars>2?'on':''}"></i><i class="l4 ${sigBars>3?'on':''}"></i><i class="l5 ${sigBars>4?'on':''}"></i></span>`],
-    ["Volt (mV)", fmt(volt,2)],
+   ["Volt (V)", fmt(volt,2)],
   ].concat(sensorRows);
   document.getElementById("latest").innerHTML =
     rows.map(r=>`<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
@@ -788,6 +786,7 @@ function wireDateInputsCommit(){
         document.activeElement.blur();
       }
     }, { capture:true });
+        btn.onclick = downloadCsvForCurrentSelection;
   }
 }
 
