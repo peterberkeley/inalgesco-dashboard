@@ -40,25 +40,11 @@ function onReady(fn){
 }
 const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
 
+// Get the *displayed* name seen on the dashboard for a given device label
 function getDisplayName(deviceLabel){
   return (aliasMap && aliasMap[deviceLabel])
       || (sensorMapConfig[deviceLabel] && sensorMapConfig[deviceLabel].label)
       || deviceLabel;
-}
-/* =================== Chart.js plugin: white chart area =================== */
-if (typeof Chart !== 'undefined') {
-  const ChartAreaBackground = {
-    id: 'chartAreaBackground',
-    beforeDraw(chart, args, opts) {
-      const { ctx, chartArea } = chart;
-      if (!chartArea) return;
-      ctx.save();
-      ctx.fillStyle = (opts && opts.color) || '#ffffff';
-      ctx.fillRect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
-      ctx.restore();
-    }
-  };
-  Chart.register(ChartAreaBackground);
 }
 
 /* =================== Admin mapping (context) =================== */
@@ -78,58 +64,26 @@ async function fetchSensorMapMapping(){
 
 /* =================== Devices (v2) =================== */
 async function fetchSensorMapConfig(){
-  const context = {};
-  const H = { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN } };
-
-  function add(dev){
-    if(!dev) return;
-    const name = dev.name || dev.label || dev.device || dev["$id"] || "";
-    if(!name || !String(name).startsWith("skycafe-")) return;
-    const label = dev.label || name.replace("skycafe-","SkyCafé ");
-    const lastMs =
-      (dev.lastActivity && Date.parse(dev.lastActivity)) ||
-      (dev.last_activity && Date.parse(dev.last_activity)) ||
-      (dev.lastActivityTime && Date.parse(dev.lastActivityTime)) || 0;
-    const id = dev.id || dev._id || dev["$id"] || (dev.url && dev.url.split("/").pop());
-    context[name] = { label, last_seen: Math.floor((lastMs||0)/1000), id };
+  try{
+    const res = await fetch(`${UBIDOTS_BASE}/devices/`, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
+    if(!res.ok) throw new Error("Failed to fetch devices");
+    const js = await res.json();
+    const context = {};
+    js.results
+      .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
+      .forEach(dev => {
+        const name  = dev.name;
+        const label = dev.label || name.replace("skycafe-", "SkyCafé ");
+        const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
+        const id = dev.id || dev._id || dev["$id"];
+        context[name] = { label, last_seen: Math.floor(lastSeen/1000), id };
+      });
+    return context;
+  }catch(err){
+    console.error("Failed to fetch device list:", err);
+    return {};
   }
-
-  // Try v2.0 first
-  try {
-    const r2 = await fetch(`${UBIDOTS_BASE}/devices/`, H);
-    if (r2.ok) {
-      const js = await r2.json();
-      const arr = Array.isArray(js?.results) ? js.results : (Array.isArray(js) ? js : []);
-      arr.forEach(add);
-      if (Object.keys(context).length) return context;
-    } else {
-      console.error("v2 devices non-OK:", r2.status, r2.statusText);
-    }
-  } catch(e) {
-    console.error("v2 devices fetch failed:", e);
-  }
-
-  // Fallback to v1.6
-  try {
-    const r1 = await fetch(`https://industrial.api.ubidots.com/api/v1.6/devices/`, H);
-    if (r1.ok) {
-      const js = await r1.json();
-      if (Array.isArray(js?.results)) js.results.forEach(add);
-      else if (Array.isArray(js)) js.forEach(add);
-      else if (js && typeof js === "object") Object.keys(js).forEach(k => add(js[k]));
-      if (Object.keys(context).length) return context;
-    } else {
-      console.error("v1.6 devices non-OK:", r1.status, r1.statusText);
-    }
-  } catch(e) {
-    console.error("v1.6 devices fetch failed:", e);
-  }
-
-  console.error("Failed to fetch device list from v2.0 and v1.6.");
-  // Keep previous if we have one (avoids clearing dropdown on transient errors)
-  return Object.keys(__deviceMap||{}).length ? __deviceMap : {};
 }
-
 
 function buildDeviceDropdownFromConfig(sensorMap){
   const sel = document.getElementById("deviceSelect");
@@ -192,7 +146,7 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
     return [];
   }
 }
-// Part2 
+
 /* =================== Dallas addresses =================== */
 async function fetchDallasAddresses(deviceID){
   try{
@@ -212,6 +166,7 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
   const adminMap = sensorMapConfig[deviceLabel]||{};
   const addrs = [...liveDallas.slice(0,5)];
   while(addrs.length<5) addrs.push(null);
+
   const slots = addrs.map((addr,idx)=>{
     if(!addr) return { id:`empty${idx}`, label:"", col:SENSOR_COLORS[idx], chart:null, address:null, calibration:0 };
     const label = adminMap[addr]?.label?.trim() || mapped[addr]?.label?.trim() || addr;
@@ -219,11 +174,13 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
                  : typeof mapped[addr]?.offset==="number" ? mapped[addr].offset : 0;
     return { id:addr, label, col:SENSOR_COLORS[idx], chart:null, address:addr, calibration:offset };
   });
-  // prepend synthetic average slot
+
+  // Prepend synthetic average slot (new)
   slots.unshift({ id:"avg", label:"Chillrail Avg", col:SENSOR_COLORS[5], chart:null, address:null, calibration:0 });
+
   return slots;
 }
-
+//Part 2
 /* =================== Charts =================== */
 function initCharts(SENSORS){
   const ctr = document.getElementById("charts");
@@ -234,10 +191,11 @@ function initCharts(SENSORS){
     box.innerHTML = `<h3>${s.label||""}</h3><canvas></canvas>`;
     ctr.appendChild(box);
     const ctx = box.querySelector("canvas").getContext("2d");
+    // Keep canvas background white; dataset will not fill
     ctx.canvas.style.backgroundColor = "#ffffff";
     s.chart = new Chart(ctx,{
       type:"line",
-      data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, backgroundColor:'transparent', fill:false, spanGaps:true }]},
+      data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, fill:false, backgroundColor:'transparent' }]},
       options:{
         responsive:true,
         maintainAspectRatio:false,
@@ -248,97 +206,128 @@ function initCharts(SENSORS){
           y:{ beginAtZero:false, ticks:{ callback:v=>Number(v).toFixed(1) }, grid:{ color:'rgba(17,24,39,.06)' } }
         },
         elements:{ line:{ tension:0.22 }, point:{ radius:0 } },
-       plugins:{
-  legend:{ display:false },
-  decimation:{ enabled:true, algorithm:'lttb' },
-  chartAreaBackground:{ color:'#ffffff' }   // <— forces white plot area
-}
+        plugins:{ legend:{ display:false }, decimation:{ enabled:true, algorithm:'lttb' } }
       }
     });
   });
 }
 
 async function updateCharts(deviceID, SENSORS){
-  // fetch all sensor series first
-  const seriesData = {};
-  let allTimestamps = new Set();
-
-  await Promise.all(SENSORS.filter(s=>s.address).map(async s=>{
+  // ORIGINAL per-sensor plotting (unchanged)
+  await Promise.all(SENSORS.map(async s=>{
+    if(!s.address || !s.chart) return;
     const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
     if(!rows.length) return;
     const ordered = rows.slice().reverse();
-    seriesData[s.id] = ordered.map(r=>{
+    s.chart.data.labels = ordered.map(r=>
+      new Date(r.timestamp).toLocaleTimeString('en-GB', {
+        hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London'
+      })
+    );
+    s.chart.data.datasets[0].data = ordered.map(r=>{
       let v = parseFloat(r.value);
       if(typeof s.calibration==="number") v += s.calibration;
-      return { ts:r.timestamp, v:isNaN(v)?null:v };
+      return isNaN(v)?null:v;
     });
-    ordered.forEach(r=>allTimestamps.add(r.timestamp));
-  }));
 
-  // Build O(1) lookups AFTER seriesData is populated
-  const seriesMap = {};
-  Object.keys(seriesData).forEach(id => {
-    const m = new Map();
-    (seriesData[id] || []).forEach(r => m.set(r.ts, r.v));
-    seriesMap[id] = m;
-  });
-
-  // union axis for AVG only
-  const timestamps = Array.from(allTimestamps).sort((a,b)=>a-b);
-
-  SENSORS.forEach(s=>{
-    if(!s.chart) return;
-
-    if(s.id==="avg"){
-      const avgSeries = timestamps.map(ts=>{
-        const vals = SENSORS.filter(ss=>ss.address)
-          .map(ss => seriesMap[ss.id]?.get(ts) ?? null)
-          .filter(v => v!=null && isFinite(v));
-        if(!vals.length) return null;
-        return vals.reduce((a,b)=>a+b,0)/vals.length;
-      });
-      s.chart.data.labels = timestamps.map(t =>
-        new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'}));
-      s.chart.data.datasets[0].data = avgSeries;
-      s.chart.data.datasets[0].fill = false;
-      s.chart.data.datasets[0].backgroundColor = 'transparent';
-    } else if (s.address){
-      const rows = seriesData[s.id] || [];
-      s.chart.data.labels = rows.map(r =>
-        new Date(r.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'}));
-      s.chart.data.datasets[0].data = rows.map(r => r.v);
-      s.chart.data.datasets[0].fill = false;
-      s.chart.data.datasets[0].backgroundColor = 'transparent';
-    }
-
-    // dynamic y-scale
-    const vals = s.chart.data.datasets[0].data.filter(v=>v!=null && isFinite(v));
-    if(vals.length){
-      const vmin=Math.min(...vals), vmax=Math.max(...vals);
-      const pad=Math.max(0.5,(vmax-vmin)*0.10);
-      s.chart.options.scales.y.min=vmin-pad;
-      s.chart.options.scales.y.max=vmax+pad;
-    }else{
+    // Dynamic y-scale (never clip top/bottom)
+    const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
+    if (vals.length) {
+      const vmin = Math.min(...vals);
+      const vmax = Math.max(...vals);
+      const pad  = Math.max(0.5, (vmax - vmin) * 0.10); // 10% or ≥0.5°
+      s.chart.options.scales.y.min = vmin - pad;
+      s.chart.options.scales.y.max = vmax + pad;
+    } else {
       delete s.chart.options.scales.y.min;
       delete s.chart.options.scales.y.max;
     }
-    s.chart.update();
-  });
 
-  // range banner
-  if(timestamps.length){
-    const minTs=timestamps[0], maxTs=timestamps[timestamps.length-1];
-    const rng=document.getElementById("chartRange");
-    if(rng){
-      const a=new Date(minTs), b=new Date(maxTs);
-      const same=a.toDateString()===b.toDateString();
-      const fmtD=d=>d.toLocaleDateString('en-GB',{year:'numeric',month:'short',day:'numeric',timeZone:'Europe/London'});
-      const fmtT=d=>d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'});
-      rng.textContent = same?`${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}`:`${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+    s.chart.update();
+  }));
+
+  // === NEW: Build & render "Chillrail Avg" using minute buckets; no forward-fill ===
+  try{
+    // 1) Gather per-sensor short series (again) for a clean union
+    const series = [];
+    for(const s of SENSORS){
+      if(!s.address) continue;
+      const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
+      if(!rows || !rows.length) continue;
+      const ordered = rows.slice().reverse();
+      const items = ordered.map(r=>{
+        let v = parseFloat(r.value);
+        if(typeof s.calibration==="number") v += s.calibration;
+        return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v)?null:v };
+      }).filter(o=>o.v!=null);
+      if(items.length) series.push(items);
     }
+
+    // 2) Union per-minute buckets
+    const bucketSet = new Set();
+    series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
+    const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
+
+    // 3) Fast minute->value maps
+    const maps = series.map(arr=>{
+      const m = new Map();
+      arr.forEach(o => m.set(o.ts, o.v));
+      return m;
+    });
+
+    // 4) Compute averages
+    const avgLabels = buckets.map(ts =>
+      new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'}));
+    const avgData   = buckets.map(ts=>{
+      const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
+      if(!vals.length) return null;
+      return vals.reduce((a,b)=>a+b,0)/vals.length;
+    });
+
+    // 5) Paint the preprended "avg" chart
+    const avgSlot = SENSORS.find(x=>x.id==="avg");
+    if(avgSlot && avgSlot.chart){
+      avgSlot.chart.data.labels = avgLabels;
+      avgSlot.chart.data.datasets[0].data = avgData;
+      avgSlot.chart.data.datasets[0].fill = false;
+      avgSlot.chart.data.datasets[0].backgroundColor = 'transparent';
+      const good = avgData.filter(v=>v!=null && isFinite(v));
+      if(good.length){
+        const vmin = Math.min(...good), vmax = Math.max(...good);
+        const pad  = Math.max(0.5,(vmax-vmin)*0.10);
+        avgSlot.chart.options.scales.y.min = vmin - pad;
+        avgSlot.chart.options.scales.y.max = vmax + pad;
+      }else{
+        delete avgSlot.chart.options.scales.y.min;
+        delete avgSlot.chart.options.scales.y.max;
+      }
+      avgSlot.chart.update();
+    }
+  }catch(e){
+    console.error("avg-build failed:", e);
+  }
+
+  // ORIGINAL range banner
+  let minTs = Infinity, maxTs = -Infinity;
+  await Promise.all(SENSORS.map(async s=>{
+    if(!s.address) return;
+    const peek = await fetchUbidotsVar(deviceID, s.address, Math.min(HIST_POINTS, 10));
+    if(!peek.length) return;
+    const newest = peek[0].timestamp;
+    const oldest = peek[peek.length-1].timestamp;
+    minTs = Math.min(minTs, oldest, newest);
+    maxTs = Math.max(maxTs, oldest, newest);
+  }));
+  const rng = document.getElementById("chartRange");
+  if (rng && isFinite(minTs) && isFinite(maxTs)) {
+    const a=new Date(minTs), b=new Date(maxTs);
+    const same = a.toDateString()===b.toDateString();
+    const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
+    const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+    rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
   }
 }
-// Part 3
+
 /* =================== Live panel + map =================== */
 let map, marker;
 function initMap(){
@@ -356,7 +345,6 @@ function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,speed,signal,volt,readings} = data;
   ts = ts || Date.now();
   const temps = SENSORS
-    .filter(s=>s.address) // exclude avg
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
     .filter(v=>v!=null && isFinite(v));
   const avg = temps.length ? (temps.reduce((a,b)=>a+b,0)/temps.length) : null;
@@ -368,13 +356,14 @@ function drawLive(data, SENSORS){
 
   document.getElementById("kpiTruck").textContent = displayName;
 
+  // London time zone for last-updated label
   const updateTime = new Date(ts).toLocaleTimeString('en-GB', {
     hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
   });
   document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
 
   const sigBars = signalBarsFrom(signal);
-  const sensorRows = SENSORS.filter(s=>s.address).map(s=>[
+  const sensorRows = SENSORS.map(s=>[
     s.label,
     s.address && readings[s.address]!=null ? fmt(readings[s.address] + (s.calibration||0),1) : ""
   ]);
@@ -388,7 +377,7 @@ function drawLive(data, SENSORS){
       (signal!=null?String(signal):"—")
       + ` <span class="sig ${sigBars>=4?'high':(sigBars>=2?'med':'low')}">`
       + `<i class="l1 ${sigBars>0?'on':''}"></i><i class="l2 ${sigBars>1?'on':''}"></i><i class="l3 ${sigBars>2?'on':''}"></i><i class="l4 ${sigBars>3?'on':''}"></i><i class="l5 ${sigBars>4?'on':''}"></i></span>`],
-   ["Volt (V)", fmt(volt,2)],
+    ["Volt (mV)", fmt(volt,2)],
   ].concat(sensorRows);
   document.getElementById("latest").innerHTML =
     rows.map(r=>`<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
@@ -399,7 +388,7 @@ function drawLive(data, SENSORS){
     }
   }
 }
-
+// Part 3
 async function poll(deviceID, SENSORS){
   const [gpsArr, iccArr] = await Promise.all([
     fetchUbidotsVar(deviceID, "gps"),
@@ -505,8 +494,7 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID){
   }
   return state;
 }
-// Part 4
-// ─────────── Part 4 (complete) ───────────
+
 async function renderMaintenanceBox(truckLabel, deviceID){
   const box = document.getElementById("maintenanceBox");
   if(!box){ onReady(()=>renderMaintenanceBox(truckLabel,deviceID)); return; }
@@ -671,9 +659,279 @@ async function downloadCsvForCurrentSelection(){
     if(expStatus) expStatus.textContent = "Failed to build CSV.";
   }
 }
+// Part 3
+async function poll(deviceID, SENSORS){
+  const [gpsArr, iccArr] = await Promise.all([
+    fetchUbidotsVar(deviceID, "gps"),
+    fetchUbidotsVar(deviceID, "iccid")
+  ]);
+  let tsGps   = gpsArr[0]?.timestamp || null;
+  let tsIccid = iccArr[0]?.timestamp || null;
+  let readings = {};
+  let tsSensorMax = null;
+  await Promise.all(SENSORS.filter(s => s.address).map(async s => {
+    const v = await fetchUbidotsVar(deviceID, s.address, 1);
+    if (v.length && v[0].value != null) {
+      readings[s.address] = parseFloat(v[0].value);
+      const tsVal = v[0]?.timestamp;
+      if (tsVal != null && (tsSensorMax == null || tsVal > tsSensorMax)) tsSensorMax = tsVal;
+    }
+  }));
+  const [signalArr, voltArr] = await Promise.all([
+    fetchUbidotsVar(deviceID, "signal", 1),
+    fetchUbidotsVar(deviceID, "volt", 1)
+  ]);
+  let tsSignal = signalArr[0]?.timestamp || null;
+  let tsVolt   = voltArr[0]?.timestamp || null;
+  let ts = Date.now();
+  const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => x != null);
+  if (candidates.length > 0) ts = Math.max(...candidates);
+  const lat = gpsArr[0]?.context?.lat;
+  const lon = gpsArr[0]?.context?.lng;
+  const speedVal = gpsArr[0]?.context?.speed;
+  const iccidVal = iccArr[0]?.value || null;
+  drawLive({
+    ts,
+    iccid: iccidVal,
+    lat,
+    lon,
+    speed: speedVal,
+    signal: signalArr[0]?.value || null,
+    volt: voltArr[0]?.value || null,
+    readings
+  }, SENSORS);
+}
 
+/* =================== Maintenance =================== */
+const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
+
+function showPromptModal(message, callback){
+  const old=document.getElementById("promptModal"); if(old) old.remove();
+  const m=document.createElement("div");
+  m.id="promptModal"; m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;z-index:70";
+  m.innerHTML=`<div style="background:#fff;border-radius:1rem;box-shadow:0 6px 24px rgba(0,0,0,.12);padding:1.5rem;min-width:280px;display:flex;gap:.75rem;flex-direction:column;align-items:center">
+    <div style="font-weight:600">${message}</div>
+    <input id="modalCodeInput" type="password" style="font-size:1rem;padding:.4rem .6rem;border-radius:.5rem;border:1px solid #cbd5e1;width:10rem" />
+    <div id="modalCodeError" style="color:#dc2626;font-weight:600;display:none"></div>
+    <div style="display:flex;gap:.5rem">
+      <button id="modalOkBtn" class="btn" style="padding:.4rem .8rem;background:#2563eb;color:#fff;border-radius:.5rem">OK</button>
+      <button id="modalCancelBtn" class="btn" style="padding:.4rem .8rem;background:#9ca3af;color:#fff;border-radius:.5rem">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  function close(){ m.remove() }
+  document.getElementById("modalCancelBtn").onclick=close;
+  document.getElementById("modalOkBtn").onclick=()=>{
+    const val=document.getElementById("modalCodeInput").value;
+    callback(val, close, msg=>{ const e=document.getElementById("modalCodeError"); e.textContent=msg; e.style.display="block"; });
+  };
+  setTimeout(()=>document.getElementById("modalCodeInput").focus(),50);
+}
+
+function getMaintState(truckLabel){
+  const map = sensorMapConfig[truckLabel] || {};
+  return {
+    filterDays:  typeof map.filterDays  === "number" ? map.filterDays  : MAINTENANCE_DEFAULTS.filterDays,
+    serviceDays: typeof map.serviceDays === "number" ? map.serviceDays : MAINTENANCE_DEFAULTS.serviceDays,
+    lastDecrementDate: map.lastDecrementDate || null,
+  };
+}
+
+async function saveMaintState(truckLabel, maintObj){
+  sensorMapConfig[truckLabel] = sensorMapConfig[truckLabel] || {};
+  Object.assign(sensorMapConfig[truckLabel], maintObj);
+  await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?token='+UBIDOTS_ACCOUNT_TOKEN, {
+    method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ value:0, context:sensorMapConfig })
+  });
+}
+
+async function checkAndUpdateMaintCounters(truckLabel, deviceID){
+  const state = getMaintState(truckLabel);
+  const today = (new Date()).toISOString().slice(0,10);
+  if (state.lastDecrementDate === today) return state;
+  let hasActivity=false;
+  for(const s of SENSORS){
+    if(!s.address) continue;
+    const vals = await fetchUbidotsVar(deviceID, s.address, 1);
+    if (vals[0]?.timestamp) {
+      if (new Date(vals[0].timestamp).toISOString().slice(0,10) === today) { hasActivity=true; break; }
+    }
+  }
+  if (hasActivity) {
+    if (state.filterDays>0)  state.filterDays--;
+    if (state.serviceDays>0) state.serviceDays--;
+    state.lastDecrementDate = today;
+    await saveMaintState(truckLabel, state);
+  }
+  return state;
+}
+
+async function renderMaintenanceBox(truckLabel, deviceID){
+  const box = document.getElementById("maintenanceBox");
+  if(!box){ onReady(()=>renderMaintenanceBox(truckLabel,deviceID)); return; }
+  const state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
+  box.innerHTML = `
+    <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
+    <div class="space-y-4">
+      <div class="flex justify-between items-center">
+        <span><strong>Filter Replacement:</strong> ${state.filterDays} day${state.filterDays===1?"":"s"} to go</span>
+        <button id="resetFilterBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">Reset</button>
+      </div>
+      <div class="flex justify-between items-center">
+        <span><strong>Annual Service:</strong> ${state.serviceDays} day${state.serviceDays===1?"":"s"} to go</span>
+        <button id="resetServiceBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">Reset</button>
+      </div>
+    </div>`;
+  document.getElementById("resetFilterBtn").onclick = () =>
+    showPromptModal("Enter code to reset filter (60 days):", async (val, close, showError)=>{
+      if(val==="0000"){ await saveMaintState(truckLabel,{filterDays:60}); close(); renderMaintenanceBox(truckLabel,deviceID); }
+      else showError("Invalid code");
+    });
+  document.getElementById("resetServiceBtn").onclick = () =>
+    showPromptModal("Enter code to reset annual service (365 days):", async (val, close, showError)=>{
+      if(val==="8971"){ await saveMaintState(truckLabel,{serviceDays:365}); close(); renderMaintenanceBox(truckLabel,deviceID); }
+      else showError("Invalid code");
+    });
+}
+
+/* =================== CSV download =================== */
+async function fetchCsvRows(deviceID, varLabel, start, end){
+  try{
+    await ensureVarCache(deviceID);
+    const id = variableCache[deviceID][varLabel];
+    if(!id) return [];
+    let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${id}/values/?page_size=1000`;
+    if(start) url += `&start=${start}`;
+    if(end)   url += `&end=${end}`;
+    const res = await fetch(url, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
+    if(!res.ok) return [];
+    return (await res.json()).results||[];
+  }catch{ return []; }
+}
+
+// Build and download CSV for the selected device/date range
+async function downloadCsvForCurrentSelection(){
+  try{
+    const expStatus = document.getElementById('expStatus');
+    const startEl   = document.getElementById('start');
+    const endEl     = document.getElementById('end');
+    const devSel    = document.getElementById('deviceSelect');
+
+    if(!startEl || !endEl || !devSel){ return; }
+
+    const startStr = startEl.value; // "YYYY-MM-DD"
+    const endStr   = endEl.value;
+    if(!startStr || !endStr){
+      if(expStatus) expStatus.textContent = "Pick a start and end date.";
+      return;
+    }
+
+    // [start, end] in ms (end inclusive)
+    const startMs = new Date(startStr+"T00:00:00").getTime();
+    const endMs   = new Date(endStr+"T23:59:59.999").getTime();
+    if(isNaN(startMs) || isNaN(endMs) || endMs < startMs){
+      if(expStatus) expStatus.textContent = "Invalid date range.";
+      return;
+    }
+
+    // Resolve current device and its display name
+    const deviceLabel = devSel.value;
+    const deviceID    = __deviceMap?.[deviceLabel]?.id;
+    const displayName = getDisplayName(deviceLabel);
+    if(!deviceID){
+      if(expStatus) expStatus.textContent = "Device not found.";
+      return;
+    }
+
+    if(expStatus) expStatus.textContent = "Building CSV…";
+
+    // Columns: timestamp ISO, lat, lng, speed, signal, volt, then each temp sensor (by label)
+    const baseCols = ["timestamp", "lat", "lng", "speed", "signal", "volt"];
+    const sensorCols = SENSORS.filter(s => s.address).map(s => s.label || s.address);
+
+    // Fetch series
+    const [gpsRows, signalRows, voltRows] = await Promise.all([
+      fetchCsvRows(deviceID, "gps",    startMs, endMs),
+      fetchCsvRows(deviceID, "signal", startMs, endMs),
+      fetchCsvRows(deviceID, "volt",   startMs, endMs)
+    ]);
+
+    // Fetch temperature sensors
+    const tempSeries = {};
+    await Promise.all(SENSORS.filter(s => s.address).map(async s => {
+      const rows = await fetchCsvRows(deviceID, s.address, startMs, endMs);
+      tempSeries[s.label || s.address] = { rows, calibration: s.calibration||0 };
+    }));
+
+    // Merge by exact timestamp (ms)
+    const rowMap = new Map(); // ts -> object
+    function ensure(ts){ if(!rowMap.has(ts)) rowMap.set(ts, { timestamp: ts }); return rowMap.get(ts); }
+
+    gpsRows.forEach(r=>{
+      const o = ensure(r.timestamp);
+      o.lat   = r.context?.lat ?? null;
+      o.lng   = r.context?.lng ?? null;
+      o.speed = (typeof r.context?.speed === 'number') ? r.context.speed : null;
+    });
+    signalRows.forEach(r=>{ ensure(r.timestamp).signal = (typeof r.value === 'number') ? r.value : null; });
+    voltRows.forEach(r=>{ ensure(r.timestamp).volt   = (typeof r.value === 'number') ? r.value : null; });
+
+    Object.entries(tempSeries).forEach(([label, obj])=>{
+      obj.rows.forEach(r=>{
+        const o = ensure(r.timestamp);
+        let v = parseFloat(r.value);
+        if(!isNaN(v)) v += obj.calibration || 0;
+        o[label] = isNaN(v) ? null : v;
+      });
+    });
+
+    // Sort timestamps
+    const rows = Array.from(rowMap.values()).sort((a,b)=>a.timestamp-b.timestamp);
+
+    // CSV header
+    const headers = baseCols.concat(sensorCols);
+    const toISO = ts => new Date(ts).toISOString();
+
+    // CSV body
+    const csvLines = [];
+    csvLines.push(headers.join(','));
+    rows.forEach(o=>{
+      const line = [
+        toISO(o.timestamp),
+        o.lat ?? "",
+        o.lng ?? "",
+        (o.speed != null ? Number(o.speed).toFixed(1) : ""),
+        (o.signal!= null ? o.signal : ""),
+        (o.volt  != null ? o.volt   : "")
+      ];
+      sensorCols.forEach(lbl=>{
+        line.push(o[lbl] != null ? Number(o[lbl]).toFixed(2) : "");
+      });
+      csvLines.push(line.join(','));
+    });
+    const csv = csvLines.join('\n');
+
+    // Download (filename uses the *display* name)
+    const safeName = String(displayName).replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+    const fname = `${safeName}_${startStr}_to_${endStr}.csv`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    if(expStatus) expStatus.textContent = `Saved ${fname} (${rows.length} rows).`;
+  }catch(err){
+    console.error("downloadCsvForCurrentSelection error:", err);
+    const expStatus = document.getElementById('expStatus');
+    if(expStatus) expStatus.textContent = "Failed to build CSV.";
+  }
+}
+// part 4
 /* =================== Breadcrumb route drawing =================== */
-// Restored verbatim from your original
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   try{
     if(!map) initMap();
@@ -844,7 +1102,8 @@ function wireDateInputsCommit(){
         document.activeElement.blur();
       }
     }, { capture:true });
-        btn.onclick = downloadCsvForCurrentSelection;
+    // Wire the Download button
+    btn.onclick = downloadCsvForCurrentSelection;
   }
 }
 
@@ -861,23 +1120,48 @@ onReady(()=>{
 async function updateAll(){
   await fetchSensorMapMapping();
   const sensorMap = await fetchSensorMapConfig();
-  if (!sensorMap || !Object.keys(sensorMap).length) {
-  console.error("No devices available from Ubidots (v2.0 and v1.6).");
-  const charts = document.getElementById("charts");
-  if (charts) charts.innerHTML = "<div class='text-sm text-gray-600'>No devices found. Check API token/network.</div>";
-  return; // bail early to avoid “Device ID not found” noise
-}
   __deviceMap = sensorMap; // expose to CSV click handler
   buildDeviceDropdownFromConfig(sensorMap);
+
+  // If no devices available, stop here gracefully
+  if (!sensorMap || !Object.keys(sensorMap).length) {
+    console.error("No devices available from Ubidots.");
+    const charts = document.getElementById("charts");
+    if (charts) charts.innerHTML = "<div class='text-sm text-gray-600'>No devices found. Check API token/network.</div>";
+    return;
+  }
+
   const deviceLabel = document.getElementById("deviceSelect").value;
   const deviceID    = sensorMap[deviceLabel]?.id;
-  const isOnline    = (Math.floor(Date.now()/1000) - (sensorMap[deviceLabel]?.last_seen||0)) < 60;
+
+  // Online pill: use device last_seen; fallback to GPS latest timestamp if missing
+  let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
+  if (!lastSeenSec && deviceID) {
+    try {
+      await ensureVarCache(deviceID);
+      const gpsVarId = variableCache[deviceID]?.["gps"];
+      if (gpsVarId) {
+        const vs = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${gpsVarId}/values/?page_size=1`, {
+          headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+        });
+        if (vs.ok) {
+          const vr = await vs.json();
+          const ts = vr?.results?.[0]?.timestamp || 0;
+          if (ts) lastSeenSec = Math.floor(ts / 1000);
+        }
+      }
+    } catch(e) {
+      console.error("last_seen fallback (gps) failed:", e);
+    }
+  }
+  const isOnline    = (Math.floor(Date.now()/1000) - (lastSeenSec||0)) < 60;
   if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
   const pill = document.getElementById('deviceStatusPill');
   if (pill) {
-    const seen = sensorMap[deviceLabel]?.last_seen ? new Date(sensorMap[deviceLabel].last_seen*1000) : null;
+    const seen = lastSeenSec ? new Date(lastSeenSec*1000) : null;
     pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone:'Europe/London' })}` : '';
   }
+
   if (deviceID){
     variableCache = {};
     const liveDallas = await fetchDallasAddresses(deviceID);
@@ -893,4 +1177,3 @@ async function updateAll(){
   }
   wireRangeButtons();
 }
-
