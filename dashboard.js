@@ -876,76 +876,86 @@ function wireDateInputsCommit(){
 }
 
 /* =================== Main update loop =================== */
-onReady(()=>{
+onReady(() => {
   wireRangeButtons();
   wireDateInputsCommit();   // commit date instantly
 
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
-  document.getElementById("deviceSelect").addEventListener("change", updateAll);
+
+  const sel = document.getElementById("deviceSelect");
+  if (sel) sel.addEventListener("change", updateAll);
 });
 
 async function updateAll(){
-  await fetchSensorMapMapping();
-  const sensorMap = await fetchSensorMapConfig();
-  __deviceMap = sensorMap; // expose to CSV click handler
-  buildDeviceDropdownFromConfig(sensorMap);
+  try{
+    await fetchSensorMapMapping();
+    const sensorMap = await fetchSensorMapConfig();
+    __deviceMap = sensorMap; // expose to CSV click handler
+    buildDeviceDropdownFromConfig(sensorMap);
 
-  // If no devices available, stop here gracefully
-  if (!sensorMap || !Object.keys(sensorMap).length) {
-    console.error("No devices available from Ubidots.");
-    const charts = document.getElementById("charts");
-    if (charts) charts.innerHTML = "<div class='text-sm text-gray-600'>No devices found. Check API token/network.</div>";
-    return;
-  }
-
-  const deviceLabel = document.getElementById("deviceSelect").value;
-  const deviceID    = sensorMap[deviceLabel]?.id;
-
-  // Online pill: use device last_seen; fallback to freshest of gps/signal/volt
-let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
-if (!lastSeenSec && deviceID) {
-  try {
-    await ensureVarCache(deviceID);
-    const labelsToCheck = ["gps", "signal", "volt"];
-    let bestTs = 0;
-    for (const lab of labelsToCheck) {
-      const varId = variableCache[deviceID]?.[lab];
-      if (!varId) continue;
-      const vs = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1`, {
-        headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-      });
-      if (!vs.ok) continue;
-      const vr = await vs.json();
-      const ts = vr?.results?.[0]?.timestamp || 0;
-      if (ts > bestTs) bestTs = ts;
+    // If no devices available, stop here gracefully
+    if (!sensorMap || !Object.keys(sensorMap).length) {
+      console.error("No devices available from Ubidots.");
+      const charts = document.getElementById("charts");
+      if (charts) charts.innerHTML = "<div class='text-sm text-gray-600'>No devices found. Check API token/network.</div>";
+      return;
     }
-    if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
-  } catch(e) {
-    console.error("last_seen fallback failed:", e);
+
+    const sel = document.getElementById("deviceSelect");
+    const deviceLabel = sel ? sel.value : Object.keys(sensorMap)[0];
+    const deviceID    = sensorMap[deviceLabel]?.id;
+
+    // Online pill: use device last_seen; fallback to freshest of gps/signal/volt
+    let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
+    if (!lastSeenSec && deviceID) {
+      try {
+        await ensureVarCache(deviceID);
+        const labelsToCheck = ["gps", "signal", "volt"];
+        let bestTs = 0;
+        for (const lab of labelsToCheck) {
+          const varId = variableCache[deviceID]?.[lab];
+          if (!varId) continue;
+          const vs = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1`, {
+            headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+          });
+          if (!vs.ok) continue;
+          const vr = await vs.json();
+          const ts = vr?.results?.[0]?.timestamp || 0;
+          if (ts > bestTs) bestTs = ts;
+        }
+        if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
+      } catch(e) {
+        console.error("last_seen fallback failed:", e);
+      }
+    }
+    const isOnline = (Math.floor(Date.now()/1000) - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
+
+    if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
+    const pill = document.getElementById('deviceStatusPill');
+    if (pill) {
+      const seen = lastSeenSec ? new Date(lastSeenSec*1000) : null;
+      pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone:'Europe/London' })}` : '';
+    }
+
+    if (deviceID){
+      variableCache = {};
+      const liveDallas = await fetchDallasAddresses(deviceID);
+      SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMap);
+      initCharts(SENSORS);
+      await updateCharts(deviceID, SENSORS);
+      if(!map) initMap();
+      await poll(deviceID, SENSORS);
+      await renderMaintenanceBox(deviceLabel, deviceID);
+      await updateBreadcrumbs(deviceID, selectedRangeMinutes);
+    }else{
+      console.error("Device ID not found for", deviceLabel);
+    }
+
+    wireRangeButtons();
+  }catch(err){
+    console.error("updateAll fatal error:", err);
   }
 }
-const isOnline = (Math.floor(Date.now()/1000) - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
+// EOF
 
-  if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
-  const pill = document.getElementById('deviceStatusPill');
-  if (pill) {
-    const seen = lastSeenSec ? new Date(lastSeenSec*1000) : null;
-    pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone:'Europe/London' })}` : '';
-  }
-
-  if (deviceID){
-    variableCache = {};
-    const liveDallas = await fetchDallasAddresses(deviceID);
-    SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMap);
-    initCharts(SENSORS);
-    await updateCharts(deviceID, SENSORS);
-    if(!map) initMap();
-    await poll(deviceID, SENSORS);
-    await renderMaintenanceBox(deviceLabel, deviceID);
-    await updateBreadcrumbs(deviceID, selectedRangeMinutes);
-  }else{
-    console.error("Device ID not found for", deviceLabel);
-  }
-  wireRangeButtons();
-}
