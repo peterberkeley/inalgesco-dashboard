@@ -987,15 +987,13 @@ if (pill) {
   pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: 'Europe/London' })}` : "";
 }
 
-// Also update the selected dropdown option text to reflect the computed status
+// Update the selected dropdown option text using the current display name
 const dd = document.getElementById("deviceSelect");
 if (dd && dd.selectedIndex >= 0) {
   const opt = dd.options[dd.selectedIndex];
-  // strip any existing dot and status suffix, then re-print with current state
-  const noDot = opt.text.replace(/^(\u{1F7E2}|⚪️)\s*/u, "");
-  const noSuffix = noDot.replace(/\s\((Online|Offline)\)$/i, "");
-  opt.text = `${isOnline ? "🟢" : "⚪️"} ${noSuffix} (${isOnline ? "Online" : "Offline"})`;
+  opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
 }
+
 
     // 6) Render everything for the selected device
     if (deviceID){
