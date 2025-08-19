@@ -362,8 +362,17 @@ function drawLive(data, SENSORS){
     hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
   });
   document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
-
-  const sigBars = signalBarsFrom(signal);
+const sigBars = signalBarsFrom(signal);
+const sigClass = sigBars >= 4 ? 'high' : (sigBars >= 2 ? 'med' : 'low');
+const sigHtml =
+  (signal != null ? String(signal) : "—") + " " +
+  `<span class="sig ${sigClass}">
+     <i class="l1 ${sigBars>0?'on':''}"></i>
+     <i class="l2 ${sigBars>1?'on':''}"></i>
+     <i class="l3 ${sigBars>2?'on':''}"></i>
+     <i class="l4 ${sigBars>3?'on':''}"></i>
+     <i class="l5 ${sigBars>4?'on':''}"></i>
+   </span>`;
 
 const sensorRows = SENSORS
   .filter(s => s.address && s.id !== "avg" && s.label !== "Chillrail Avg")
@@ -380,15 +389,14 @@ const rows = [
   ["Lat",   fmt(lat, 6)],
   ["Lon",   fmt(lon, 6)],
   ["Speed (km/h)", fmt(speed, 1)],
-  ["Signal", (signal != null ? String(signal) : "—") + " " + sigBars],
+  ["Signal", sigHtml],
+  ["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"],
   ...sensorRows
 ];
-      + ` <span class="sig ${sigBars>=4?'high':(sigBars>=2?'med':'low')}">`
-      + `<i class="l1 ${sigBars>0?'on':''}"></i><i class="l2 ${sigBars>1?'on':''}"></i><i class="l3 ${sigBars>2?'on':''}"></i><i class="l4 ${sigBars>3?'on':''}"></i><i class="l5 ${sigBars>4?'on':''}"></i></span>`],
-    ["Volt (mV)", fmt(volt,2)],
-  ].concat(sensorRows);
-  document.getElementById("latest").innerHTML =
-    rows.map(r=>`<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
+
+document.getElementById("latest").innerHTML =
+  rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
+
   if(lat!=null && lon!=null && isFinite(lat) && isFinite(lon)){
     marker.setLatLng([lat,lon]);
     if (map) {
