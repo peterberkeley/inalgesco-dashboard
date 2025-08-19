@@ -65,20 +65,42 @@ async function fetchSensorMapMapping(){
 
 /* =================== Devices (v2) =================== */
 async function fetchSensorMapConfig(){
+ async function fetchSensorMapConfig(){
   try{
-    const res = await fetch(`${UBIDOTS_BASE}/devices/`, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
-    if(!res.ok) throw new Error("Failed to fetch devices");
+    // Ask for enough items to cover all devices
+    const res = await fetch(`${UBIDOTS_BASE}/devices/?page_size=1000`, {
+      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if(!res.ok) throw new Error(`Failed to fetch devices (${res.status})`);
+
     const js = await res.json();
     const context = {};
-    js.results
-      .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
-      .forEach(dev => {
-        const name  = dev.name;
-        const label = dev.label || name.replace("skycafe-", "SkyCafé ");
-        const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
-        const id = dev.id || dev._id || dev["$id"];
-        context[name] = { label, last_seen: Math.floor(lastSeen/1000), id };
-      });
+
+    (js.results || []).forEach(dev => {
+      const label = (dev.label || "").trim();   // usually "skycafe-1"
+      const name  = (dev.name  || "").trim();   // friendly name
+      const key   = label || name;              // prefer label so keys are "skycafe-*"
+      if (!key) return;
+
+      // Accept devices whose LABEL starts with skycafe- OR whose NAME mentions skycafe
+      const isSkyCafe = (label && label.startsWith("skycafe-")) ||
+                        (name  && name.toLowerCase().includes("skycafe"));
+      if (!isSkyCafe) return;
+
+      // Ubidots returns various last-activity shapes across APIs
+      const lastStr = dev.lastActivity || dev.last_activity || dev.last_seen || dev.lastSeen || null;
+      const lastMs  = lastStr ? Date.parse(lastStr) : 0;
+
+      const id = dev.id || dev._id || dev["$id"];
+      const display = name || (label ? label.replace(/^skycafe-/i, "SkyCafé ") : key);
+
+      context[key] = {
+        label: display,                     // friendly display name (overridden later by aliases)
+        last_seen: Math.floor((lastMs||0)/1000),
+        id
+      };
+    });
+
     return context;
   }catch(err){
     console.error("Failed to fetch device list:", err);
