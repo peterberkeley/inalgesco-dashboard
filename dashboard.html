@@ -227,5 +227,54 @@ if (flightsBtn) {
 
   <div id="spinner"></div>
   <script src="dashboard.js" defer></script>
+  <script>
+window.addEventListener('DOMContentLoaded', () => {
+  const PASSWORD = "Skycafe8971";
+
+  const overlay = document.getElementById("auth-overlay");
+  const form    = document.getElementById("auth-form");
+  const pass    = document.getElementById("auth-pass");
+  const err     = document.getElementById("auth-error");
+
+  // If any element is missing, bail gracefully
+  if (!overlay || !form || !pass || !err) {
+    console.warn("[auth] Overlay elements not found — auth disabled.");
+    return;
+  }
+
+  function showLock(msg) {
+    overlay.style.display = "flex";
+    err.textContent = msg ? msg : "";
+    pass.value = "";
+    pass.focus();
+  }
+  function hideLock() {
+    overlay.style.display = "none";
+    // seed activity so admin can see you were recently active
+    localStorage.setItem("sc_last_activity", Date.now().toString());
+  }
+
+  // Always gate on initial page load
+  showLock();
+
+  // Handle submit
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (pass.value.trim() === PASSWORD) {
+      hideLock();
+    } else {
+      err.textContent = "Incorrect password";
+      pass.select();
+    }
+  });
+
+  // Track activity for admin idle timer
+  ["mousemove","keydown","touchstart","scroll","click"].forEach(evt =>
+    document.addEventListener(evt, () =>
+      localStorage.setItem("sc_last_activity", Date.now().toString())
+    , { passive:true })
+  );
+});
+</script>
 </body>
 </html>
