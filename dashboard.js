@@ -365,9 +365,9 @@ function drawLive(data, SENSORS){
 
   const sigBars = signalBarsFrom(signal);
  const sensorRows = SENSORS.filter(s=>s.address).map(s=>[
-    s.label,
-    s.address && readings[s.address]!=null ? fmt(readings[s.address] + (s.calibration||0),1) : ""
-  ]);
+    const sensorRows = SENSORS
+  .filter(s => s.address && s.id !== "avg" && s.label !== "Chillrail Avg")
+  .map(s => [
   const rows = [
     ["Local Time", new Date(ts).toLocaleString('en-GB', { timeZone:'Europe/London' })],
     ["ICCID", iccid || "—"],
