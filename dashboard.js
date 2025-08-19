@@ -3,7 +3,8 @@ let _maintenanceLogged = false;
 
 /* =================== Config =================== */
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
-const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
+const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";   // devices OK via v2.0
+const UBIDOTS_V1   = "https://industrial.api.ubidots.com/api/v1.6";   // variables must use v1.6 (CORS-safe)
 
 let REFRESH_INTERVAL = 60_000;      // poll live every 60s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
@@ -51,7 +52,7 @@ function getDisplayName(deviceLabel){
 /* =================== Admin mapping (context) =================== */
 async function fetchSensorMapMapping(){
   try{
-    const res = await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?page_size=1',
+    const res = await fetch(`${UBIDOTS_V1}/devices/config/sensor_map/values?page_size=1`,
       { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
     const js = await res.json();
     sensorMapConfig = (js.results?.[0]?.context) || {};
@@ -107,60 +108,29 @@ async function fetchSensorMapConfig(){
   }
 }
 
-
-function buildDeviceDropdownFromConfig(sensorMap){
-  const sel = document.getElementById("deviceSelect");
-  const prev = sel.value;
-  const now = Math.floor(Date.now()/1000);
-  sel.innerHTML = "";
-  const entries = Object.entries(sensorMap)
-    .sort(([a],[b]) => parseInt(a.replace("skycafe-",""),10)-parseInt(b.replace("skycafe-",""),10));
-  entries.forEach(([dev,obj])=>{
-   const isOnline = (now - (obj.last_seen||0)) < ONLINE_WINDOW_SEC;
-    const dot = isOnline ? "🟢" : "⚪️";
-    const opt = document.createElement("option");
-    opt.value = dev;
-    const displayLabel = getDisplayName(dev);
-    opt.text  = `${dot} ${displayLabel} (${isOnline?"Online":"Offline"})`;
-    sel.appendChild(opt);
-  });
-  let foundPrev=false;
-  for(let i=0; i<sel.options.length; i++){
-    if (sel.options[i].value === prev){
-      sel.selectedIndex = i;
-      foundPrev=true;
-      break;
-    }
-  }
-  if(!foundPrev){
-    for(let i=0; i<sel.options.length; i++){
-      if (sel.options[i].text.includes("Online")){
-        sel.selectedIndex = i;
-        foundPrev=true;
-        break;
-      }
-    }
-  }
-  if(!foundPrev && sel.options.length>0){
-    sel.selectedIndex = 0;
-  }
-}
-
-/* =================== Variables & values =================== */
+/* =================== Variables & values (v1.6) =================== */
+// Map deviceID -> { varLabel : varId } using v1.6 (CORS-safe)
 async function ensureVarCache(deviceID){
   if (variableCache[deviceID]) return;
-  const rs = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
-  if(!rs.ok){ variableCache[deviceID]={}; return; }
-  const jl = await rs.json();
-  variableCache[deviceID] = Object.fromEntries(jl.results.map(v=>[v.label, v.id]));
+  const url = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`;
+  try{
+    const rs = await fetch(url, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
+    if(!rs.ok){ variableCache[deviceID]={}; return; }
+    const jl = await rs.json();
+    variableCache[deviceID] = Object.fromEntries((jl.results||[]).map(v=>[v.label, v.id]));
+  }catch(e){
+    console.error("ensureVarCache", e);
+    variableCache[deviceID] = {};
+  }
 }
 
+// Read values using varId (v1.6)
 async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   try{
     await ensureVarCache(deviceID);
     const varId = variableCache[deviceID][varLabel];
     if(!varId) return [];
-    const vs = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=${limit}`,
+    const vs = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=${limit}`,
       { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
     if(!vs.ok) return [];
     return (await vs.json()).results || [];
@@ -170,17 +140,22 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   }
 }
 
-/* =================== Dallas addresses =================== */
+/* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    const res = await fetch(`${UBIDOTS_BASE}/variables/?device=${deviceID}`, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
+    const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
+      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
     if(!res.ok) return [];
     const js = await res.json();
-    return js.results
+    return (js.results || [])
       .filter(v=>/^[0-9a-fA-F]{16}$/.test(v.label))
       .map(v=>v.label)
       .sort();
-  }catch(e){ return []; }
+  }catch(e){
+    console.error("fetchDallasAddresses", e);
+    return [];
+  }
 }
 
 /* =================== Sensor slots =================== */
@@ -203,6 +178,7 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
 
   return slots;
 }
+
 //Part 2
 /* =================== Charts =================== */
 function initCharts(SENSORS){
