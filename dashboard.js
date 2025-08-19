@@ -65,7 +65,6 @@ async function fetchSensorMapMapping(){
 
 /* =================== Devices (v2) =================== */
 async function fetchSensorMapConfig(){
- async function fetchSensorMapConfig(){
   try{
     // Ask for enough items to cover all devices
     const res = await fetch(`${UBIDOTS_BASE}/devices/?page_size=1000`, {
@@ -107,6 +106,7 @@ async function fetchSensorMapConfig(){
     return {};
   }
 }
+
 
 function buildDeviceDropdownFromConfig(sensorMap){
   const sel = document.getElementById("deviceSelect");
