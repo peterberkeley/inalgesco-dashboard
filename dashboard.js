@@ -364,18 +364,25 @@ function drawLive(data, SENSORS){
   document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
 
   const sigBars = signalBarsFrom(signal);
- const sensorRows = SENSORS.filter(s=>s.address).map(s=>[
-    const sensorRows = SENSORS
+
+const sensorRows = SENSORS
   .filter(s => s.address && s.id !== "avg" && s.label !== "Chillrail Avg")
   .map(s => [
-  const rows = [
-    ["Local Time", new Date(ts).toLocaleString('en-GB', { timeZone:'Europe/London' })],
-    ["ICCID", iccid || "—"],
-    ["Lat",   fmt(lat,6)],
-    ["Lon",   fmt(lon,6)],
-    ["Speed (km/h)", fmt(speed,1)],
-    ["Signal",
-      (signal!=null?String(signal):"—")
+    s.label,
+    (s.address && readings[s.address] != null)
+      ? fmt(readings[s.address] + (s.calibration || 0), 1)
+      : ""
+  ]);
+
+const rows = [
+  ["Local Time", new Date(ts).toLocaleString('en-GB', { timeZone: "Europe/London" })],
+  ["ICCID", iccid || "—"],
+  ["Lat",   fmt(lat, 6)],
+  ["Lon",   fmt(lon, 6)],
+  ["Speed (km/h)", fmt(speed, 1)],
+  ["Signal", (signal != null ? String(signal) : "—") + " " + sigBars],
+  ...sensorRows
+];
       + ` <span class="sig ${sigBars>=4?'high':(sigBars>=2?'med':'low')}">`
       + `<i class="l1 ${sigBars>0?'on':''}"></i><i class="l2 ${sigBars>1?'on':''}"></i><i class="l3 ${sigBars>2?'on':''}"></i><i class="l4 ${sigBars>3?'on':''}"></i><i class="l5 ${sigBars>4?'on':''}"></i></span>`],
     ["Volt (mV)", fmt(volt,2)],
