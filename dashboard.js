@@ -364,7 +364,7 @@ function drawLive(data, SENSORS){
   document.getElementById("kpiSeen").textContent  = `last updated ${updateTime}`;
 
   const sigBars = signalBarsFrom(signal);
-  const sensorRows = SENSORS.map(s=>[
+ const sensorRows = SENSORS.filter(s=>s.address).map(s=>[
     s.label,
     s.address && readings[s.address]!=null ? fmt(readings[s.address] + (s.calibration||0),1) : ""
   ]);
