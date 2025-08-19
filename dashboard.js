@@ -951,37 +951,51 @@ async function updateAll(){
     const deviceLabel = document.getElementById("deviceSelect")?.value || Object.keys(sensorMap)[0];
     const deviceID    = sensorMap[deviceLabel]?.id;
 
-    // 5) Online pill: use device last_seen; fallback to freshest of gps/signal/volt (v1.6)
-    let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
-    if (!lastSeenSec && deviceID) {
-      try {
-        await ensureVarCache(deviceID);
-        const labelsToCheck = ["gps", "signal", "volt"];
-        let bestTs = 0;
-        for (const lab of labelsToCheck) {
-          const varId = variableCache[deviceID]?.[lab];
-          if (!varId) continue;
-          const vs = await fetch(`https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1`, {
-            headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-          });
-          if (!vs.ok) continue;
-          const vr = await vs.json();
-          const ts = vr?.results?.[0]?.timestamp || 0;
-          if (ts > bestTs) bestTs = ts;
-        }
-        if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
-      } catch(e) {
-        console.error("last_seen fallback failed:", e);
-      }
-    }
-    const isOnline = (Math.floor(Date.now()/1000) - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
+    // 5) Online pill: trust last_seen; if missing OR stale (>ONLINE_WINDOW_SEC) fall back to freshest of gps/signal/volt
+const nowSec = Math.floor(Date.now() / 1000);
+let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
+const stale = !lastSeenSec || (nowSec - lastSeenSec) > ONLINE_WINDOW_SEC;
 
-    if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
-    const pill = document.getElementById('deviceStatusPill');
-    if (pill) {
-      const seen = lastSeenSec ? new Date(lastSeenSec*1000) : null;
-      pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone:'Europe/London' })}` : '';
+if (stale && deviceID) {
+  try {
+    await ensureVarCache(deviceID);
+    const labelsToCheck = ["gps", "signal", "volt"];
+    let bestTs = 0;
+    for (const lab of labelsToCheck) {
+      const varId = variableCache[deviceID]?.[lab];
+      if (!varId) continue;
+      const vs = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
+        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+      });
+      if (!vs.ok) continue;
+      const vr = await vs.json();
+      const ts = vr?.results?.[0]?.timestamp || 0;
+      if (ts > bestTs) bestTs = ts;
     }
+    if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
+  } catch (e) {
+    console.error("last_seen fallback failed:", e);
+  }
+}
+
+const isOnline = (nowSec - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
+
+if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
+const pill = document.getElementById("deviceStatusPill");
+if (pill) {
+  const seen = lastSeenSec ? new Date(lastSeenSec * 1000) : null;
+  pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: 'Europe/London' })}` : "";
+}
+
+// Also update the selected dropdown option text to reflect the computed status
+const dd = document.getElementById("deviceSelect");
+if (dd && dd.selectedIndex >= 0) {
+  const opt = dd.options[dd.selectedIndex];
+  // strip any existing dot and status suffix, then re-print with current state
+  const noDot = opt.text.replace(/^(\u{1F7E2}|⚪️)\s*/u, "");
+  const noSuffix = noDot.replace(/\s\((Online|Offline)\)$/i, "");
+  opt.text = `${isOnline ? "🟢" : "⚪️"} ${noSuffix} (${isOnline ? "Online" : "Offline"})`;
+}
 
     // 6) Render everything for the selected device
     if (deviceID){
