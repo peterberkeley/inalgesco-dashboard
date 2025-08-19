@@ -999,7 +999,7 @@ if (dd && dd.selectedIndex >= 0) {
     if (deviceID){
       variableCache = {}; // clear per-device var cache
       const liveDallas = await fetchDallasAddresses(deviceID);
-      SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMap);
+  SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
       initCharts(SENSORS);
       await updateCharts(deviceID, SENSORS);
       if(!map) initMap();
