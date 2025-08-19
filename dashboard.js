@@ -900,12 +900,46 @@ onReady(() => {
 
 async function updateAll(){
   try{
+    // 1) Fetch mapping + devices
     await fetchSensorMapMapping();
     const sensorMap = await fetchSensorMapConfig();
     __deviceMap = sensorMap; // expose to CSV click handler
-    buildDeviceDropdownFromConfig(sensorMap);
 
-    // If no devices available, stop here gracefully
+    // 2) Build the device dropdown INLINE (no external dependency)
+    const sel = document.getElementById("deviceSelect");
+    if (sel) {
+      const prev = sel.value;
+      const now = Math.floor(Date.now()/1000);
+      sel.innerHTML = "";
+
+      const entries = Object.entries(sensorMap).sort(([a],[b])=>{
+        const na = parseInt(String(a).replace("skycafe-",""), 10);
+        const nb = parseInt(String(b).replace("skycafe-",""), 10);
+        return (isNaN(na)?9999:na) - (isNaN(nb)?9999:nb);
+      });
+
+      for (const [dev, obj] of entries){
+        const isOnline = (now - (obj.last_seen || 0)) < ONLINE_WINDOW_SEC;
+        const opt = document.createElement("option");
+        opt.value = dev;
+        opt.text  = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(dev)} (${isOnline ? "Online" : "Offline"})`;
+        sel.appendChild(opt);
+      }
+
+      // restore previous, else first Online, else first
+      let foundPrev = false;
+      for (let i=0;i<sel.options.length;i++){
+        if (sel.options[i].value === prev){ sel.selectedIndex = i; foundPrev = true; break; }
+      }
+      if (!foundPrev){
+        for (let i=0;i<sel.options.length;i++){
+          if (sel.options[i].text.includes("Online")){ sel.selectedIndex = i; foundPrev = true; break; }
+        }
+      }
+      if (!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
+    }
+
+    // 3) If still no devices, stop gracefully
     if (!sensorMap || !Object.keys(sensorMap).length) {
       console.error("No devices available from Ubidots.");
       const charts = document.getElementById("charts");
@@ -913,11 +947,11 @@ async function updateAll(){
       return;
     }
 
-    const sel = document.getElementById("deviceSelect");
-    const deviceLabel = sel ? sel.value : Object.keys(sensorMap)[0];
+    // 4) Resolve current device
+    const deviceLabel = document.getElementById("deviceSelect")?.value || Object.keys(sensorMap)[0];
     const deviceID    = sensorMap[deviceLabel]?.id;
 
-    // Online pill: use device last_seen; fallback to freshest of gps/signal/volt
+    // 5) Online pill: use device last_seen; fallback to freshest of gps/signal/volt (v1.6)
     let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
     if (!lastSeenSec && deviceID) {
       try {
@@ -949,8 +983,9 @@ async function updateAll(){
       pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone:'Europe/London' })}` : '';
     }
 
+    // 6) Render everything for the selected device
     if (deviceID){
-      variableCache = {};
+      variableCache = {}; // clear per-device var cache
       const liveDallas = await fetchDallasAddresses(deviceID);
       SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMap);
       initCharts(SENSORS);
@@ -959,14 +994,16 @@ async function updateAll(){
       await poll(deviceID, SENSORS);
       await renderMaintenanceBox(deviceLabel, deviceID);
       await updateBreadcrumbs(deviceID, selectedRangeMinutes);
-    }else{
+    } else {
       console.error("Device ID not found for", deviceLabel);
     }
 
+    // 7) Re-wire buttons in case DOM changed
     wireRangeButtons();
   }catch(err){
-    console.error("updateAll fatal error:", err);
+    console.error("updateAll fatal error (patched):", err);
   }
 }
 // EOF
+
 
