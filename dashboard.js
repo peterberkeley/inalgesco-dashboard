@@ -3,18 +3,18 @@ let _maintenanceLogged = false;
 
 /* =================== Config =================== */
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
-const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";   // devices OK via v2.0
-const UBIDOTS_V1   = "https://industrial.api.ubidots.com/api/v1.6";   // variables must use v1.6 (CORS-safe)
+const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";   // devices via v2.0
+const UBIDOTS_V1   = "https://industrial.api.ubidots.com/api/v1.6";   // variables via v1.6 (CORS-safe)
 
 let REFRESH_INTERVAL = 60_000;      // poll live every 60s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
-const ONLINE_WINDOW_SEC = 300;      // consider device online if seen within last 5 minutes
+const ONLINE_WINDOW_SEC = 300;      // online if seen within last 5 minutes
 
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981", "#f97316"];
 
 /* =================== State =================== */
 let SENSORS = [];                   // [{address,label,calibration,chart,col},...]
-let variableCache = {};             // per-device map: label -> varId
+let variableCache = {};             // per-device map: label -> varId (v1.6)
 let sensorMapConfig = {};           // admin mapping/config from Ubidots (context)
 let aliasMap = {};                  // friendly display names per truck label
 
@@ -64,10 +64,9 @@ async function fetchSensorMapMapping(){
   }
 }
 
-/* =================== Devices (v2) =================== */
+/* =================== Devices (v2.0) =================== */
 async function fetchSensorMapConfig(){
   try{
-    // Ask for enough items to cover all devices
     const res = await fetch(`${UBIDOTS_BASE}/devices/?page_size=1000`, {
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
@@ -95,7 +94,7 @@ async function fetchSensorMapConfig(){
       const display = name || (label ? label.replace(/^skycafe-/i, "SkyCafé ") : key);
 
       context[key] = {
-        label: display,                     // friendly display name (overridden later by aliases)
+        label: display,
         last_seen: Math.floor((lastMs||0)/1000),
         id
       };
@@ -107,6 +106,42 @@ async function fetchSensorMapConfig(){
     return {};
   }
 }
+
+/* =================== Device dropdown (GLOBAL) =================== */
+function buildDeviceDropdownFromConfig(sensorMap){
+  const sel = document.getElementById("deviceSelect");
+  if (!sel) return;
+  const prev = sel.value;
+  const now = Math.floor(Date.now()/1000);
+  sel.innerHTML = "";
+
+  const entries = Object.entries(sensorMap)
+    .sort(([a],[b]) => parseInt(a.replace("skycafe-",""),10)-parseInt(b.replace("skycafe-",""),10));
+
+  entries.forEach(([dev,obj])=>{
+    const isOnline = (now - (obj.last_seen||0)) < ONLINE_WINDOW_SEC;
+    const dot = isOnline ? "🟢" : "⚪️";
+    const opt = document.createElement("option");
+    opt.value = dev;
+    const displayLabel = getDisplayName(dev);
+    opt.text  = `${dot} ${displayLabel} (${isOnline?"Online":"Offline"})`;
+    sel.appendChild(opt);
+  });
+
+  // restore previous, else first Online, else first
+  let foundPrev=false;
+  for(let i=0; i<sel.options.length; i++){
+    if (sel.options[i].value === prev){ sel.selectedIndex = i; foundPrev=true; break; }
+  }
+  if(!foundPrev){
+    for(let i=0; i<sel.options.length; i++){
+      if (sel.options[i].text.includes("Online")){ sel.selectedIndex = i; foundPrev=true; break; }
+    }
+  }
+  if(!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
+}
+// ensure global visibility in Safari/strict modes
+window.buildDeviceDropdownFromConfig = buildDeviceDropdownFromConfig;
 
 /* =================== Variables & values (v1.6) =================== */
 // Map deviceID -> { varLabel : varId } using v1.6 (CORS-safe)
