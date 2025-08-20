@@ -962,15 +962,16 @@ if (stale && deviceID) {
     const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
       headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
-    if (res.ok) {
-      const js = await res.json();
-      let bestTs = 0;
-      for (const v of (js.results || [])) {
-        const t = v?.lastValue?.timestamp || 0;
-        if (t && t > bestTs) bestTs = t;
-      }
-      if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
-    }
+   if (res.ok) {
+  const js = await res.json();
+  let bestTs = 0;
+  for (const v of (js.results || [])) {
+    // Support both Ubidots response shapes
+    const t = (v?.lastValue?.timestamp ?? v?.last_value?.timestamp ?? 0);
+    if (t > bestTs) bestTs = t;
+  }
+  if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
+}
   } catch (e) {
     console.error("last_seen any-variable fallback failed:", e);
   }
