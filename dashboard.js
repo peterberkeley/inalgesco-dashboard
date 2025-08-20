@@ -951,30 +951,28 @@ async function updateAll(){
     const deviceLabel = document.getElementById("deviceSelect")?.value || Object.keys(sensorMap)[0];
     const deviceID    = sensorMap[deviceLabel]?.id;
 
-    // 5) Online pill: trust last_seen; if missing OR stale (>ONLINE_WINDOW_SEC) fall back to freshest of gps/signal/volt
+    // 5) Online pill: trust last_seen; if missing OR stale (>ONLINE_WINDOW_SEC) fall back to freshest of ANY variable (v1.6)
 const nowSec = Math.floor(Date.now() / 1000);
 let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
 const stale = !lastSeenSec || (nowSec - lastSeenSec) > ONLINE_WINDOW_SEC;
 
 if (stale && deviceID) {
   try {
-    await ensureVarCache(deviceID);
-    const labelsToCheck = ["gps", "signal", "volt"];
-    let bestTs = 0;
-    for (const lab of labelsToCheck) {
-      const varId = variableCache[deviceID]?.[lab];
-      if (!varId) continue;
-      const vs = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
-        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-      });
-      if (!vs.ok) continue;
-      const vr = await vs.json();
-      const ts = vr?.results?.[0]?.timestamp || 0;
-      if (ts > bestTs) bestTs = ts;
+    // Check ALL variables on the device and use the freshest lastValue timestamp
+    const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if (res.ok) {
+      const js = await res.json();
+      let bestTs = 0;
+      for (const v of (js.results || [])) {
+        const t = v?.lastValue?.timestamp || 0;
+        if (t && t > bestTs) bestTs = t;
+      }
+      if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
     }
-    if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
   } catch (e) {
-    console.error("last_seen fallback failed:", e);
+    console.error("last_seen any-variable fallback failed:", e);
   }
 }
 
@@ -994,12 +992,11 @@ if (dd && dd.selectedIndex >= 0) {
   opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
 }
 
-
     // 6) Render everything for the selected device
     if (deviceID){
       variableCache = {}; // clear per-device var cache
       const liveDallas = await fetchDallasAddresses(deviceID);
-  SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+ SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
       initCharts(SENSORS);
       await updateCharts(deviceID, SENSORS);
       if(!map) initMap();
