@@ -249,22 +249,40 @@ function pickHeartbeatLabels(deviceId, deviceLabel){
   }
 }
 
-/* =================== Sensor slots =================== */
 function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
-  const mapped   = SENSOR_MAP[deviceLabel]||{};
-  const adminMap = sensorMapConfig[deviceLabel]||{};
-  const addrs = [...liveDallas.slice(0,5)];
-  while(addrs.length<5) addrs.push(null);
+  const mapped   = SENSOR_MAP[deviceLabel] || {};
+  const adminMap = sensorMapConfig[deviceLabel] || {};
+  const isHex = (s) => /^[0-9a-fA-F]{16}$/.test(s);
 
-  const slots = addrs.map((addr,idx)=>{
-    if(!addr) return { id:`empty${idx}`, label:"", col:SENSOR_COLORS[idx], chart:null, address:null, calibration:0 };
-    const label = adminMap[addr]?.label?.trim() || mapped[addr]?.label?.trim() || addr;
-    const offset = typeof adminMap[addr]?.offset==="number" ? adminMap[addr].offset
-                 : typeof mapped[addr]?.offset==="number" ? mapped[addr].offset : 0;
-    return { id:addr, label, col:SENSOR_COLORS[idx], chart:null, address:addr, calibration:offset };
+  // Admin-mapped addresses first (so labels show), then any remaining live ones
+  const adminAddrs = Object.keys(adminMap).filter(isHex);
+  const ordered = Array.from(new Set([...adminAddrs, ...liveDallas]));
+
+  // Take first 5; pad with nulls if fewer
+  const addrs = ordered.slice(0, 5);
+  while (addrs.length < 5) addrs.push(null);
+
+  // Build slots (preserve calibration if present)
+  const slots = addrs.map((addr, idx) => {
+    if (!addr) {
+      return { id:`empty${idx}`, label:"", col:SENSOR_COLORS[idx], chart:null, address:null, calibration:0 };
+    }
+    const mapLab = (adminMap[addr]?.label ?? mapped[addr]?.label);
+    const mapOff =
+      (typeof adminMap[addr]?.offset === "number") ? adminMap[addr].offset :
+      (typeof mapped[addr]?.offset   === "number") ? mapped[addr].offset   : 0;
+
+    return {
+      id: addr,
+      label: (mapLab && String(mapLab).trim()) || addr,
+      col: SENSOR_COLORS[idx],
+      chart: null,
+      address: addr,
+      calibration: mapOff
+    };
   });
 
-  // Prepend synthetic average slot (new)
+  // Keep the synthetic average as the first chart, as before
   slots.unshift({ id:"avg", label:"Chillrail Avg", col:SENSOR_COLORS[5], chart:null, address:null, calibration:0 });
 
   return slots;
