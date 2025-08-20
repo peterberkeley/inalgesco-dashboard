@@ -188,11 +188,23 @@ async function fetchDallasAddresses(deviceID){
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if(!res.ok) return [];
+
     const js = await res.json();
-    return (js.results || [])
-      .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
+    // 1) Collect only 16-hex DS18B20 labels (in API order)
+    const labels = (js.results || [])
       .map(v => v.label)
-      .sort();
+      .filter(l => /^[0-9a-fA-F]{16}$/.test(l));
+
+    // 2) De-duplicate while preserving first-seen order
+    const seen = new Set();
+    const uniq = [];
+    for (const l of labels) {
+      if (!seen.has(l)) {
+        seen.add(l);
+        uniq.push(l);
+      }
+    }
+    return uniq;
   }catch(e){
     console.error("fetchDallasAddresses", e);
     return [];
