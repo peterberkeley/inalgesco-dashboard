@@ -153,7 +153,6 @@ function buildDeviceDropdownFromConfig(sensorMap){
 window.buildDeviceDropdownFromConfig = buildDeviceDropdownFromConfig;
 
 /* =================== Variables & values (v1.6) =================== */
-// Map deviceID -> { varLabel : varId } using v1.6 (CORS-safe)
 async function ensureVarCache(deviceID){
   if (variableCache[deviceID]) return;
   const url = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`;
@@ -167,8 +166,6 @@ async function ensureVarCache(deviceID){
     variableCache[deviceID] = {};
   }
 }
-
-// Read values using varId (v1.6)
 async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   try{
     await ensureVarCache(deviceID);
@@ -202,6 +199,28 @@ async function fetchDallasAddresses(deviceID){
   }
 }
 
+/* =================== Heartbeat labels resolver =================== */
+function pickHeartbeatLabels(deviceId, deviceLabel){
+  const labels = Object.keys(variableCache[deviceId] || {});
+  const pickFirst = (...cands) => cands.find(l => labels.includes(l));
+  const hb = [];
+
+  const radio = pickFirst("signal","rssi","csq");           if (radio) hb.push(radio);
+  const power = pickFirst("volt","vbatt","battery","batt"); if (power) hb.push(power);
+  const gps   = pickFirst("gps","position");                if (gps)   hb.push(gps);
+
+  if (!hb.length) {
+    const map = sensorMapConfig[deviceLabel] || {};
+    hb.push(
+      ...Object.keys(map)
+        .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
+        .slice(0, 2)
+    );
+  }
+  return hb;
+}
+
+/* =================== Sensor slots =================== */
 function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
   const mapped   = SENSOR_MAP[deviceLabel]||{};
   const adminMap = sensorMapConfig[deviceLabel]||{};
@@ -238,7 +257,6 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
 
   return slots;
 }
-
 //Part 2
 /* =================== Charts =================== */
 function initCharts(SENSORS){
