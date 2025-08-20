@@ -76,26 +76,39 @@ async function fetchSensorMapConfig(){
     const context = {};
 
     (js.results || []).forEach(dev => {
-      const label = (dev.label || "").trim();   // usually "skycafe-1"
-      const name  = (dev.name  || "").trim();   // friendly name
-      const key   = label || name;              // prefer label so keys are "skycafe-*"
+      const label = (dev.label || "").trim();
+      const name  = (dev.name  || "").trim();
+      const key   = label || name;
       if (!key) return;
 
-      // Accept devices whose LABEL starts with skycafe- OR whose NAME mentions skycafe
       const isSkyCafe = (label && label.startsWith("skycafe-")) ||
                         (name  && name.toLowerCase().includes("skycafe"));
       if (!isSkyCafe) return;
 
-      // Ubidots returns various last-activity shapes across APIs
-      const lastStr = dev.lastActivity || dev.last_activity || dev.last_seen || dev.lastSeen || null;
-      const lastMs  = lastStr ? Date.parse(lastStr) : 0;
+      // ---- robust last_seen parser (handles number or string; seconds or ms) ----
+      let last = dev.lastActivity ?? dev.last_activity ?? dev.last_seen ?? dev.lastSeen ?? null;
+      let lastMs = 0;
+
+      if (typeof last === "number") {
+        // treat >1e12 as ms; >1e9 as seconds; otherwise assume seconds
+        lastMs = last > 1e12 ? last : (last > 1e9 ? last * 1000 : last * 1000);
+      } else if (typeof last === "string" && last) {
+        const num = Number(last);
+        if (!Number.isNaN(num)) {
+          lastMs = num > 1e12 ? num : (num > 1e9 ? num * 1000 : num * 1000);
+        } else {
+          const parsed = Date.parse(last);
+          if (!Number.isNaN(parsed)) lastMs = parsed;
+        }
+      }
+      // --------------------------------------------------------------------------
 
       const id = dev.id || dev._id || dev["$id"];
       const display = name || (label ? label.replace(/^skycafe-/i, "SkyCafé ") : key);
 
       context[key] = {
         label: display,
-        last_seen: Math.floor((lastMs||0)/1000),
+        last_seen: Math.floor((lastMs || 0) / 1000),
         id
       };
     });
