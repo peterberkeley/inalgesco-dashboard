@@ -95,6 +95,22 @@
   #auth-card button { margin-top: 12px; width: 100%; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; }
   #auth-error { color: #ff9b9b; font-size: 12px; min-height: 16px; margin-top: 8px; }
 </style>
+
+  <style>
+  /* Force sensors area to expand; no inner scroll */
+  #latest, #latestWrap { max-height: none !important; overflow: visible !important; }
+
+  /* Slightly tighter rows so more fits naturally (optional but helps) */
+  #latest th{ text-align:left; padding:.35rem .5rem; font-weight:600; color:#334155; width:55% }
+  #latest td{ text-align:right; padding:.35rem .5rem; color:#0f172a; font-variant-numeric:tabular-nums }
+
+  /* Make the CSV card taller */
+  #csvCard { min-height: 260px; }
+</style>
+
+
+
+  
 </head>
 <body>
   <div id="auth-overlay" aria-modal="true" role="dialog">
@@ -181,7 +197,7 @@ if (flightsBtn) {
    <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
 <table id="latest" class="w-full text-sm"></table>
 </div>
-      <div class="card p-4">
+     <div id="csvCard" class="card p-4">
         <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
         <div class="flex flex-wrap items-center gap-2 mb-3">
           <label class="text-sm text-gray-600">Start</label>
