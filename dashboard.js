@@ -909,7 +909,7 @@ async function updateAll(){
     const sel = document.getElementById("deviceSelect");
     if (sel) {
       const prev = sel.value;
-      const now = Math.floor(Date.now()/1000);
+      const nowSecForBuild = Math.floor(Date.now()/1000);
       sel.innerHTML = "";
 
       const entries = Object.entries(sensorMap).sort(([a],[b])=>{
@@ -919,7 +919,7 @@ async function updateAll(){
       });
 
       for (const [dev, obj] of entries){
-        const isOnline = (now - (obj.last_seen || 0)) < ONLINE_WINDOW_SEC;
+        const isOnline = (nowSecForBuild - (obj.last_seen || 0)) < ONLINE_WINDOW_SEC;
         const opt = document.createElement("option");
         opt.value = dev;
         opt.text  = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(dev)} (${isOnline ? "Online" : "Offline"})`;
@@ -937,6 +937,38 @@ async function updateAll(){
         }
       }
       if (!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
+
+      // 2b) Re-evaluate dropdown statuses for stale devices using ANY variable recency
+      const nowMs = Date.now();
+      const nowSec = Math.floor(nowMs / 1000);
+      const updates = Array.from(sel.options).map(async (opt) => {
+        const label = opt.value;
+        const info  = sensorMap[label];
+        const id    = info?.id;
+        const last  = info?.last_seen || 0;
+        if (!id) return;
+        if ((nowSec - last) <= ONLINE_WINDOW_SEC) return; // already fresh
+
+        try {
+          const res = await fetch(`${UBIDOTS_V1}/variables/?device=${id}&page_size=50`, {
+            headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+          });
+          if (!res.ok) return;
+          const js = await res.json();
+          let best = 0;
+          for (const v of (js.results || [])) {
+            const t = (v?.lastValue?.timestamp ?? v?.last_value?.timestamp ?? 0);
+            if (t > best) best = t;
+          }
+          if (best) {
+            const isOn = ((nowMs - best) / 1000) < ONLINE_WINDOW_SEC;
+            opt.text = `${isOn ? "🟢" : "⚪️"} ${getDisplayName(label)} (${isOn ? "Online" : "Offline"})`;
+          }
+        } catch (e) {
+          console.warn("dropdown status refresh failed for", label, e);
+        }
+      });
+      await Promise.all(updates);
     }
 
     // 3) If still no devices, stop gracefully
@@ -952,52 +984,50 @@ async function updateAll(){
     const deviceID    = sensorMap[deviceLabel]?.id;
 
     // 5) Online pill: trust last_seen; if missing OR stale (>ONLINE_WINDOW_SEC) fall back to freshest of ANY variable (v1.6)
-const nowSec = Math.floor(Date.now() / 1000);
-let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
-const stale = !lastSeenSec || (nowSec - lastSeenSec) > ONLINE_WINDOW_SEC;
+    const nowSec = Math.floor(Date.now() / 1000);
+    let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
+    const stale = !lastSeenSec || (nowSec - lastSeenSec) > ONLINE_WINDOW_SEC;
 
-if (stale && deviceID) {
-  try {
-    // Check ALL variables on the device and use the freshest lastValue timestamp
-    const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-   if (res.ok) {
-  const js = await res.json();
-  let bestTs = 0;
-  for (const v of (js.results || [])) {
-    // Support both Ubidots response shapes
-    const t = (v?.lastValue?.timestamp ?? v?.last_value?.timestamp ?? 0);
-    if (t > bestTs) bestTs = t;
-  }
-  if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
-}
-  } catch (e) {
-    console.error("last_seen any-variable fallback failed:", e);
-  }
-}
+    if (stale && deviceID) {
+      try {
+        const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
+          headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+        });
+        if (res.ok) {
+          const js = await res.json();
+          let bestTs = 0;
+          for (const v of (js.results || [])) {
+            const t = (v?.lastValue?.timestamp ?? v?.last_value?.timestamp ?? 0);
+            if (t > bestTs) bestTs = t;
+          }
+          if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
+        }
+      } catch (e) {
+        console.error("last_seen any-variable fallback failed:", e);
+      }
+    }
 
-const isOnline = (nowSec - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
+    const isOnline = (nowSec - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
 
-if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
-const pill = document.getElementById("deviceStatusPill");
-if (pill) {
-  const seen = lastSeenSec ? new Date(lastSeenSec * 1000) : null;
-  pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: 'Europe/London' })}` : "";
-}
+    if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
+    const pill = document.getElementById("deviceStatusPill");
+    if (pill) {
+      const seen = lastSeenSec ? new Date(lastSeenSec * 1000) : null;
+      pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: 'Europe/London' })}` : "";
+    }
 
-// Update the selected dropdown option text using the current display name
-const dd = document.getElementById("deviceSelect");
-if (dd && dd.selectedIndex >= 0) {
-  const opt = dd.options[dd.selectedIndex];
-  opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
-}
+    // Update the selected dropdown option text using the current display name
+    const dd = document.getElementById("deviceSelect");
+    if (dd && dd.selectedIndex >= 0) {
+      const opt = dd.options[dd.selectedIndex];
+      opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
+    }
 
     // 6) Render everything for the selected device
     if (deviceID){
       variableCache = {}; // clear per-device var cache
       const liveDallas = await fetchDallasAddresses(deviceID);
- SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+      SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
       initCharts(SENSORS);
       await updateCharts(deviceID, SENSORS);
       if(!map) initMap();
@@ -1015,5 +1045,6 @@ if (dd && dd.selectedIndex >= 0) {
   }
 }
 // EOF
+
 
 
