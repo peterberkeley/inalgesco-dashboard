@@ -905,7 +905,7 @@ async function updateAll(){
     const sensorMap = await fetchSensorMapConfig();
     __deviceMap = sensorMap; // expose to CSV click handler
 
-    // 2) Build the device dropdown INLINE (no external dependency)
+    // 2) Build the device dropdown from Devices v2 last_seen ONLY (no bulk re-check)
     const sel = document.getElementById("deviceSelect");
     if (sel) {
       const prev = sel.value;
@@ -937,38 +937,6 @@ async function updateAll(){
         }
       }
       if (!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
-
-      // 2b) Re-evaluate dropdown statuses for stale devices using ANY variable recency
-      const nowMs = Date.now();
-      const nowSec = Math.floor(nowMs / 1000);
-      const updates = Array.from(sel.options).map(async (opt) => {
-        const label = opt.value;
-        const info  = sensorMap[label];
-        const id    = info?.id;
-        const last  = info?.last_seen || 0;
-        if (!id) return;
-        if ((nowSec - last) <= ONLINE_WINDOW_SEC) return; // already fresh
-
-        try {
-          const res = await fetch(`${UBIDOTS_V1}/variables/?device=${id}&page_size=50`, {
-            headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-          });
-          if (!res.ok) return;
-          const js = await res.json();
-          let best = 0;
-          for (const v of (js.results || [])) {
-            const t = (v?.lastValue?.timestamp ?? v?.last_value?.timestamp ?? 0);
-            if (t > best) best = t;
-          }
-          if (best) {
-            const isOn = ((nowMs - best) / 1000) < ONLINE_WINDOW_SEC;
-            opt.text = `${isOn ? "🟢" : "⚪️"} ${getDisplayName(label)} (${isOn ? "Online" : "Offline"})`;
-          }
-        } catch (e) {
-          console.warn("dropdown status refresh failed for", label, e);
-        }
-      });
-      await Promise.all(updates);
     }
 
     // 3) If still no devices, stop gracefully
@@ -983,32 +951,37 @@ async function updateAll(){
     const deviceLabel = document.getElementById("deviceSelect")?.value || Object.keys(sensorMap)[0];
     const deviceID    = sensorMap[deviceLabel]?.id;
 
-    // 5) Online pill: trust last_seen; if missing OR stale (>ONLINE_WINDOW_SEC) fall back to freshest of ANY variable (v1.6)
+    // 5) Pill Online logic:
+    //    Use Devices v2 last_seen; if stale/missing, FALLBACK to gps/signal/volt (v1.6 values) within the same 5-min window.
     const nowSec = Math.floor(Date.now() / 1000);
     let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
     const stale = !lastSeenSec || (nowSec - lastSeenSec) > ONLINE_WINDOW_SEC;
 
     if (stale && deviceID) {
       try {
-        const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
-          headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-        });
-        if (res.ok) {
-          const js = await res.json();
-          let bestTs = 0;
-          for (const v of (js.results || [])) {
-            const t = (v?.lastValue?.timestamp ?? v?.last_value?.timestamp ?? 0);
-            if (t > bestTs) bestTs = t;
-          }
-          if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
+        await ensureVarCache(deviceID);  // fills variableCache[deviceID]: label -> varId
+        const labelsToCheck = ["gps", "signal", "volt"];
+        let bestTs = 0;
+        for (const lab of labelsToCheck) {
+          const varId = variableCache[deviceID]?.[lab];
+          if (!varId) continue;
+          const vs = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
+            headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+          });
+          if (!vs.ok) continue;
+          const vr = await vs.json();
+          const ts = vr?.results?.[0]?.timestamp || 0;   // v1.6 values endpoint
+          if (ts > bestTs) bestTs = ts;
         }
+        if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
       } catch (e) {
-        console.error("last_seen any-variable fallback failed:", e);
+        console.error("last_seen fallback (gps/signal/volt) failed:", e);
       }
     }
 
     const isOnline = (nowSec - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
 
+    // Pill + tooltip
     if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
     const pill = document.getElementById("deviceStatusPill");
     if (pill) {
@@ -1016,7 +989,7 @@ async function updateAll(){
       pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: 'Europe/London' })}` : "";
     }
 
-    // Update the selected dropdown option text using the current display name
+    // Update the SELECTED dropdown option text to match the pill
     const dd = document.getElementById("deviceSelect");
     if (dd && dd.selectedIndex >= 0) {
       const opt = dd.options[dd.selectedIndex];
@@ -1025,7 +998,7 @@ async function updateAll(){
 
     // 6) Render everything for the selected device
     if (deviceID){
-      variableCache = {}; // clear per-device var cache
+      variableCache = {}; // clear per-device var cache (so per-variable reads are clean in the next steps)
       const liveDallas = await fetchDallasAddresses(deviceID);
       SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
       initCharts(SENSORS);
@@ -1045,6 +1018,7 @@ async function updateAll(){
   }
 }
 // EOF
+
 
 
 
