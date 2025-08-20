@@ -178,6 +178,31 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
+    /* =================== Heartbeat labels resolver =================== */
+/* Chooses the best-available heartbeat labels per device:
+   - radio:  signal | rssi | csq
+   - power:  volt   | vbatt | battery | batt
+   - gps:    gps    | position
+   If none found, falls back to first 2 DS18B20 addresses from mapping.
+*/
+function pickHeartbeatLabels(deviceId, deviceLabel){
+  const labels = Object.keys(variableCache[deviceId] || {});
+  const pickFirst = (...cands) => cands.find(l => labels.includes(l));
+  const hb = [];
+
+  const radio = pickFirst("signal","rssi","csq");           if (radio) hb.push(radio);
+  const power = pickFirst("volt","vbatt","battery","batt"); if (power) hb.push(power);
+  const gps   = pickFirst("gps","position");                if (gps)   hb.push(gps);
+
+  if (!hb.length) {
+    const map = sensorMapConfig[deviceLabel] || {};
+    hb.push(...Object.keys(map)
+      .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
+      .slice(0,2));
+  }
+  return hb;
+}
+
     const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
@@ -955,7 +980,7 @@ async function updateAll(){
         try {
           // Map labels -> varIds (v1.6)
           await ensureVarCache(id);
-          const hb = ["gps", "signal", "volt"];
+         const hb = pickHeartbeatLabels(id, label);
           let bestTs = 0;
 
           for (const lab of hb) {
@@ -1003,7 +1028,7 @@ async function updateAll(){
     if (stale && deviceID) {
       try {
         await ensureVarCache(deviceID);  // fills variableCache[deviceID]: label -> varId
-        const labelsToCheck = ["gps", "signal", "volt"];
+      const labelsToCheck = pickHeartbeatLabels(deviceID, deviceLabel);
         let bestTs = 0;
         for (const lab of labelsToCheck) {
           const varId = variableCache[deviceID]?.[lab];
