@@ -85,41 +85,19 @@ async function fetchSensorMapConfig(){
                         (name  && name.toLowerCase().includes("skycafe"));
       if (!isSkyCafe) return;
 
-      // --- robust last_seen parser (number or string; seconds or ms) ---
+      // robust last_seen parser (number or string; seconds or ms)
       let raw = dev.lastActivity ?? dev.last_activity ?? dev.last_seen ?? dev.lastSeen ?? null;
       let lastMs = 0;
-
       if (typeof raw === "number") {
-        lastMs = raw > 1e12 ? raw : raw * 1000;                // ms or sec
+        lastMs = raw > 1e12 ? raw : raw * 1000;
       } else if (typeof raw === "string" && raw) {
         const n = Number(raw);
-        if (!Number.isNaN(n)) {
-          lastMs = n > 1e12 ? n : n * 1000;                    // numeric string
-        } else {
-          const p = Date.parse(raw);                            // ISO string
+        if (!Number.isNaN(n)) lastMs = n > 1e12 ? n : n * 1000;
+        else {
+          const p = Date.parse(raw);
           if (!Number.isNaN(p)) lastMs = p;
         }
       }
-      // ---------------------------------------------------------------
-
-      const id = dev.id || dev._id || dev["$id"];
-      const display = name || (label ? label.replace(/^skycafe-/i, "SkyCafé ") : key);
-
-      context[key] = {
-        label: display,
-        last_seen: Math.floor((lastMs || 0) / 1000),
-        id
-      };
-    });
-
-    return context;
-  }catch(err){
-    console.error("Failed to fetch device list:", err);
-    return {};
-  }
-}
-
-      // --------------------------------------------------------------------------
 
       const id = dev.id || dev._id || dev["$id"];
       const display = name || (label ? label.replace(/^skycafe-/i, "SkyCafé ") : key);
@@ -209,39 +187,14 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    /* =================== Heartbeat labels resolver =================== */
-/* Chooses the best-available heartbeat labels per device:
-   - radio:  signal | rssi | csq
-   - power:  volt   | vbatt | battery | batt
-   - gps:    gps    | position
-   If none found, falls back to first 2 DS18B20 addresses from mapping.
-*/
-function pickHeartbeatLabels(deviceId, deviceLabel){
-  const labels = Object.keys(variableCache[deviceId] || {});
-  const pickFirst = (...cands) => cands.find(l => labels.includes(l));
-  const hb = [];
-
-  const radio = pickFirst("signal","rssi","csq");           if (radio) hb.push(radio);
-  const power = pickFirst("volt","vbatt","battery","batt"); if (power) hb.push(power);
-  const gps   = pickFirst("gps","position");                if (gps)   hb.push(gps);
-
-  if (!hb.length) {
-    const map = sensorMapConfig[deviceLabel] || {};
-    hb.push(...Object.keys(map)
-      .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
-      .slice(0,2));
-  }
-  return hb;
-}
-
     const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if(!res.ok) return [];
     const js = await res.json();
     return (js.results || [])
-      .filter(v=>/^[0-9a-fA-F]{16}$/.test(v.label))
-      .map(v=>v.label)
+      .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
+      .map(v => v.label)
       .sort();
   }catch(e){
     console.error("fetchDallasAddresses", e);
@@ -250,39 +203,37 @@ function pickHeartbeatLabels(deviceId, deviceLabel){
 }
 
 function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
-  const mapped   = SENSOR_MAP[deviceLabel] || {};
-  const adminMap = sensorMapConfig[deviceLabel] || {};
-  const isHex = (s) => /^[0-9a-fA-F]{16}$/.test(s);
+  const mapped   = SENSOR_MAP[deviceLabel]||{};
+  const adminMap = sensorMapConfig[deviceLabel]||{};
 
-  // Admin-mapped addresses first (so labels show), then any remaining live ones
-  const adminAddrs = Object.keys(adminMap).filter(isHex);
-  const ordered = Array.from(new Set([...adminAddrs, ...liveDallas]));
-
-  // Take first 5; pad with nulls if fewer
-  const addrs = ordered.slice(0, 5);
+  // Take the first 5 live DS18B20 addresses from Ubidots
+  const addrs = [...liveDallas.slice(0,5)];
   while (addrs.length < 5) addrs.push(null);
 
-  // Build slots (preserve calibration if present)
   const slots = addrs.map((addr, idx) => {
     if (!addr) {
       return { id:`empty${idx}`, label:"", col:SENSOR_COLORS[idx], chart:null, address:null, calibration:0 };
     }
-    const mapLab = (adminMap[addr]?.label ?? mapped[addr]?.label);
-    const mapOff =
+    const label =
+      (adminMap[addr]?.label && String(adminMap[addr].label).trim()) ||
+      (mapped[addr]?.label   && String(mapped[addr].label).trim())   ||
+      addr;
+
+    const offset =
       (typeof adminMap[addr]?.offset === "number") ? adminMap[addr].offset :
       (typeof mapped[addr]?.offset   === "number") ? mapped[addr].offset   : 0;
 
     return {
       id: addr,
-      label: (mapLab && String(mapLab).trim()) || addr,
+      label,
       col: SENSOR_COLORS[idx],
       chart: null,
       address: addr,
-      calibration: mapOff
+      calibration: offset
     };
   });
 
-  // Keep the synthetic average as the first chart, as before
+  // Keep synthetic average first
   slots.unshift({ id:"avg", label:"Chillrail Avg", col:SENSOR_COLORS[5], chart:null, address:null, calibration:0 });
 
   return slots;
