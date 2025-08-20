@@ -85,22 +85,40 @@ async function fetchSensorMapConfig(){
                         (name  && name.toLowerCase().includes("skycafe"));
       if (!isSkyCafe) return;
 
-      // ---- robust last_seen parser (handles number or string; seconds or ms) ----
-      let last = dev.lastActivity ?? dev.last_activity ?? dev.last_seen ?? dev.lastSeen ?? null;
+      // --- robust last_seen parser (number or string; seconds or ms) ---
+      let raw = dev.lastActivity ?? dev.last_activity ?? dev.last_seen ?? dev.lastSeen ?? null;
       let lastMs = 0;
 
-      if (typeof last === "number") {
-        // treat >1e12 as ms; >1e9 as seconds; otherwise assume seconds
-        lastMs = last > 1e12 ? last : (last > 1e9 ? last * 1000 : last * 1000);
-      } else if (typeof last === "string" && last) {
-        const num = Number(last);
-        if (!Number.isNaN(num)) {
-          lastMs = num > 1e12 ? num : (num > 1e9 ? num * 1000 : num * 1000);
+      if (typeof raw === "number") {
+        lastMs = raw > 1e12 ? raw : raw * 1000;                // ms or sec
+      } else if (typeof raw === "string" && raw) {
+        const n = Number(raw);
+        if (!Number.isNaN(n)) {
+          lastMs = n > 1e12 ? n : n * 1000;                    // numeric string
         } else {
-          const parsed = Date.parse(last);
-          if (!Number.isNaN(parsed)) lastMs = parsed;
+          const p = Date.parse(raw);                            // ISO string
+          if (!Number.isNaN(p)) lastMs = p;
         }
       }
+      // ---------------------------------------------------------------
+
+      const id = dev.id || dev._id || dev["$id"];
+      const display = name || (label ? label.replace(/^skycafe-/i, "SkyCafé ") : key);
+
+      context[key] = {
+        label: display,
+        last_seen: Math.floor((lastMs || 0) / 1000),
+        id
+      };
+    });
+
+    return context;
+  }catch(err){
+    console.error("Failed to fetch device list:", err);
+    return {};
+  }
+}
+
       // --------------------------------------------------------------------------
 
       const id = dev.id || dev._id || dev["$id"];
