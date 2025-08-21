@@ -33,7 +33,7 @@ let segmentMarkers = [];
 let legendControl = null;
 
 // holds the most recent devices context so the CSV click handler can resolve deviceID
-let __deviceMap = {};
+window.__deviceMap = {};
 
 /* =================== Helpers =================== */
 function onReady(fn){
@@ -964,7 +964,7 @@ async function updateAll(){
     // 1) Fetch mapping + devices
     await fetchSensorMapMapping();
     const sensorMap = await fetchSensorMapConfig();
-    __deviceMap = sensorMap; // expose to CSV click handler
+    window.__deviceMap = sensorMap; // expose to CSV click handler
 
     // 2) Build the device dropdown from Devices v2 last_seen ONLY (no bulk re-check)
     const sel = document.getElementById("deviceSelect");
@@ -1082,6 +1082,18 @@ async function updateAll(){
         console.error("last_seen fallback (gps/signal/volt) failed:", e);
       }
     }
+    // DEBUG: final lastSeenSec used for KPI (London)
+console.log('[lastSeen]', {
+  deviceLabel,
+  lastSeenSec,
+  london: lastSeenSec
+    ? new Date(lastSeenSec * 1000).toLocaleString('en-GB', { timeZone: 'Europe/London' })
+    : null,
+  nowSec,
+  ageSec: lastSeenSec ? (nowSec - lastSeenSec) : null,
+  from: stale ? 'fallback(v1.6 values)' : 'devices v2'
+});
+
 // DEBUG: final lastSeenSec used for KPI (London time)
 console.log('[lastSeen]', {
   deviceLabel,
