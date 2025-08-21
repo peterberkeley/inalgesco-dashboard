@@ -35,6 +35,9 @@
     .kpi .lab{ font-size:.72rem; letter-spacing:.02em; text-transform:uppercase; color:#6b7280; }
     .kpi .val{ font-weight:700; font-size:1.35rem; line-height:1.2 }
     .kpi .sub{ font-size:.72rem; color:#6b7280 }
+    /* Force 2-line layout for the Truck subline */
+#kpiSeen{ white-space:normal; min-height:2.6em; }
+#kpiSeen span{ display:block; }   /* second line always on its own row */
     /* Ensure the Truck subline can show 2 lines comfortably */
 #kpiSeen{ min-height: 2.4em; white-space: normal; }
 
