@@ -334,59 +334,32 @@ window.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('kpiSeen');
   if (!el) return;
 
-  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-  function getDateFromLocalTimeRow(){
-    const table = document.getElementById('latest');
-    if (!table) return null;
-    for (const tr of table.querySelectorAll('tr')){
-      const label = (tr.querySelector('th, td:first-child')?.textContent || '').trim().toLowerCase();
-      if (label.startsWith('local time')){
-        const val = (tr.querySelector('td:last-child')?.textContent || '').trim();
-        // Accept dd/mm/yyyy or yyyy-mm-dd etc.
-        const m = val.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
-        if (m) return m[1].replace(/-/g,'/');
-      }
-    }
-    return null;
-  }
-
-  function apply(){
+  function split(){
     const raw = (el.textContent || '').trim();
     if (!raw) return;
 
-    // Already two lines?
-    if (el.innerHTML.includes('<br')) return;
+    const m = raw.match(/\b\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?\b/i);
+    if (!m) return;
 
-    // Find a time like 14:05, 14:05:33, or 2:05 PM
-    const timeMatch = raw.match(/\b\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?\b/i);
-    if (!timeMatch) return;
+    const time = m[0];
+    const before = raw.slice(0, m.index).replace(/^(last\s*updated|updated|last\s*seen)\s*/i,'').replace(/[,\s]+$/,'').trim();
+    const date = before || new Date().toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
 
-    const time = timeMatch[0].trim();
-    let datePart = raw.slice(0, timeMatch.index).trim();
-    // Clean common prefixes
-    datePart = datePart.replace(/^(last\s*updated|updated|last\s*seen)\s*/i,'').replace(/[,\s]+$/,'').trim();
-
-    let date = datePart;
-    // If we didn't actually get a date (no digits), try the Local Time row
-    if (!/\d/.test(date)) {
-      date = getDateFromLocalTimeRow();
-    }
-    // Final fallback: today's date (local)
-    if (!date){
-      const d = new Date();
-      date = d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'2-digit' });
-    }
-
-    el.innerHTML = esc(date) + '<br><span class="text-gray-500">' + esc(time) + '</span>';
+    // Only rewrite when needed
+    const want = `${date}<br><span class="text-gray-500">${time}</span>`;
+    if (el.innerHTML !== want) el.innerHTML = want;
   }
 
-  const mo = new MutationObserver(apply);
-  mo.observe(el, { childList:true, characterData:true, subtree:true });
+  // React to any future rewrites
+  new MutationObserver(split).observe(el,{childList:true,characterData:true,subtree:true});
 
-  apply();
+  // Belt & braces: also retry periodically if something keeps stomping it
+  setInterval(split, 2000);
+
+  split();
 })();
 </script>
+
 
 </body>
 </html>
