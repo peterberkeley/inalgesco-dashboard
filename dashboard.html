@@ -35,6 +35,9 @@
     .kpi .lab{ font-size:.72rem; letter-spacing:.02em; text-transform:uppercase; color:#6b7280; }
     .kpi .val{ font-weight:700; font-size:1.35rem; line-height:1.2 }
     .kpi .sub{ font-size:.72rem; color:#6b7280 }
+    /* Ensure the Truck subline can show 2 lines comfortably */
+#kpiSeen{ min-height: 2.4em; white-space: normal; }
+
 
     /* Charts area grid */
     #charts{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:1rem }
@@ -325,5 +328,43 @@ window.addEventListener('DOMContentLoaded', () => {
   );
 });
 </script>
+<!-- Split #kpiSeen into Date (line 1) and Time (line 2) -->
+<script>
+(function(){
+  const el = document.getElementById('kpiSeen');
+  if(!el) return;
+
+  function apply(){
+    // Avoid re-processing if we've already inserted a <br>
+    if (el.innerHTML.includes('<br')) return;
+
+    const raw = (el.textContent || '').trim();
+    if (!raw) return;
+
+    // Look for a time like 14:05, 14:05:33, or 2:05 PM
+    const tRe = /\b\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?\b/i;
+    const m = tRe.exec(raw);
+    if (!m) return; // if no time is found, leave as-is
+
+    const time = m[0].trim();
+    let date = raw.slice(0, m.index).trim();
+
+    // Tidy common prefixes and trailing punctuation
+    date = date.replace(/^(updated|last\s*seen)\s*/i, '').replace(/[,\s]+$/,'').trim();
+
+    if (!date) return; // require a non-empty date
+
+    // Safe minimal HTML injection
+    el.innerHTML = date + '<br><span class="text-gray-500">' + time + '</span>';
+  }
+
+  // Re-apply whenever the app updates the text
+  const mo = new MutationObserver(apply);
+  mo.observe(el, { childList:true, characterData:true, subtree:true });
+
+  apply();
+})();
+</script>
 </body>
 </html>
+
