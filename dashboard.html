@@ -41,12 +41,45 @@
     .chart-box{ background:var(--color-card); border-radius:1rem; box-shadow:0 4px 16px rgba(15,23,42,.06); padding:1rem 1rem 1.25rem; height:360px; overflow:hidden; }
     .chart-box h3{ font-weight:700; margin:0 0 .5rem 0; font-size:1rem }
 
-    /* Info table */
-    #latest{ width:100%; border-radius:.75rem; overflow:hidden; }
-    #latest th{ text-align:left; padding:.45rem .6rem; font-weight:600; color:#334155; width:55% }
-    #latest td{ text-align:right; padding:.45rem .6rem; color:#0f172a; font-variant-numeric:tabular-nums }
+       /* Info table — compact, no wrap, tighter label/value gap */
+    #latest{
+      width:100%;
+      border-radius:.75rem;
+      overflow:hidden;
+      table-layout:fixed;                /* predictable column widths */
+    }
+    #latest th,
+    #latest td{
+      white-space:nowrap;                 /* prevent multi-line rows */
+      overflow:hidden;
+      text-overflow:ellipsis;
+      line-height:1.15;
+    }
+    #latest th{
+      text-align:left;
+      padding:.28rem .45rem;              /* tighter vertical spacing */
+      font-weight:600;
+      color:#334155;
+      width:45%;                          /* reduce label column from 55% -> 45% */
+    }
+    #latest td{
+      text-align:right;
+      padding:.28rem .45rem;
+      color:#0f172a;
+      font-variant-numeric:tabular-nums;
+      width:55%;
+    }
     #latest tr:nth-child(odd){ background:#f9fafb }
     #latest tr:nth-child(even){ background:#f3f4f6 }
+
+    /* Keep signal bars from inflating row height */
+    #latest td .sig{
+      display:inline-flex;
+      align-items:flex-end;
+      height:18px;                        /* matches tallest bar */
+      line-height:1;
+    }
+
 
     /* Phone-like signal bars */
     .sig{ display:inline-flex; gap:2px; vertical-align:middle }
@@ -105,9 +138,6 @@
   /* Force sensors area to expand; no inner scroll */
   #latest, #latestWrap { max-height: none !important; overflow: visible !important; }
 
-  /* Slightly tighter rows so more fits naturally (optional but helps) */
-  #latest th{ text-align:left; padding:.35rem .5rem; font-weight:600; color:#334155; width:55% }
-  #latest td{ text-align:right; padding:.35rem .5rem; color:#0f172a; font-variant-numeric:tabular-nums }
 
   /* Make the CSV card taller */
   #csvCard { min-height: 260px; }
