@@ -332,39 +332,62 @@ window.addEventListener('DOMContentLoaded', () => {
 <script>
 (function(){
   const el = document.getElementById('kpiSeen');
-  if(!el) return;
+  if (!el) return;
+
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function getDateFromLocalTimeRow(){
+    const table = document.getElementById('latest');
+    if (!table) return null;
+    for (const tr of table.querySelectorAll('tr')){
+      const label = (tr.querySelector('th, td:first-child')?.textContent || '').trim().toLowerCase();
+      if (label.startsWith('local time')){
+        const val = (tr.querySelector('td:last-child')?.textContent || '').trim();
+        // Accept dd/mm/yyyy or yyyy-mm-dd etc.
+        const m = val.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
+        if (m) return m[1].replace(/-/g,'/');
+      }
+    }
+    return null;
+  }
 
   function apply(){
-    // Avoid re-processing if we've already inserted a <br>
-    if (el.innerHTML.includes('<br')) return;
-
     const raw = (el.textContent || '').trim();
     if (!raw) return;
 
-    // Look for a time like 14:05, 14:05:33, or 2:05 PM
-    const tRe = /\b\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?\b/i;
-    const m = tRe.exec(raw);
-    if (!m) return; // if no time is found, leave as-is
+    // Already two lines?
+    if (el.innerHTML.includes('<br')) return;
 
-    const time = m[0].trim();
-    let date = raw.slice(0, m.index).trim();
+    // Find a time like 14:05, 14:05:33, or 2:05 PM
+    const timeMatch = raw.match(/\b\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?\b/i);
+    if (!timeMatch) return;
 
-    // Tidy common prefixes and trailing punctuation
-    date = date.replace(/^(updated|last\s*seen)\s*/i, '').replace(/[,\s]+$/,'').trim();
+    const time = timeMatch[0].trim();
+    let datePart = raw.slice(0, timeMatch.index).trim();
+    // Clean common prefixes
+    datePart = datePart.replace(/^(last\s*updated|updated|last\s*seen)\s*/i,'').replace(/[,\s]+$/,'').trim();
 
-    if (!date) return; // require a non-empty date
+    let date = datePart;
+    // If we didn't actually get a date (no digits), try the Local Time row
+    if (!/\d/.test(date)) {
+      date = getDateFromLocalTimeRow();
+    }
+    // Final fallback: today's date (local)
+    if (!date){
+      const d = new Date();
+      date = d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'2-digit' });
+    }
 
-    // Safe minimal HTML injection
-    el.innerHTML = date + '<br><span class="text-gray-500">' + time + '</span>';
+    el.innerHTML = esc(date) + '<br><span class="text-gray-500">' + esc(time) + '</span>';
   }
 
-  // Re-apply whenever the app updates the text
   const mo = new MutationObserver(apply);
   mo.observe(el, { childList:true, characterData:true, subtree:true });
 
   apply();
 })();
 </script>
+
 </body>
 </html>
 
