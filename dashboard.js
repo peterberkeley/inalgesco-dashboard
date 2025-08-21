@@ -475,8 +475,12 @@ const sensorRows = SENSORS
       : ""
   ]);
 
+// Build 2-line Local Time: line 1 = date, line 2 = time
+const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: "Europe/London" });
+const localTime = new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: "Europe/London" });
+
 const rows = [
-  ["Local Time", new Date(ts).toLocaleString('en-GB', { timeZone: "Europe/London" })],
+  ["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`],
   ["ICCID", iccid || "—"],
   ["Lat",   fmt(lat, 6)],
   ["Lon",   fmt(lon, 6)],
@@ -487,7 +491,11 @@ const rows = [
 ];
 
 document.getElementById("latest").innerHTML =
-  rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("");
+  rows.map(([lab,val]) => {
+    const wrap = (lab === "Local Time") ? ' style="white-space:normal"' : '';
+    return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
+  }).join("");
+
 
   if(lat!=null && lon!=null && isFinite(lat) && isFinite(lon)){
     marker.setLatLng([lat,lon]);
