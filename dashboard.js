@@ -1082,6 +1082,16 @@ async function updateAll(){
         console.error("last_seen fallback (gps/signal/volt) failed:", e);
       }
     }
+// DEBUG: final lastSeenSec used for KPI (London time)
+console.log('[lastSeen]', {
+  deviceLabel,
+  lastSeenSec,
+  london: lastSeenSec ? new Date(lastSeenSec * 1000)
+    .toLocaleString('en-GB', { timeZone: 'Europe/London' }) : null,
+  nowSec,
+  ageSec: lastSeenSec ? (nowSec - lastSeenSec) : null,
+  onlineWindow: ONLINE_WINDOW_SEC
+});
 
     const isOnline = (nowSec - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
 
