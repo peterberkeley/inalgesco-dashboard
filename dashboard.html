@@ -331,34 +331,50 @@ window.addEventListener('DOMContentLoaded', () => {
 <!-- Split #kpiSeen into Date (line 1) and Time (line 2) -->
 <script>
 (function(){
-  const el = document.getElementById('kpiSeen');
-  if (!el) return;
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-  function split(){
+  function getDateFromLocalTimeRow(){
+    const table = document.getElementById('latest');
+    if (!table) return null;
+    for (const tr of table.querySelectorAll('tr')){
+      const label = (tr.querySelector('th, td:first-child')?.textContent || '').trim().toLowerCase();
+      if (label.startsWith('local time')){
+        const val = (tr.querySelector('td:last-child')?.textContent || '').trim();
+        const m = val.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}|[A-Za-z]{3}\s\d{1,2},?\s\d{4})/);
+        if (m) return m[1].replace(/-/g,'/');
+      }
+    }
+    return null;
+  }
+
+  function splitNow(){
+    const el = document.getElementById('kpiSeen');
+    if (!el) return;
+
     const raw = (el.textContent || '').trim();
-    if (!raw) return;
-
     const m = raw.match(/\b\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?\b/i);
-    if (!m) return;
+    if (!m) return; // if no time, leave as-is
 
-    const time = m[0];
-    const before = raw.slice(0, m.index).replace(/^(last\s*updated|updated|last\s*seen)\s*/i,'').replace(/[,\s]+$/,'').trim();
-    const date = before || new Date().toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
+    const time = m[0].trim();
+    let date = raw.slice(0, m.index).replace(/^(last\s*updated|updated|last\s*seen)\s*/i,'').replace(/[,\s]+$/,'').trim();
+    if (!/\d/.test(date)) date = getDateFromLocalTimeRow() || new Date().toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
 
-    // Only rewrite when needed
-    const want = `${date}<br><span class="text-gray-500">${time}</span>`;
+    const want = esc(date) + '<br><span class="text-gray-500">' + esc(time) + '</span>';
     if (el.innerHTML !== want) el.innerHTML = want;
   }
 
-  // React to any future rewrites
-  new MutationObserver(split).observe(el,{childList:true,characterData:true,subtree:true});
+  // Watch the whole document so we still catch it if #kpiSeen is replaced.
+  const docObserver = new MutationObserver(() => splitNow());
+  docObserver.observe(document.documentElement, { childList:true, subtree:true, characterData:true });
 
-  // Belt & braces: also retry periodically if something keeps stomping it
-  setInterval(split, 2000);
+  // Also run periodically for extra safety during async updates.
+  let n = 0; const iv = setInterval(() => { splitNow(); if (++n > 15) clearInterval(iv); }, 500);
 
-  split();
+  // First run.
+  splitNow();
 })();
 </script>
+
 
 
 </body>
