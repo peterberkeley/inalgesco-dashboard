@@ -441,12 +441,12 @@ function drawLive(data, SENSORS){
 
   const devSel = document.getElementById("deviceSelect");
   const deviceKey = devSel.value;
-  const displayName = getDisplayName(deviceKey);
+  const const displayName = getDisplayName(deviceKey);
 
  document.getElementById("kpiTruck").textContent = displayName;
 
-// Two-line date/time (London)
-const dtLondon = new Date(ts);
+// KPI date/time is set in updateAll() from lastSeenSec to avoid per-sensor skew.
+
 const seenDate = dtLondon.toLocaleDateString('en-GB', { timeZone:'Europe/London' });
 const seenTime = dtLondon.toLocaleTimeString('en-GB', {
   hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
@@ -1104,6 +1104,20 @@ async function updateAll(){
     if (dd && dd.selectedIndex >= 0) {
       const opt = dd.options[dd.selectedIndex];
       opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
+    }
+    // Update KPI “last updated” using lastSeenSec (v2 Devices or heartbeat fallback)
+    {
+      const el = document.getElementById("kpiSeen");
+      if (el) {
+        if (lastSeenSec) {
+          const dt = new Date(lastSeenSec * 1000);
+          const dStr = dt.toLocaleDateString('en-GB', { timeZone:'Europe/London' });
+          const tStr = dt.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
+          el.innerHTML = `<div>${dStr}</div><div class="text-gray-500">${tStr}</div>`;
+        } else {
+          el.textContent = "—";
+        }
+      }
     }
 
     // 6) Render everything for the selected device
