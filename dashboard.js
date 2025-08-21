@@ -452,7 +452,7 @@ const seenTime = dtLondon.toLocaleTimeString('en-GB', {
   hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
 });
 const seenEl = document.getElementById("kpiSeen");
-if (seenEl) seenEl.innerHTML = `${seenDate}<br><span class="text-gray-500">${seenTime}</span>`;
+if (seenEl) seenEl.innerHTML = `${seenDate}<br><span class="text-gray-500">${seenDate} ${seenTime}</span>`;
 
 const sigBars = signalBarsFrom(signal);
 const sigClass = sigBars >= 4 ? 'high' : (sigBars >= 2 ? 'med' : 'low');
