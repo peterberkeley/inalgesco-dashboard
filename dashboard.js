@@ -458,8 +458,7 @@ function signalBarsFrom(value){
 }
 
 function drawLive(data, SENSORS){
-  let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
-
+ let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
 
   ts = ts || Date.now();
   const temps = SENSORS
@@ -597,7 +596,7 @@ async function poll(deviceID, SENSORS){
   }
 
 
-       drawLive({
+        drawLive({
     ts,
     iccid: iccArr[0]?.value ?? null,
     lat,
@@ -608,7 +607,6 @@ async function poll(deviceID, SENSORS){
     volt:  voltArr[0]?.value ?? null,
     readings
   }, SENSORS);
-
 
 
 }
