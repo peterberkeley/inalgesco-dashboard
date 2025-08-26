@@ -458,7 +458,8 @@ function signalBarsFrom(value){
 }
 
 function drawLive(data, SENSORS){
-  let {ts,iccid,lat,lon,speed,signal,volt,readings} = data;
+   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
+
   ts = ts || Date.now();
   const temps = SENSORS
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
@@ -500,16 +501,23 @@ const sensorRows = SENSORS
 const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: "Europe/London" });
 const localTime = new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: "Europe/London" });
 
-const rows = [
-  ["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`],
-  ["ICCID", iccid || "—"],
-  ["Lat",   fmt(lat, 6)],
-  ["Lon",   fmt(lon, 6)],
-  ["Speed (km/h)", fmt(speed, 1)],
-  ["Signal", sigHtml],
-  ["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"],
-  ...sensorRows
-];
+const rows = [];
+rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
+
+// If no fresh pin but we know the last GPS, add a stale note just under Local Time
+if ((lat==null || lon==null) && lastLat!=null && lastLon!=null) {
+  const staleNote = lastGpsAgeMin!=null ? `Last GPS (${lastGpsAgeMin} min ago)` : 'Last GPS (stale)';
+  rows.push(["Last GPS", `<span class="text-gray-500">${staleNote}</span>`]);
+}
+
+rows.push(["ICCID", iccid || "—"]);
+rows.push(["Lat",   fmt(lat, 6)]);
+rows.push(["Lon",   fmt(lon, 6)]);
+rows.push(["Speed (km/h)", fmt(speed, 1)]);
+rows.push(["Signal", sigHtml]);
+rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"]);
+rows.push(...sensorRows);
+
 
 document.getElementById("latest").innerHTML =
   rows.map(([lab,val]) => {
@@ -518,12 +526,16 @@ document.getElementById("latest").innerHTML =
   }).join("");
 
 
-  if(lat!=null && lon!=null && isFinite(lat) && isFinite(lon)){
+    if (lat!=null && lon!=null && isFinite(lat) && isFinite(lon)) {
+    // Fresh pin
     marker.setLatLng([lat,lon]);
-    if (map) {
-      map.setView([lat,lon], Math.max(map.getZoom(), 13));
-    }
+    if (map) map.setView([lat,lon], Math.max(map.getZoom(), 13));
+  } else if (lastLat!=null && lastLon!=null && isFinite(lastLat) && isFinite(lastLon)) {
+    // Last-known (stale) pin
+    marker.setLatLng([lastLat,lastLon]);
+    if (map) map.setView([lastLat,lastLon], Math.max(map.getZoom(), 12));
   }
+
 }
 
 // Part 3
@@ -564,26 +576,33 @@ async function poll(deviceID, SENSORS){
   const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => x != null);
     if (candidates.length > 0) ts = Math.max(...candidates);
 
-  // Use GPS only if fresh; otherwise leave null so the map won’t jump to stale coords
+    // Fresh location for live pin; also keep last known (may be stale)
   let lat = null, lon = null, speedVal = null;
+  let lastLat = null, lastLon = null, lastGpsAgeMin = null;
+
+  if (gpsArr[0]?.context) {
+    lastLat = gpsArr[0].context.lat;
+    lastLon = gpsArr[0].context.lng;
+    if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
+  }
   if (gpsIsFresh) {
-    lat      = gpsArr[0]?.context?.lat;
-    lon      = gpsArr[0]?.context?.lng;
+    lat      = lastLat;
+    lon      = lastLon;
     speedVal = gpsArr[0]?.context?.speed;
   }
 
-  const iccidVal = iccArr[0]?.value || null;
 
-  drawLive({
+    drawLive({
     ts,
     iccid: iccidVal,
-    lat,
-    lon,
+    lat, lon,
+    lastLat, lastLon, lastGpsAgeMin,
     speed: speedVal,
     signal: signalArr[0]?.value || null,
-    volt: voltArr[0]?.value || null,
+    volt:  voltArr[0]?.value || null,
     readings
   }, SENSORS);
+
 }
 
 /* =================== Maintenance =================== */
