@@ -798,13 +798,21 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       map.removeControl(legendControl);
       legendControl = null;
     }
-    const nowMs = Date.now();
+       const nowMs = Date.now();
     const startTime = nowMs - (rangeMinutes * 60 * 1000);
-    const gpsRows = await fetchCsvRows(deviceID, 'gps', startTime, nowMs);
+
+    // Try 'gps' first; if empty, fall back to 'position'
+    let gpsRows = await fetchCsvRows(deviceID, 'gps', startTime, nowMs);
+    if (!gpsRows.length) gpsRows = await fetchCsvRows(deviceID, 'position', startTime, nowMs);
+
     const gpsPoints = gpsRows
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
       .sort((a,b) => a.timestamp - b.timestamp);
-    if(!gpsPoints.length) return;
+    if(!gpsPoints.length){
+      // console.warn('[breadcrumbs] no GPS/position points in range');
+      return;
+    }
+
     const tempData = {};
     const tempAvg  = {};
     for(const s of SENSORS){
