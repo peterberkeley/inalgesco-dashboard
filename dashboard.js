@@ -501,14 +501,22 @@ document.getElementById("latest").innerHTML =
 
 // Part 3
 async function poll(deviceID, SENSORS){
-  const [gpsArr, iccArr] = await Promise.all([
-    fetchUbidotsVar(deviceID, "gps"),
-    fetchUbidotsVar(deviceID, "iccid")
-  ]);
-  let tsGps   = gpsArr[0]?.timestamp || null;
+  // Try 'gps' first; if empty, fall back to 'position'
+  let gpsArr = await fetchUbidotsVar(deviceID, "gps");
+  if (!gpsArr.length) gpsArr = await fetchUbidotsVar(deviceID, "position");
+
+  const iccArr = await fetchUbidotsVar(deviceID, "iccid");
+
+   let tsGps   = gpsArr[0]?.timestamp || null;
   let tsIccid = iccArr[0]?.timestamp || null;
   let readings = {};
   let tsSensorMax = null;
+
+  // ---------- GPS Freshness Gate (avoid plotting very old locations) ----------
+  const FRESH_GPS_MS = 15 * 60 * 1000;          // 15 minutes
+  const gpsIsFresh = tsGps && (Date.now() - tsGps) <= FRESH_GPS_MS;
+  // ---------------------------------------------------------------------------
+
   await Promise.all(SENSORS.filter(s => s.address).map(async s => {
     const v = await fetchUbidotsVar(deviceID, s.address, 1);
     if (v.length && v[0].value != null) {
@@ -525,11 +533,18 @@ async function poll(deviceID, SENSORS){
   let tsVolt   = voltArr[0]?.timestamp || null;
   let ts = Date.now();
   const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => x != null);
-  if (candidates.length > 0) ts = Math.max(...candidates);
-  const lat = gpsArr[0]?.context?.lat;
-  const lon = gpsArr[0]?.context?.lng;
-  const speedVal = gpsArr[0]?.context?.speed;
+    if (candidates.length > 0) ts = Math.max(...candidates);
+
+  // Use GPS only if fresh; otherwise leave null so the map won’t jump to stale coords
+  let lat = null, lon = null, speedVal = null;
+  if (gpsIsFresh) {
+    lat      = gpsArr[0]?.context?.lat;
+    lon      = gpsArr[0]?.context?.lng;
+    speedVal = gpsArr[0]?.context?.speed;
+  }
+
   const iccidVal = iccArr[0]?.value || null;
+
   drawLive({
     ts,
     iccid: iccidVal,
