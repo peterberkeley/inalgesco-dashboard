@@ -180,6 +180,33 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
     return [];
   }
 }
+/* =================== GPS variable auto-detect =================== */
+// deviceID -> chosen label (e.g., 'gps' / 'position' / 'location' / 'yellowboard.gps' / …)
+const gpsLabelCache = {};
+
+async function resolveGpsLabel(deviceID){
+  if (gpsLabelCache[deviceID] !== undefined) return gpsLabelCache[deviceID];
+
+  await ensureVarCache(deviceID);
+  const labels = Object.keys(variableCache[deviceID] || {});
+
+  // Try common names first, then scan everything
+  const preferred = ['gps','position','location'];
+  const order = preferred.concat(labels.filter(l => !preferred.includes(l)));
+
+  for (const lab of order){
+    const rows = await fetchUbidotsVar(deviceID, lab, 1);
+    const ctx  = rows?.[0]?.context;
+    if (ctx && ctx.lat != null && ctx.lng != null){
+      gpsLabelCache[deviceID] = lab;
+      console.log('[gps label]', deviceID, '→', lab);
+      return lab;
+    }
+  }
+  gpsLabelCache[deviceID] = null;
+  console.warn('[gps label] none found for device', deviceID, labels);
+  return null;
+}
 
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
@@ -501,14 +528,12 @@ document.getElementById("latest").innerHTML =
 
 // Part 3
 async function poll(deviceID, SENSORS){
-  // Try these GPS labels in order; take the first that returns rows
+  const gpsLabel = await resolveGpsLabel(deviceID);
   let gpsArr = [];
-  for (const label of ["gps", "position", "location"]) {
-    const rows = await fetchUbidotsVar(deviceID, label, 1);
-    if (rows && rows.length) { gpsArr = rows; break; }
-  }
+  if (gpsLabel) gpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
 
   const iccArr = await fetchUbidotsVar(deviceID, "iccid", 1);
+
 
 
    let tsGps   = gpsArr[0]?.timestamp || null;
@@ -709,11 +734,14 @@ async function downloadCsvForCurrentSelection(){
     const sensorCols = SENSORS.filter(s => s.address).map(s => s.label || s.address);
 
     // Fetch series
+       // Fetch series
+    const gpsLabel = await resolveGpsLabel(deviceID);
     const [gpsRows, signalRows, voltRows] = await Promise.all([
-      fetchCsvRows(deviceID, "gps",    startMs, endMs),
+      gpsLabel ? fetchCsvRows(deviceID, gpsLabel, startMs, endMs) : Promise.resolve([]),
       fetchCsvRows(deviceID, "signal", startMs, endMs),
       fetchCsvRows(deviceID, "volt",   startMs, endMs)
     ]);
+
 
     // Fetch temperature sensors
     const tempSeries = {};
@@ -802,15 +830,13 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       map.removeControl(legendControl);
       legendControl = null;
     }
-           const nowMs = Date.now();
+              const nowMs = Date.now();
     const startTime = nowMs - (rangeMinutes * 60 * 1000);
 
-    // Try these GPS labels in order; take the first that returns rows
+    const gpsLabel = await resolveGpsLabel(deviceID);
     let gpsRows = [];
-    for (const label of ['gps', 'position', 'location']) {
-      const rows = await fetchCsvRows(deviceID, label, startTime, nowMs);
-      if (rows && rows.length) { gpsRows = rows; break; }
-    }
+    if (gpsLabel) gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTime, nowMs);
+
 
     const gpsPoints = gpsRows
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
