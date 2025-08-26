@@ -501,11 +501,15 @@ document.getElementById("latest").innerHTML =
 
 // Part 3
 async function poll(deviceID, SENSORS){
-  // Try 'gps' first; if empty, fall back to 'position'
-  let gpsArr = await fetchUbidotsVar(deviceID, "gps");
-  if (!gpsArr.length) gpsArr = await fetchUbidotsVar(deviceID, "position");
+  // Try these GPS labels in order; take the first that returns rows
+  let gpsArr = [];
+  for (const label of ["gps", "position", "location"]) {
+    const rows = await fetchUbidotsVar(deviceID, label, 1);
+    if (rows && rows.length) { gpsArr = rows; break; }
+  }
 
-  const iccArr = await fetchUbidotsVar(deviceID, "iccid");
+  const iccArr = await fetchUbidotsVar(deviceID, "iccid", 1);
+
 
    let tsGps   = gpsArr[0]?.timestamp || null;
   let tsIccid = iccArr[0]?.timestamp || null;
@@ -798,20 +802,24 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       map.removeControl(legendControl);
       legendControl = null;
     }
-       const nowMs = Date.now();
+           const nowMs = Date.now();
     const startTime = nowMs - (rangeMinutes * 60 * 1000);
 
-    // Try 'gps' first; if empty, fall back to 'position'
-    let gpsRows = await fetchCsvRows(deviceID, 'gps', startTime, nowMs);
-    if (!gpsRows.length) gpsRows = await fetchCsvRows(deviceID, 'position', startTime, nowMs);
+    // Try these GPS labels in order; take the first that returns rows
+    let gpsRows = [];
+    for (const label of ['gps', 'position', 'location']) {
+      const rows = await fetchCsvRows(deviceID, label, startTime, nowMs);
+      if (rows && rows.length) { gpsRows = rows; break; }
+    }
 
     const gpsPoints = gpsRows
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
       .sort((a,b) => a.timestamp - b.timestamp);
     if(!gpsPoints.length){
-      // console.warn('[breadcrumbs] no GPS/position points in range');
+      // No usable points in the selected range
       return;
     }
+
 
     const tempData = {};
     const tempAvg  = {};
