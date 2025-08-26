@@ -458,7 +458,8 @@ function signalBarsFrom(value){
 }
 
 function drawLive(data, SENSORS){
-   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
+  let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
+
 
   ts = ts || Date.now();
   const temps = SENSORS
@@ -505,8 +506,9 @@ const rows = [];
 rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
 
 // If no fresh pin but we know the last GPS, add a stale note just under Local Time
-if ((lat==null || lon==null) && lastLat!=null && lastLon!=null) {
-  const staleNote = lastGpsAgeMin!=null ? `Last GPS (${lastGpsAgeMin} min ago)` : 'Last GPS (stale)';
+if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
+  const mins = (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)) ? lastGpsAgeMin : null;
+  const staleNote = mins != null ? `Last GPS (${mins} min ago)` : 'Last GPS (stale)';
   rows.push(["Last GPS", `<span class="text-gray-500">${staleNote}</span>`]);
 }
 
@@ -519,6 +521,7 @@ rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2
 rows.push(...sensorRows);
 
 
+
 document.getElementById("latest").innerHTML =
   rows.map(([lab,val]) => {
     const wrap = (lab === "Local Time") ? ' style="white-space:normal"' : '';
@@ -526,16 +529,18 @@ document.getElementById("latest").innerHTML =
   }).join("");
 
 
-    if (lat!=null && lon!=null && isFinite(lat) && isFinite(lon)) {
-    // Fresh pin
-    marker.setLatLng([lat,lon]);
-    if (map) map.setView([lat,lon], Math.max(map.getZoom(), 13));
-  } else if (lastLat!=null && lastLon!=null && isFinite(lastLat) && isFinite(lastLon)) {
-    // Last-known (stale) pin
-    marker.setLatLng([lastLat,lastLon]);
-    if (map) map.setView([lastLat,lastLon], Math.max(map.getZoom(), 12));
-  }
-
+    // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
+if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
+  // Fresh pin
+  marker.setLatLng([lat, lon]);
+  if (map) map.setView([lat, lon], Math.max(map.getZoom(), 13));
+} else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
+  // Last-known (stale) pin
+  marker.setLatLng([lastLat, lastLon]);
+  if (map) map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
+} else {
+  // No coords at all — keep current view (do not re-center)
+}
 }
 
 // Part 3
@@ -592,16 +597,19 @@ async function poll(deviceID, SENSORS){
   }
 
 
-    drawLive({
+       drawLive({
     ts,
-    iccid: iccidVal,
-    lat, lon,
+    iccid: iccArr[0]?.value ?? null,
+    lat,
+    lon,
     lastLat, lastLon, lastGpsAgeMin,
     speed: speedVal,
-    signal: signalArr[0]?.value || null,
-    volt:  voltArr[0]?.value || null,
+    signal: signalArr[0]?.value ?? null,
+    volt:  voltArr[0]?.value ?? null,
     readings
   }, SENSORS);
+
+
 
 }
 
