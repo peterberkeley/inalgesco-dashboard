@@ -207,6 +207,23 @@ async function resolveGpsLabel(deviceID){
   console.warn('[gps label] none found for device', deviceID, labels);
   return null;
 }
+// --- NEW: read Ubidots device.location (v2) for a device id ---
+async function fetchDeviceLocationV2(deviceID){
+  try{
+    const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/?fields=location`, {
+      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if(!r.ok) return null;
+    const j = await r.json();
+    const lat = j?.location?.lat;
+    const lng = j?.location?.lng;
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      return { lat, lon: lng };
+    }
+  }catch(e){ /* ignore */ }
+  return null;
+}
+
 
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
@@ -613,6 +630,18 @@ async function poll(deviceID, SENSORS){
     lat      = lastLat;
     lon      = lastLon;
     speedVal = gpsArr[0]?.context?.speed;
+  }
+  // --- NEW: prefer Ubidots device.location if present (most current) ---
+  const devLoc = await fetchDeviceLocationV2(deviceID);
+  if (devLoc) {
+    // Always keep last-known in case variable GPS is absent
+    if (lastLat == null || lastLon == null) {
+      lastLat = devLoc.lat; lastLon = devLoc.lon;
+    }
+    // If we don't have a fresh variable GPS point, use device.location for the live pin/link
+    if (lat == null || lon == null) {
+      lat = devLoc.lat; lon = devLoc.lon;
+    }
   }
 
 
