@@ -497,6 +497,27 @@ const sensorRows = SENSORS
       : ""
   ]);
 
+  // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
+const hasFresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
+const useLat = hasFresh
+  ? lat
+  : ((lastLat != null && isFinite(lastLat)) ? lastLat : null);
+const useLon = hasFresh
+  ? lon
+  : ((lastLon != null && isFinite(lastLon)) ? lastLon : null);
+
+let locationHtml = "—";
+if (useLat != null && useLon != null) {
+  const href = `https://maps.google.com/?q=${useLat},${useLon}`;
+  const label = `${Number(useLat).toFixed(6)}, ${Number(useLon).toFixed(6)}`;
+  const staleNote = hasFresh ? "" :
+    (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)
+      ? ` <span class="text-gray-500">(stale ${lastGpsAgeMin} min)</span>`
+      : ` <span class="text-gray-500">(stale)</span>`);
+  locationHtml = `<a href="${href}" target="_blank" rel="noopener">${label}</a>${staleNote}`;
+}
+
+
 // Build 2-line Local Time: line 1 = date, line 2 = time
 const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: "Europe/London" });
 const localTime = new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: "Europe/London" });
@@ -512,8 +533,7 @@ if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
 }
 
 rows.push(["ICCID", iccid || "—"]);
-rows.push(["Lat",   fmt(lat, 6)]);
-rows.push(["Lon",   fmt(lon, 6)]);
+rows.push(["Location", locationHtml]);
 rows.push(["Speed (km/h)", fmt(speed, 1)]);
 rows.push(["Signal", sigHtml]);
 rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"]);
