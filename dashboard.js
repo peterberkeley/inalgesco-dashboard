@@ -536,8 +536,9 @@ if (useLat != null && useLon != null) {
 
 
 // Build 2-line Local Time: line 1 = date, line 2 = time
-const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: "Europe/London" });
-const localTime = new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: "Europe/London" });
+const t = (window.__lastSeenMs != null && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : ts;
+const localDate = new Date(t).toLocaleDateString('en-GB', { timeZone: "Europe/London" });
+const localTime = new Date(t).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: "Europe/London" });
 
 const rows = [];
 rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
@@ -1282,6 +1283,7 @@ console.log('[lastSeen]', {
         }
       }
     }
+window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
     // 6) Render everything for the selected device
     if (deviceID){
