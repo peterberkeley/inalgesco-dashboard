@@ -48,6 +48,38 @@ function getDisplayName(deviceLabel){
       || (sensorMapConfig[deviceLabel] && sensorMapConfig[deviceLabel].label)
       || deviceLabel;
 }
+/* =================== Timezone helpers =================== */
+/* Rule:
+ * 1) If admin set sensorMapConfig[deviceLabel].tz (IANA), use it.
+ * 2) Else auto-lookup with tz-lookup (loaded once from unpkg).
+ * 3) Else fallback to 'Europe/London'.
+ */
+let __tzLoadPromise = null;
+function loadTzLookup(){
+  if (window.tzlookup) return Promise.resolve(true);
+  if (__tzLoadPromise) return __tzLoadPromise;
+  __tzLoadPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/tz-lookup@6.1.25/tz.js';
+    s.async = true;
+    s.onload = () => res(true);
+    s.onerror = (e) => { console.warn('tz-lookup load failed', e); res(false); };
+    document.head.appendChild(s);
+  });
+  return __tzLoadPromise;
+}
+async function resolveDeviceTz(deviceLabel, lat, lon){
+  const adminTz = sensorMapConfig?.[deviceLabel]?.tz;
+  if (adminTz && typeof adminTz === 'string') return adminTz;
+  if (typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon)){
+    try{
+      if (window.tzlookup || await loadTzLookup()){
+        return window.tzlookup(lat, lon); // returns IANA, DST-aware
+      }
+    }catch(e){ console.warn('tzlookup failed', e); }
+  }
+  return 'Europe/London';
+}
 
 /* =================== Admin mapping (context) =================== */
 async function fetchSensorMapMapping(){
@@ -537,8 +569,9 @@ if (useLat != null && useLon != null) {
 
 // Build 2-line Local Time: line 1 = date, line 2 = time
 const t = (window.__lastSeenMs != null && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : ts;
-const localDate = new Date(t).toLocaleDateString('en-GB', { timeZone: "Europe/London" });
-const localTime = new Date(t).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: "Europe/London" });
+const tz = data.tz || 'Europe/London';
+const localDate = new Date(t).toLocaleDateString('en-GB', { timeZone: tz });
+const localTime = new Date(t).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: tz });
 
 const rows = [];
 rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
@@ -661,6 +694,9 @@ async function poll(deviceID, SENSORS){
     }
   }
 
+  // Determine device IANA timezone (admin override > tz-lookup > London)
+  const deviceLabel = document.getElementById("deviceSelect")?.value || null;
+  const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
 
         drawLive({
     ts,
@@ -671,6 +707,7 @@ async function poll(deviceID, SENSORS){
     speed: speedVal,
     signal: signalArr[0]?.value ?? null,
     volt:  voltArr[0]?.value ?? null,
+           tz,
     readings
   }, SENSORS);
 
