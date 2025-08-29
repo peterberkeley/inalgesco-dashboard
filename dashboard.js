@@ -550,7 +550,23 @@ if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
 }
 
 rows.push(["ICCID", iccid || "—"]);
-rows.push(["Location", locationHtml]);
+const _fresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
+const _lat   = _fresh ? Number(lat)    : (isFinite(lastLat) ? Number(lastLat) : null);
+const _lon   = _fresh ? Number(lon)    : (isFinite(lastLon) ? Number(lastLon) : null);
+
+let _locationHtml = "—";
+if (_lat != null && _lon != null) {
+  const _href  = `https://maps.google.com/?q=${_lat},${_lon}`;
+  const _label = `${_lat.toFixed(6)}, ${_lon.toFixed(6)}`;
+  const _stale = _fresh
+    ? ""
+    : (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)
+        ? ` <span class="text-gray-500">(stale ${lastGpsAgeMin} min)</span>`
+        : ` <span class="text-gray-500">(stale)</span>`);
+  _locationHtml = `<a href="${_href}" target="_blank" rel="noopener">${_label}</a>${_stale}`;
+}
+
+rows.push(["Location", _locationHtml]);
 rows.push(["Speed (km/h)", fmt(speed, 1)]);
 rows.push(["Signal", sigHtml]);
 rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"]);
