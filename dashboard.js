@@ -1314,7 +1314,7 @@ console.log('[lastSeen]', {
           const dt = new Date(lastSeenSec * 1000);
           const dStr = dt.toLocaleDateString('en-GB', { timeZone:'Europe/London' });
           const tStr = dt.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
-          el.innerHTML = `<div>${dStr}</div><div class="text-gray-500">${tStr}</div>`;
+        el.innerHTML = `<div>${dStr}</div><div class="text-gray-500">${tStr} (London)</div>`;
         } else {
           el.textContent = "—";
         }
