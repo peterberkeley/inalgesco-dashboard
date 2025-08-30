@@ -256,25 +256,26 @@ async function resolveGpsLabel(deviceID){
   const preferred = ['gps','position','location'];
   const order = preferred.concat(labels.filter(l => !preferred.includes(l)));
 
-    // Choose the freshest label whose latest value includes lat/lng
-  let bestLab = null, bestTs = -Infinity;
-  for (const lab of order){
-    const rows = await fetchUbidotsVar(deviceID, lab, 1);
-    const r = rows?.[0];
-    const lat = r?.context?.lat, lng = r?.context?.lng;
-    const ts  = r?.timestamp || 0;
-    if (typeof lat === 'number' && typeof lng === 'number' && ts > bestTs) {
-      bestTs = ts; bestLab = lab;
-    }
+   // Choose the freshest label whose latest value includes lat/lng
+let bestLab = null, bestTs = -Infinity;
+for (const lab of order){
+  const rows = await fetchUbidotsVar(deviceID, lab, 1);
+  const r = rows?.[0];
+  const lat = r?.context?.lat, lng = r?.context?.lng;
+  const ts  = r?.timestamp || 0;
+  if (typeof lat === 'number' && typeof lng === 'number' && ts > bestTs) {
+    bestTs = ts; bestLab = lab;
   }
-  if (bestLab) {
-    gpsLabelCache[deviceID] = bestLab;
-    console.log('[gps label]', deviceID, '→', bestLab);
-    return bestLab;
-  }
-  gpsLabelCache[deviceID] = null;
-  console.warn('[gps label] none found for device', deviceID, labels);
-  return null;
+}
+if (bestLab) {
+  gpsLabelCache[deviceID] = bestLab;
+  console.log('[gps label]', deviceID, '→', bestLab);
+  return bestLab;
+}
+gpsLabelCache[deviceID] = null;
+console.warn('[gps label] none found for device', deviceID, labels);
+return null;
+
 
 }
 // --- NEW: read Ubidots device.location (v2) for a device id ---
@@ -721,18 +722,16 @@ async function poll(deviceID, SENSORS){
   }
   // --- NEW: prefer Ubidots device.location if present (most current) ---
   const devLoc = await fetchDeviceLocationV2(deviceID);
-   if (devLoc) {
-    // Always keep last-known in case variable GPS is absent
-    if (lastLat == null || lastLon == null) {
-      lastLat = devLoc.lat; lastLon = devLoc.lon;
-    }
-    // If the GPS variable is not fresh, prefer device.location for the live pin/link
-    if (!gpsIsFresh) {
-      lat = devLoc.lat; lon = devLoc.lon;
-    }
+  if (devLoc) {
+  // Always keep last-known in case variable GPS is absent
+  if (lastLat == null || lastLon == null) {
+    lastLat = devLoc.lat; lastLon = devLoc.lon;
   }
-
-
+  // If the GPS variable is not fresh, prefer device.location for the live pin/link
+  if (!gpsIsFresh) {
+    lat = devLoc.lat; lon = devLoc.lon;
+  }
+}
 
   // Determine device IANA timezone (admin override > tz-lookup > London)
   const deviceLabel = document.getElementById("deviceSelect")?.value || null;
