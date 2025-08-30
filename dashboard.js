@@ -1242,8 +1242,12 @@ async function updateAll(){
   const caps = variableCache[id] || {};
 
   // STRICT heartbeat: radio + power + GPS only (never Dallas/temperature addresses)
-  const hb = ['signal','rssi','csq','volt','vbatt','battery','batt','gps','position']
+   const hb = ['signal','rssi','csq','volt','vbatt','battery','batt']  // radio + power only
     .filter(l => l in caps);
+  // If no heartbeat labels exist for this device, mark Offline now
+  if (hb.length === 0) {
+    opt.text = `⚪️ ${getDisplayName(label)} (Offline)`;
+  }
 
   let bestTs = 0;
   for (const lab of hb) {
@@ -1259,9 +1263,9 @@ async function updateAll(){
   }
 
   if (bestTs) {
-    const isOn = (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
-    opt.text = `${isOn ? "🟢" : "⚪️"} ${getDisplayName(label)} (${isOn ? "Online" : "Offline"})`;
-  }
+    const ageOk = bestTs && (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
+  opt.text = `${ageOk ? "🟢" : "⚪️"} ${getDisplayName(label)} (${ageOk ? "Online" : "Offline"})`;
+
 
         } catch (e) {
           console.warn("dropdown re-check failed for", label, e);
