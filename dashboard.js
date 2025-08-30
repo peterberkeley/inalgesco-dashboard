@@ -1363,7 +1363,6 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
     // 6) Render everything for the selected device
     if (deviceID){
-      variableCache = {}; // clear per-device var cache (so per-variable reads are clean in the next steps)
       const liveDallas = await fetchDallasAddresses(deviceID);
       SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
       initCharts(SENSORS);
