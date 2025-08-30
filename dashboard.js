@@ -1372,6 +1372,7 @@ console.log('[lastSeen]', {
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
     // 6) Render everything for the selected device
+      delete variableCache[deviceID];  // rebuild freshest varId map for this device
     if (deviceID){
       const liveDallas = await fetchDallasAddresses(deviceID);
       SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
