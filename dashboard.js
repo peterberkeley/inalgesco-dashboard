@@ -192,7 +192,34 @@ async function ensureVarCache(deviceID){
     const rs = await fetch(url, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
     if(!rs.ok){ variableCache[deviceID]={}; return; }
     const jl = await rs.json();
-    variableCache[deviceID] = Object.fromEntries((jl.results||[]).map(v=>[v.label, v.id]));
+    // Group by label; if duplicates exist, pick the varId whose *latest value* has the newest timestamp.
+const groups = new Map(); // label -> [varId...]
+(jl.results || []).forEach(v => {
+  if (!groups.has(v.label)) groups.set(v.label, []);
+  groups.get(v.label).push(v.id);
+});
+
+// Build the map; only probe values for labels that actually have duplicates
+const map = {};
+for (const [label, ids] of groups.entries()) {
+  if (ids.length === 1) { map[label] = ids[0]; continue; }
+
+  // Duplicate label: choose freshest by latest value timestamp
+  let bestId = ids[0], bestTs = -Infinity;
+  for (const id of ids) {
+    const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if (!r.ok) continue;
+    const j = await r.json();
+    const ts = j?.results?.[0]?.timestamp || 0;
+    if (ts > bestTs) { bestTs = ts; bestId = id; }
+  }
+  map[label] = bestId;
+}
+
+variableCache[deviceID] = map;
+
   }catch(e){
     console.error("ensureVarCache", e);
     variableCache[deviceID] = {};
@@ -213,11 +240,15 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   }
 }
 /* =================== GPS variable auto-detect =================== */
-// deviceID -> chosen label (e.g., 'gps' / 'position' / 'location' / 'yellowboard.gps' / …)
+const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
 const gpsLabelCache = {};
 
 async function resolveGpsLabel(deviceID){
-  if (gpsLabelCache[deviceID] !== undefined) return gpsLabelCache[deviceID];
+  // Only return when a real label string is cached; re-scan if it was null
+  if (gpsLabelCache[deviceID] !== undefined && gpsLabelCache[deviceID] !== null) {
+    return gpsLabelCache[deviceID];
+  }
+
 
   await ensureVarCache(deviceID);
   const labels = Object.keys(variableCache[deviceID] || {});
@@ -689,10 +720,17 @@ async function poll(deviceID, SENSORS){
       lastLat = devLoc.lat; lastLon = devLoc.lon;
     }
     // If we don't have a fresh variable GPS point, use device.location for the live pin/link
-    if (lat == null || lon == null) {
-      lat = devLoc.lat; lon = devLoc.lon;
-    }
+  if (devLoc) {
+  // Always keep last-known in case variable GPS is absent
+  if (lastLat == null || lastLon == null) {
+    lastLat = devLoc.lat; lastLon = devLoc.lon;
   }
+  // If the GPS variable is not fresh, prefer device.location for the live pin/link
+  if (!gpsIsFresh) {
+    lat = devLoc.lat; lon = devLoc.lon;
+  }
+}
+
 
   // Determine device IANA timezone (admin override > tz-lookup > London)
   const deviceLabel = document.getElementById("deviceSelect")?.value || null;
