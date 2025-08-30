@@ -1237,28 +1237,32 @@ async function updateAll(){
         // Only re-check devices that look stale by v2 last_seen
         if ((nowSec - last) <= ONLINE_WINDOW_SEC) return;
 
-        try {
           // Map labels -> varIds (v1.6)
-          await ensureVarCache(id);
-         const hb = pickHeartbeatLabels(id, label);
-          let bestTs = 0;
+  await ensureVarCache(id);
+  const caps = variableCache[id] || {};
 
-          for (const lab of hb) {
-            const varId = variableCache[id]?.[lab];
-            if (!varId) continue;
-            const r = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
-              headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-            });
-            if (!r.ok) continue;
-            const j = await r.json();
-            const ts = j?.results?.[0]?.timestamp || 0; // v1.6 values endpoint
-            if (ts > bestTs) bestTs = ts;
-          }
+  // STRICT heartbeat: radio + power + GPS only (never Dallas/temperature addresses)
+  const hb = ['signal','rssi','csq','volt','vbatt','battery','batt','gps','position']
+    .filter(l => l in caps);
 
-          if (bestTs) {
-            const isOn = (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
-            opt.text = `${isOn ? "🟢" : "⚪️"} ${getDisplayName(label)} (${isOn ? "Online" : "Offline"})`;
-          }
+  let bestTs = 0;
+  for (const lab of hb) {
+    const varId = caps[lab];
+    if (!varId) continue;
+    const r = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if (!r.ok) continue;
+    const j = await r.json();
+    const ts = j?.results?.[0]?.timestamp || 0; // v1.6 values endpoint (ms)
+    if (ts > bestTs) bestTs = ts;
+  }
+
+  if (bestTs) {
+    const isOn = (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
+    opt.text = `${isOn ? "🟢" : "⚪️"} ${getDisplayName(label)} (${isOn ? "Online" : "Offline"})`;
+  }
+
         } catch (e) {
           console.warn("dropdown re-check failed for", label, e);
         }
