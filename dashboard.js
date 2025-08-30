@@ -1228,49 +1228,51 @@ async function updateAll(){
       const nowSec = Math.floor(Date.now() / 1000);
 
       const updates = Array.from(sel.options).map(async (opt) => {
-        const label = opt.value;
-        const info  = sensorMap[label];
-        const id    = info?.id;
-        const last  = info?.last_seen || 0;
-        if (!id) return;
+  const label = opt.value;
+  const info  = sensorMap[label];
+  const id    = info?.id;
+  const last  = info?.last_seen || 0;
+  if (!id) return;
 
-        // Only re-check devices that look stale by v2 last_seen
-        if ((nowSec - last) <= ONLINE_WINDOW_SEC) return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  // Only re-check devices that look stale by v2 last_seen
+  if ((nowSec - last) <= ONLINE_WINDOW_SEC) return;
 
-          // Map labels -> varIds (v1.6)
-  await ensureVarCache(id);
-  const caps = variableCache[id] || {};
+  try {
+    // Map labels -> varIds (v1.6)
+    await ensureVarCache(id);
+    const caps = variableCache[id] || {};
 
-  // STRICT heartbeat: radio + power + GPS only (never Dallas/temperature addresses)
-   const hb = ['signal','rssi','csq','volt','vbatt','battery','batt']  // radio + power only
-    .filter(l => l in caps);
-  // If no heartbeat labels exist for this device, mark Offline now
-  if (hb.length === 0) {
-    opt.text = `⚪️ ${getDisplayName(label)} (Offline)`;
-  }
+    // STRICT heartbeat: radio + power only (never Dallas/temperature addresses)
+    const hb = ['signal','rssi','csq','volt','vbatt','battery','batt']
+      .filter(l => l in caps);
 
-  let bestTs = 0;
-  for (const lab of hb) {
-    const varId = caps[lab];
-    if (!varId) continue;
-    const r = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!r.ok) continue;
-    const j = await r.json();
-    const ts = j?.results?.[0]?.timestamp || 0; // v1.6 values endpoint (ms)
-    if (ts > bestTs) bestTs = ts;
-  }
+    // No heartbeat vars -> keep Offline and stop re-check for this device
+    if (hb.length === 0) {
+      opt.text = `⚪️ ${getDisplayName(label)} (Offline)`;
+      return;
+    }
 
-  if (bestTs) {
-    const ageOk = bestTs && (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
-  opt.text = `${ageOk ? "🟢" : "⚪️"} ${getDisplayName(label)} (${ageOk ? "Online" : "Offline"})`;
-
-
-        } catch (e) {
-          console.warn("dropdown re-check failed for", label, e);
-        }
+    let bestTs = 0;
+    for (const lab of hb) {
+      const varId = caps[lab];
+      if (!varId) continue;
+      const r = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
+        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
       });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const ts = j?.results?.[0]?.timestamp || 0; // ms
+      if (ts > bestTs) bestTs = ts;
+    }
+
+    const ageOk = bestTs && (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
+    opt.text = `${ageOk ? "🟢" : "⚪️"} ${getDisplayName(label)} (${ageOk ? "Online" : "Offline"})`;
+  } catch (e) {
+    console.warn("dropdown re-check failed for", label, e);
+  }
+});
+
 
       await Promise.all(updates);
     }
