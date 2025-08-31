@@ -244,12 +244,10 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
 /* =================== GPS variable auto-detect =================== */
 const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
 
-async function resolveGpsLabel(deviceID){
-  // Only return when a real label string is cached; re-scan if it was null
-  if (gpsLabelCache[deviceID] !== undefined && gpsLabelCache[deviceID] !== null) {
-    return gpsLabelCache[deviceID];
-  }
-
+// Return cached result even if it's null (null = "no GPS label; don't rescan")
+if (Object.prototype.hasOwnProperty.call(gpsLabelCache, deviceID)) {
+  return gpsLabelCache[deviceID]; // may be string or null
+}
 
   await ensureVarCache(deviceID);
   const labels = Object.keys(variableCache[deviceID] || {});
