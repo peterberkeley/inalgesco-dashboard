@@ -32,9 +32,15 @@ let selectedRangeMode = "range";
 let segmentPolylines = [];
 let segmentMarkers = [];
 let legendControl = null;
+let __crumbToken = 0;   // cancels stale breadcrumb run
+let __crumbAbort = null; // AbortController for breadcrumbs
 
 // holds the most recent devices context so the CSV click handler can resolve deviceID
 window.__deviceMap = {};
+// Prevent overlapping updateCharts() runs
+let __chartsInFlight = false;
+let __chartsQueued   = false;
+
 // Prevent overlapping updateAll() runs (timer + device change, etc.)
 let __updateInFlight = false;
 let __updateQueued   = false;
@@ -47,6 +53,18 @@ function onReady(fn){
   else document.addEventListener("DOMContentLoaded", fn);
 }
 const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
+// Fast HH:MM formatter with per-timezone Intl cache
+const __dtfCache = {};
+function fmtTimeHHMM(ts, tz='Europe/London'){
+  let fmt = __dtfCache[tz];
+  if (!fmt){
+    fmt = __dtfCache[tz] = new Intl.DateTimeFormat('en-GB', {
+      hour:'2-digit', minute:'2-digit', hour12:false, timeZone: tz
+    });
+  }
+  return fmt.format(ts);
+}
+
 
 // Get the *displayed* name seen on the dashboard for a given device label
 function getDisplayName(deviceLabel){
@@ -75,16 +93,29 @@ function loadTzLookup(){
   return __tzLoadPromise;
 }
 async function resolveDeviceTz(deviceLabel, lat, lon){
+  // Fast path: cached tz for this device
+  if (__tzCache[deviceLabel]) return __tzCache[deviceLabel];
+
+  // Admin override
   const adminTz = sensorMapConfig?.[deviceLabel]?.tz;
-  if (adminTz && typeof adminTz === 'string') return adminTz;
+  if (adminTz && typeof adminTz === 'string') {
+    __tzCache[deviceLabel] = adminTz;
+    return adminTz;
+  }
+
+  // Try tz-lookup if we have coords
   if (typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon)){
     try{
       if (window.tzlookup || await loadTzLookup()){
-        return window.tzlookup(lat, lon); // returns IANA, DST-aware
+        const tz = window.tzlookup(lat, lon); // IANA, DST-aware
+        __tzCache[deviceLabel] = tz;          // <-- cache it
+        return tz;
       }
     }catch(e){ console.warn('tzlookup failed', e); }
   }
-  return 'Europe/London';
+
+  // Fallback: cache and return default
+  return (__tzCache[deviceLabel] = 'Europe/London');
 }
 
 /* =================== Admin mapping (context) =================== */
@@ -191,46 +222,63 @@ function buildDeviceDropdownFromConfig(sensorMap){
 window.buildDeviceDropdownFromConfig = buildDeviceDropdownFromConfig;
 
 /* =================== Variables & values (v1.6) =================== */
+// Deduplicate concurrent builds per device
+const __varCachePromises = (window.__varCachePromises = window.__varCachePromises || {});
+
 async function ensureVarCache(deviceID){
   if (variableCache[deviceID]) return;
+
+  // If a build is already running for this device, await it
+  if (__varCachePromises[deviceID]) {
+    await __varCachePromises[deviceID];
+    return;
+  }
+
   const url = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`;
-  try{
-    const rs = await fetch(url, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
-    if(!rs.ok){ variableCache[deviceID]={}; return; }
-    const jl = await rs.json();
-    // Group by label; if duplicates exist, pick the varId whose *latest value* has the newest timestamp.
-const groups = new Map(); // label -> [varId...]
-(jl.results || []).forEach(v => {
-  if (!groups.has(v.label)) groups.set(v.label, []);
-  groups.get(v.label).push(v.id);
-});
 
-// Build the map; only probe values for labels that actually have duplicates
-const map = {};
-for (const [label, ids] of groups.entries()) {
-  if (ids.length === 1) { map[label] = ids[0]; continue; }
+  __varCachePromises[deviceID] = (async () => {
+    try{
+      const rs = await fetch(url, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
+      if(!rs.ok){ variableCache[deviceID]={}; return; }
+      const jl = await rs.json();
 
-  // Duplicate label: choose freshest by latest value timestamp
-  let bestId = ids[0], bestTs = -Infinity;
-  for (const id of ids) {
-    const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1`, {
-      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if (!r.ok) continue;
-    const j = await r.json();
-    const ts = j?.results?.[0]?.timestamp || 0;
-    if (ts > bestTs) { bestTs = ts; bestId = id; }
-  }
-  map[label] = bestId;
+      // Group by label; if duplicates exist, pick the varId whose *latest value* has the newest timestamp.
+      const groups = new Map(); // label -> [varId...]
+      (jl.results || []).forEach(v => {
+        if (!groups.has(v.label)) groups.set(v.label, []);
+        groups.get(v.label).push(v.id);
+      });
+
+      // Build the map; only probe values for labels that actually have duplicates
+      const map = {};
+      for (const [label, ids] of groups.entries()) {
+        if (ids.length === 1) { map[label] = ids[0]; continue; }
+
+        // Duplicate label: choose freshest by latest value timestamp
+        let bestId = ids[0], bestTs = -Infinity;
+        for (const id of ids) {
+          const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1`, {
+            headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+          });
+          if (!r.ok) continue;
+          const j = await r.json();
+          const ts = j?.results?.[0]?.timestamp || 0;
+          if (ts > bestTs) { bestTs = ts; bestId = id; }
+        }
+        map[label] = bestId;
+      }
+
+      variableCache[deviceID] = map;
+    }catch(e){
+      console.error("ensureVarCache", e);
+      variableCache[deviceID] = {};
+    }
+  })();
+
+  try { await __varCachePromises[deviceID]; }
+  finally { delete __varCachePromises[deviceID]; }
 }
 
-variableCache[deviceID] = map;
-
-  }catch(e){
-    console.error("ensureVarCache", e);
-    variableCache[deviceID] = {};
-  }
-}
 async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   try{
     await ensureVarCache(deviceID);
@@ -245,7 +293,11 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
     return [];
   }
 }
+const __tzCache = {};  // deviceLabel -> IANA tz
+
 /* =================== GPS variable auto-detect =================== */
+const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
+
 async function resolveGpsLabel(deviceID){
   // Return cached result even if it's null (null = "no GPS label; don't rescan")
   if (Object.prototype.hasOwnProperty.call(gpsLabelCache, deviceID)) {
@@ -282,69 +334,55 @@ async function resolveGpsLabel(deviceID){
 }
 
 
-}
-// --- NEW: read Ubidots device.location (v2) for a device id ---
-async function fetchDeviceLocationV2(deviceID){
-  try{
-    const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/?fields=location`, {
-      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if(!r.ok) return null;
-    const j = await r.json();
-    const lat = j?.location?.lat;
-    const lng = j?.location?.lng;
-    if (typeof lat === 'number' && typeof lng === 'number') {
-      return { lat, lon: lng };
-    }
-  }catch(e){ /* ignore */ }
-  return null;
-}
-// Fetch all last values for a device in one call (v2). Returns an object keyed by variable label.
-// Falls back to null if not available.
-async function fetchDeviceLastValuesV2(deviceID){
-  try{
-    const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`, {
-      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
-    if(!r.ok) return null;
-    const j = await r.json();
-    return (j && typeof j === 'object') ? j : null;
-  }catch(e){
-    console.warn('last-values v2 failed', e);
-    return null;
-  }
-}
-
 
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
+    // 1) If we already have the var map, derive addresses from its labels (no network).
+    if (variableCache[deviceID]) {
+      const labels = Object.keys(variableCache[deviceID]);
+      const seen = new Set();
+      const uniq = [];
+      for (const l of labels) {
+        if (/^[0-9a-fA-F]{16}$/.test(l) && !seen.has(l)) {
+          seen.add(l);
+          uniq.push(l);
+        }
+      }
+      return uniq;
+    }
+
+    // 2) Build the var map once; then derive addresses (still only ONE network call)
+    await ensureVarCache(deviceID);
+    if (variableCache[deviceID] && Object.keys(variableCache[deviceID]).length) {
+      const labels = Object.keys(variableCache[deviceID]);
+      const seen = new Set();
+      const uniq = [];
+      for (const l of labels) {
+        if (/^[0-9a-fA-F]{16}$/.test(l) && !seen.has(l)) {
+          seen.add(l);
+          uniq.push(l);
+        }
+      }
+      return uniq;
+    }
+
+    // 3) Fallback (should rarely run): direct variables listing as a last resort
     const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
     });
     if(!res.ok) return [];
-
     const js = await res.json();
-    // 1) Collect only 16-hex DS18B20 labels (in API order)
-    const labels = (js.results || [])
-      .map(v => v.label)
-      .filter(l => /^[0-9a-fA-F]{16}$/.test(l));
-
-    // 2) De-duplicate while preserving first-seen order
-    const seen = new Set();
-    const uniq = [];
-    for (const l of labels) {
-      if (!seen.has(l)) {
-        seen.add(l);
-        uniq.push(l);
-      }
-    }
+    const labels = (js.results || []).map(v => v.label).filter(l => /^[0-9a-fA-F]{16}$/.test(l));
+    const seen = new Set(); const uniq = [];
+    for (const l of labels) { if (!seen.has(l)) { seen.add(l); uniq.push(l); } }
     return uniq;
   }catch(e){
     console.error("fetchDallasAddresses", e);
     return [];
   }
 }
+
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
@@ -420,18 +458,24 @@ function initCharts(SENSORS){
     ctx.canvas.style.backgroundColor = "#ffffff";
     s.chart = new Chart(ctx,{
       type:"line",
-      data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, fill:false, backgroundColor:'transparent' }]},
+     data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, fill:false, backgroundColor:'transparent', parsing:false, spanGaps:true }]},
       options:{
         responsive:true,
         maintainAspectRatio:false,
-        animation:{ duration:300 },
+      animation:false,
+        normalized:true,
+
+
         interaction:{ intersect:false, mode:'index' },
         scales:{
           x:{ ticks:{ display:false }, grid:{ color:'rgba(17,24,39,.05)' } },
           y:{ beginAtZero:false, ticks:{ callback:v=>Number(v).toFixed(1) }, grid:{ color:'rgba(17,24,39,.06)' } }
         },
         elements:{ line:{ tension:0.22 }, point:{ radius:0 } },
-        plugins:{ legend:{ display:false }, decimation:{ enabled:true, algorithm:'lttb' } }
+     plugins:{ legend:{ display:false }, decimation:{ enabled:false } }
+    // Keep a direct handle for fast, version-agnostic rebinding
+    ctx.canvas.__chart = s.chart;
+
       }
     });
   });
@@ -457,7 +501,7 @@ function ensureCharts(SENSORS, deviceLabel){
       const addr = box.getAttribute('data-addr') || '';
       const canvas = box.querySelector('canvas');
       if (!canvas) return;
-      const inst = Chart.getChart(canvas);  // Chart.js v4 API
+      const inst = canvas.__chart || (Chart.getChart ? Chart.getChart(canvas) : null);
       if (inst) instByAddr.set(addr, inst);
     });
 
@@ -479,21 +523,43 @@ function ensureCharts(SENSORS, deviceLabel){
 
 
 async function updateCharts(deviceID, SENSORS){
+  if (__chartsInFlight) {
+    __chartsQueued = true;
+    console.log('[charts] skipped (already running)');
+    return;
+  }
+  __chartsInFlight = true;
+  const __chartsT0 = performance.now();
+  try{
 
 
     const seriesByAddr = new Map(); // address -> ordered history (oldest..newest)
+    const QUICK_POINTS = Math.min(HIST_POINTS, 20);   // fast-first paint
+  const FULL_POINTS  = HIST_POINTS;                 // target history length
+  const NEEDS_BACKFILL = FULL_POINTS > QUICK_POINTS;
+  const expectedKey = window.__chartsKey;           // guard against device/layout changes
+      // If there are no sensor addresses, skip chart work (fast no-op)
+  if (!SENSORS.some(s => s.address)) {
+    const rng = document.getElementById('chartRange');
+    if (rng) rng.textContent = '';
+    const avgSlot = SENSORS.find(x => x.id === 'avg');
+    if (avgSlot && avgSlot.chart) {
+      avgSlot.chart.data.labels = [];
+      avgSlot.chart.data.datasets[0].data = [];
+      avgSlot.chart.update('none');
+    }
+    return;
+  }
+
   // ORIGINAL per-sensor plotting (unchanged)
   await Promise.all(SENSORS.map(async s=>{
     if(!s.address || !s.chart) return;
-    const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
+   const rows = await fetchUbidotsVar(deviceID, s.address, QUICK_POINTS);
     if(!rows.length) return;
     const ordered = rows.slice().reverse();
         seriesByAddr.set(s.address, ordered);
-    s.chart.data.labels = ordered.map(r=>
-      new Date(r.timestamp).toLocaleTimeString('en-GB', {
-        hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London'
-      })
-    );
+    s.chart.data.labels = ordered.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+
     s.chart.data.datasets[0].data = ordered.map(r=>{
       let v = parseFloat(r.value);
       if(typeof s.calibration==="number") v += s.calibration;
@@ -513,7 +579,7 @@ async function updateCharts(deviceID, SENSORS){
       delete s.chart.options.scales.y.max;
     }
 
-    s.chart.update();
+   s.chart.update('none');
   }));
 
   // Build & render "Chillrail Avg" using cached series; no extra fetch
@@ -546,9 +612,8 @@ try{
   });
 
   // Compute averages per bucket
-  const avgLabels = buckets.map(ts =>
-    new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' })
-  );
+ const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
+
   const avgData = buckets.map(ts=>{
     const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
     return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
@@ -572,7 +637,7 @@ try{
       delete avgSlot.chart.options.scales.y.min;
       delete avgSlot.chart.options.scales.y.max;
     }
-    avgSlot.chart.update();
+   avgSlot.chart.update('none');
   }
 } catch(e){ console.error('avg-build failed:', e); }
 
@@ -593,6 +658,7 @@ for (const s of SENSORS){
 }
 
   const rng = document.getElementById("chartRange");
+    const rng = document.getElementById("chartRange");
   if (rng && isFinite(minTs) && isFinite(maxTs)) {
     const a=new Date(minTs), b=new Date(maxTs);
     const same = a.toDateString()===b.toDateString();
@@ -600,147 +666,130 @@ for (const s of SENSORS){
     const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
     rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
   }
+
+  // Background backfill to FULL_POINTS (if more than quick slice requested)
+  if (NEEDS_BACKFILL) {
+    setTimeout(async () => {
+      // If layout changed, skip backfill
+      if (window.__chartsKey !== expectedKey) return;
+
+      try {
+        // 1) Fetch full series per sensor and update charts
+        await Promise.all(SENSORS.map(async s => {
+          if (!s.address || !s.chart) return;
+          const rowsFull = await fetchUbidotsVar(deviceID, s.address, FULL_POINTS);
+          if (!rowsFull || !rowsFull.length) return;
+          const orderedFull = rowsFull.slice().reverse();
+          seriesByAddr.set(s.address, orderedFull);
+
+          // Update labels and data
+          s.chart.data.labels = orderedFull.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+
+          s.chart.data.datasets[0].data = orderedFull.map(r => {
+            let v = parseFloat(r.value);
+            if (typeof s.calibration === 'number') v += s.calibration;
+            return isNaN(v) ? null : v;
+          });
+
+          // Dynamic y-scale
+          const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
+          if (vals.length) {
+            const vmin = Math.min(...vals);
+            const vmax = Math.max(...vals);
+            const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
+            s.chart.options.scales.y.min = vmin - pad;
+            s.chart.options.scales.y.max = vmax + pad;
+          } else {
+            delete s.chart.options.scales.y.min;
+            delete s.chart.options.scales.y.max;
+          }
+
+avgSlot.chart.update('none');
+        }));
+
+        // 2) Rebuild "Chillrail Avg" using the now-complete series
+        try {
+          const series = [];
+          for (const s of SENSORS){
+            if (!s.address) continue;
+            const ordered = seriesByAddr.get(s.address);
+            if (!ordered || !ordered.length) continue;
+            const items = ordered.map(r=>{
+              let v = parseFloat(r.value);
+              if (typeof s.calibration === 'number') v += s.calibration;
+              return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
+            }).filter(o => o.v != null);
+            if (items.length) series.push(items);
+          }
+
+          const bucketSet = new Set();
+          series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
+          const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
+
+          const maps = series.map(arr=>{
+            const m = new Map();
+            arr.forEach(o => m.set(o.ts, o.v));
+            return m;
+          });
+
+          const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
+
+          const avgData = buckets.map(ts=>{
+            const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
+            return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+          });
+
+          const avgSlot = SENSORS.find(x=>x.id==="avg");
+          if (avgSlot && avgSlot.chart){
+            avgSlot.chart.data.labels = avgLabels;
+            avgSlot.chart.data.datasets[0].data = avgData;
+            const good = avgData.filter(v=>v!=null && isFinite(v));
+            if (good.length){
+              const vmin = Math.min(...good), vmax = Math.max(...good);
+              const pad  = Math.max(0.5,(vmax - vmin) * 0.10);
+              avgSlot.chart.options.scales.y.min = vmin - pad;
+              avgSlot.chart.options.scales.y.max = vmax + pad;
+            } else {
+              delete avgSlot.chart.options.scales.y.min;
+              delete avgSlot.chart.options.scales.y.max;
+            }
+            avgSlot.chart.update();
+          }
+        } catch(e) {
+          console.error('avg backfill failed:', e);
+        }
+
+        // 3) Update range banner from fully backfilled series
+        let minTs = Infinity, maxTs = -Infinity;
+        for (const s of SENSORS){
+          if (!s.address) continue;
+          const ord = seriesByAddr.get(s.address);
+          if (!ord || !ord.length) continue;
+          const oldest = ord[0].timestamp;
+          const newest = ord[ord.length-1].timestamp;
+          if (isFinite(oldest) && isFinite(newest)) {
+            minTs = Math.min(minTs, oldest, newest);
+            maxTs = Math.max(maxTs, oldest, newest);
+          }
+        }
+        const rng2 = document.getElementById("chartRange");
+        if (rng2 && isFinite(minTs) && isFinite(maxTs)) {
+          const a=new Date(minTs), b=new Date(maxTs);
+          const same = a.toDateString()===b.toDateString();
+          const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
+          const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+          rng2.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+        }
+                seriesByAddr.clear();  // free memory after successful backfill
+      } catch(e) {
+        console.error('backfill error:', e);
+      }
+    }, 0);
+  }
 }
-
-/* =================== Live panel + map =================== */
-let map, marker;
-function initMap(){
-  map = L.map("map").setView([0,0], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
-  marker = L.marker([0,0]).addTo(map);
-}
-
-function signalBarsFrom(value){
-  if (value==null || isNaN(value)) return 0;
-  return Math.max(0, Math.min(5, Math.round((value/31)*5)));
-}
-
-function drawLive(data, SENSORS){
- let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
-
-  ts = ts || Date.now();
-  const temps = SENSORS
-    .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
-    .filter(v=>v!=null && isFinite(v));
-  const avg = temps.length ? (temps.reduce((a,b)=>a+b,0)/temps.length) : null;
-  document.getElementById("kpiAvg").textContent = avg!=null ? fmt(avg,1) + "°" : "—";
-
-  const devSel = document.getElementById("deviceSelect");
-const deviceKey = devSel.value;
-const displayName = getDisplayName(deviceKey);
-
-
- document.getElementById("kpiTruck").textContent = displayName;
-// KPI date/time is set in updateAll() from lastSeenSec. Do not write kpiSeen here.
-
-
-const sigBars = signalBarsFrom(signal);
-const sigClass = sigBars >= 4 ? 'high' : (sigBars >= 2 ? 'med' : 'low');
-const sigHtml =
-  (signal != null ? String(signal) : "—") + " " +
-  `<span class="sig ${sigClass}">
-     <i class="l1 ${sigBars>0?'on':''}"></i>
-     <i class="l2 ${sigBars>1?'on':''}"></i>
-     <i class="l3 ${sigBars>2?'on':''}"></i>
-     <i class="l4 ${sigBars>3?'on':''}"></i>
-     <i class="l5 ${sigBars>4?'on':''}"></i>
-   </span>`;
-
-const sensorRows = SENSORS
-  .filter(s => s.address && s.id !== "avg" && s.label !== "Chillrail Avg")
-  .map(s => [
-    s.label,
-    (s.address && readings[s.address] != null)
-      ? fmt(readings[s.address] + (s.calibration || 0), 1)
-      : ""
-  ]);
-
-  // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
-const hasFresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
-const useLat = hasFresh
-  ? lat
-  : ((lastLat != null && isFinite(lastLat)) ? lastLat : null);
-const useLon = hasFresh
-  ? lon
-  : ((lastLon != null && isFinite(lastLon)) ? lastLon : null);
-
-let locationHtml = "—";
-if (useLat != null && useLon != null) {
-  const href = `https://maps.google.com/?q=${useLat},${useLon}`;
-  const label = `${Number(useLat).toFixed(6)}, ${Number(useLon).toFixed(6)}`;
-  const staleNote = hasFresh ? "" :
-    (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)
-      ? ` <span class="text-gray-500">(stale ${lastGpsAgeMin} min)</span>`
-      : ` <span class="text-gray-500">(stale)</span>`);
-  locationHtml = `<a href="${href}" target="_blank" rel="noopener">${label}</a>${staleNote}`;
-}
-
-
-// Build 2-line Local Time: line 1 = date, line 2 = time
-const t = (window.__lastSeenMs != null && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : ts;
-const tz = data.tz || 'Europe/London';
-const localDate = new Date(t).toLocaleDateString('en-GB', { timeZone: tz });
-const localTime = new Date(t).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: tz });
-
-const rows = [];
-rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
-
-// If no fresh pin but we know the last GPS, add a stale note just under Local Time
-if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
-  const mins = (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)) ? lastGpsAgeMin : null;
-  const staleNote = mins != null ? `Last GPS (${mins} min ago)` : 'Last GPS (stale)';
-  rows.push(["Last GPS", `<span class="text-gray-500">${staleNote}</span>`]);
-}
-
-rows.push(["ICCID", iccid || "—"]);
-const _fresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
-const _lat   = _fresh ? Number(lat)    : (isFinite(lastLat) ? Number(lastLat) : null);
-const _lon   = _fresh ? Number(lon)    : (isFinite(lastLon) ? Number(lastLon) : null);
-
-let _locationHtml = "—";
-if (_lat != null && _lon != null) {
-  const _href  = `https://maps.google.com/?q=${_lat},${_lon}`;
-  const _label = `${_lat.toFixed(6)}, ${_lon.toFixed(6)}`;
-  const _stale = _fresh
-    ? ""
-    : (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)
-        ? ` <span class="text-gray-500">(stale ${lastGpsAgeMin} min)</span>`
-        : ` <span class="text-gray-500">(stale)</span>`);
-  _locationHtml = `<a href="${_href}" target="_blank" rel="noopener">${_label}</a>${_stale}`;
-}
-
-rows.push(["Location", _locationHtml]);
-rows.push(["Speed (km/h)", fmt(speed, 1)]);
-rows.push(["Signal", sigHtml]);
-rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"]);
-rows.push(...sensorRows);
-
-
-
-document.getElementById("latest").innerHTML =
-  rows.map(([lab,val]) => {
-    const wrap = (lab === "Local Time") ? ' style="white-space:normal"' : '';
-    return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
-  }).join("");
-
-
-    // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
-if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
-  // Fresh pin
-  marker.setLatLng([lat, lon]);
-  if (map) map.setView([lat, lon], Math.max(map.getZoom(), 13));
-} else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
-  // Last-known (stale) pin
-  marker.setLatLng([lastLat, lastLon]);
-  if (map) map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
-} else {
-  // No coords at all — keep current view (do not re-center)
-}
-}
-
 // Part 3
 async function poll(deviceID, SENSORS){
-    // ---- FAST PATH: one call gets all last values; draw immediately if available ----
+  // ---- FAST PATH: one call gets all last values; draw immediately if available ----
   const bulk = await fetchDeviceLastValuesV2(deviceID);
   if (bulk) {
     const readings = {};
@@ -809,29 +858,48 @@ async function poll(deviceID, SENSORS){
       readings
     }, SENSORS);
 
-    // We’re done; skip the slower per-variable path below
+    // Done via fast path
     return;
   }
   // ---- END FAST PATH ----
 
-  const gpsLabel = await resolveGpsLabel(deviceID);
+  // Prefer Ubidots device.location (v2) first to avoid GPS label scans
+  let lat = null, lon = null, speedVal = null;
+  let lastLat = null, lastLon = null, lastGpsAgeMin = null;
+  let tsGps = null;
   let gpsArr = [];
-  if (gpsLabel) gpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
 
-  const iccArr = await fetchUbidotsVar(deviceID, "iccid", 1);
+  const devLoc = await fetchDeviceLocationV2(deviceID);
+  if (devLoc) {
+    lastLat = devLoc.lat; lastLon = devLoc.lon;
+    lat = devLoc.lat;  lon = devLoc.lon;
+  } else {
+    // No device.location → fall back to scanning for a GPS variable once
+    const gpsLabel = await resolveGpsLabel(deviceID);
+    if (gpsLabel) {
+      gpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
+      tsGps = gpsArr[0]?.timestamp || null;
+      if (gpsArr[0]?.context) {
+        lastLat = gpsArr[0].context.lat;
+        lastLon = gpsArr[0].context.lng;
+      }
+    }
+  }
 
-
-
-   let tsGps   = gpsArr[0]?.timestamp || null;
-  let tsIccid = iccArr[0]?.timestamp || null;
-  let readings = {};
-  let tsSensorMax = null;
-
-  // ---------- GPS Freshness Gate (avoid plotting very old locations) ----------
+  // GPS freshness gate (only applies to variable-based GPS)
   const FRESH_GPS_MS = 15 * 60 * 1000;          // 15 minutes
   const gpsIsFresh = tsGps && (Date.now() - tsGps) <= FRESH_GPS_MS;
-  // ---------------------------------------------------------------------------
+  if (!lat && gpsIsFresh && lastLat != null && lastLon != null) {
+    lat = lastLat; lon = lastLon;
+  }
+  if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
 
+  // Latest values for ICCID, sensors, signal, volt
+  const iccArr = await fetchUbidotsVar(deviceID, "iccid", 1);
+  let tsIccid = iccArr[0]?.timestamp || null;
+
+  const readings = {};
+  let tsSensorMax = null;
   await Promise.all(SENSORS.filter(s => s.address).map(async s => {
     const v = await fetchUbidotsVar(deviceID, s.address, 1);
     if (v.length && v[0].value != null) {
@@ -846,42 +914,16 @@ async function poll(deviceID, SENSORS){
   ]);
   let tsSignal = signalArr[0]?.timestamp || null;
   let tsVolt   = voltArr[0]?.timestamp || null;
+
+  // Compose "best" ts for the live panel
   let ts = Date.now();
   const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => x != null);
-    if (candidates.length > 0) ts = Math.max(...candidates);
+  if (candidates.length > 0) ts = Math.max(...candidates);
 
-    // Fresh location for live pin; also keep last known (may be stale)
-  let lat = null, lon = null, speedVal = null;
-  let lastLat = null, lastLon = null, lastGpsAgeMin = null;
-
-  if (gpsArr[0]?.context) {
-    lastLat = gpsArr[0].context.lat;
-    lastLon = gpsArr[0].context.lng;
-    if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
-  }
-  if (gpsIsFresh) {
-    lat      = lastLat;
-    lon      = lastLon;
-    speedVal = gpsArr[0]?.context?.speed;
-  }
-  // --- NEW: prefer Ubidots device.location if present (most current) ---
-  const devLoc = await fetchDeviceLocationV2(deviceID);
-  if (devLoc) {
-  // Always keep last-known in case variable GPS is absent
-  if (lastLat == null || lastLon == null) {
-    lastLat = devLoc.lat; lastLon = devLoc.lon;
-  }
-  // If the GPS variable is not fresh, prefer device.location for the live pin/link
-  if (!gpsIsFresh) {
-    lat = devLoc.lat; lon = devLoc.lon;
-  }
-}
-
-  // Determine device IANA timezone (admin override > tz-lookup > London)
+  // Resolve timezone and paint
   const deviceLabel = document.getElementById("deviceSelect")?.value || null;
   const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
-
-        drawLive({
+  drawLive({
     ts,
     iccid: iccArr[0]?.value ?? null,
     lat,
@@ -890,12 +932,148 @@ async function poll(deviceID, SENSORS){
     speed: speedVal,
     signal: signalArr[0]?.value ?? null,
     volt:  voltArr[0]?.value ?? null,
-           tz,
+    tz,
     readings
   }, SENSORS);
+  } finally {
+    __chartsInFlight = false;
+    console.log('[charts] done in', Math.round(performance.now()-__chartsT0), 'ms');
+    if (__chartsQueued) {
+      __chartsQueued = false;
+      setTimeout(() => updateCharts(deviceID, SENSORS), 0);
+    }
+  }
 
-
+/* =================== Live panel + map =================== */
+let map, marker;
+function initMap(){
+  map = L.map("map").setView([0,0], 2);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
+  marker = L.marker([0,0]).addTo(map);
 }
+
+function signalBarsFrom(value){
+  if (value==null || isNaN(value)) return 0;
+  return Math.max(0, Math.min(5, Math.round((value/31)*5)));
+}
+
+function drawLive(data, SENSORS){
+  let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
+
+  ts = ts || Date.now();
+  const temps = SENSORS
+    .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
+    .filter(v=>v!=null && isFinite(v));
+  const avg = temps.length ? (temps.reduce((a,b)=>a+b,0)/temps.length) : null;
+  document.getElementById("kpiAvg").textContent = avg!=null ? fmt(avg,1) + "°" : "—";
+
+  const devSel = document.getElementById("deviceSelect");
+  const deviceKey = devSel ? devSel.value : '';
+  const displayName = getDisplayName(deviceKey);
+
+  document.getElementById("kpiTruck").textContent = displayName;
+  // KPI date/time is set in updateAll() from lastSeenSec. Do not write kpiSeen here.
+
+  const sigBars = signalBarsFrom(signal);
+  const sigClass = sigBars >= 4 ? 'high' : (sigBars >= 2 ? 'med' : 'low');
+  const sigHtml =
+    (signal != null ? String(signal) : "—") + " " +
+    `<span class="sig ${sigClass}">
+       <i class="l1 ${sigBars>0?'on':''}"></i>
+       <i class="l2 ${sigBars>1?'on':''}"></i>
+       <i class="l3 ${sigBars>2?'on':''}"></i>
+       <i class="l4 ${sigBars>3?'on':''}"></i>
+       <i class="l5 ${sigBars>4?'on':''}"></i>
+     </span>`;
+
+  const sensorRows = SENSORS
+    .filter(s => s.address && s.id !== "avg" && s.label !== "Chillrail Avg")
+    .map(s => [
+      s.label,
+      (s.address && readings[s.address] != null)
+        ? fmt(readings[s.address] + (s.calibration || 0), 1)
+        : ""
+    ]);
+
+  // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
+  const hasFresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
+  const useLat = hasFresh
+    ? lat
+    : ((lastLat != null && isFinite(lastLat)) ? lastLat : null);
+  const useLon = hasFresh
+    ? lon
+    : ((lastLon != null && isFinite(lastLon)) ? lastLon : null);
+
+  let locationHtml = "—";
+  if (useLat != null && useLon != null) {
+    const href = `https://maps.google.com/?q=${useLat},${useLon}`;
+    const label = `${Number(useLat).toFixed(6)}, ${Number(useLon).toFixed(6)}`;
+    const staleNote = hasFresh ? "" :
+      (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)
+        ? ` <span class="text-gray-500">(stale ${lastGpsAgeMin} min)</span>`
+        : ` <span class="text-gray-500">(stale)</span>`);
+    locationHtml = `<a href="${href}" target="_blank" rel="noopener">${label}</a>${staleNote}`;
+  }
+
+  // Build 2-line Local Time: line 1 = date, line 2 = time
+  const t = (window.__lastSeenMs != null && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : ts;
+  const tz = data.tz || 'Europe/London';
+  const localDate = new Date(t).toLocaleDateString('en-GB', { timeZone: tz });
+  const localTime = new Date(t).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: tz });
+
+  const rows = [];
+  rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
+
+  // If no fresh pin but we know the last GPS, add a stale note just under Local Time
+  if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
+    const mins = (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)) ? lastGpsAgeMin : null;
+    const staleNote = mins != null ? `Last GPS (${mins} min ago)` : 'Last GPS (stale)';
+    rows.push(["Last GPS", `<span class="text-gray-500">${staleNote}</span>`]);
+  }
+
+  rows.push(["ICCID", iccid || "—"]);
+  const _fresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
+  const _lat   = _fresh ? Number(lat)    : (isFinite(lastLat) ? Number(lastLat) : null);
+  const _lon   = _fresh ? Number(lon)    : (isFinite(lastLon) ? Number(lastLon) : null);
+
+  let _locationHtml = "—";
+  if (_lat != null && _lon != null) {
+    const _href  = `https://maps.google.com/?q=${_lat},${_lon}`;
+    const _label = `${_lat.toFixed(6)}, ${_lon.toFixed(6)}`;
+    const _stale = _fresh
+      ? ""
+      : (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)
+          ? ` <span class="text-gray-500">(stale ${lastGpsAgeMin} min)</span>`
+          : ` <span class="text-gray-500">(stale)</span>`);
+    _locationHtml = `<a href="${_href}" target="_blank" rel="noopener">${_label}</a>${_stale}`;
+  }
+
+  rows.push(["Location", _locationHtml]);
+  rows.push(["Speed (km/h)", fmt(speed, 1)]);
+  rows.push(["Signal", sigHtml]);
+  rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"]);
+  rows.push(...sensorRows);
+
+  document.getElementById("latest").innerHTML =
+    rows.map(([lab,val]) => {
+      const wrap = (lab === "Local Time") ? ' style="white-space:normal"' : '';
+      return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
+    }).join("");
+
+  // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
+  if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
+    // Fresh pin
+    marker.setLatLng([lat, lon]);
+    if (map) map.setView([lat, lon], Math.max(map.getZoom(), 13));
+  } else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
+    // Last-known (stale) pin
+    marker.setLatLng([lastLat, lastLon]);
+    if (map) map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
+  } else {
+    // No coords at all — keep current view (do not re-center)
+  }
+}
+
 
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
@@ -944,14 +1122,41 @@ async function checkAndUpdateMaintCounters(truckLabel, deviceID){
   const state = getMaintState(truckLabel);
   const today = (new Date()).toISOString().slice(0,10);
   if (state.lastDecrementDate === today) return state;
-  let hasActivity=false;
-  for(const s of SENSORS){
-    if(!s.address) continue;
-    const vals = await fetchUbidotsVar(deviceID, s.address, 1);
-    if (vals[0]?.timestamp) {
-      if (new Date(vals[0].timestamp).toISOString().slice(0,10) === today) { hasActivity=true; break; }
+
+  let hasActivity = false;
+
+  // FAST PATH: one bulk call for all last values
+  try{
+    const bulk = await fetchDeviceLastValuesV2(deviceID);
+    if (bulk) {
+      for (const s of SENSORS) {
+        if (!s.address) continue;
+        const o = bulk[s.address];
+        const ts = o?.timestamp || null;
+        if (ts) {
+          if (new Date(ts).toISOString().slice(0,10) === today) { hasActivity = true; break; }
+        }
+      }
+    } else {
+      // Fallback to per-variable (rare)
+      for (const s of SENSORS){
+        if(!s.address) continue;
+        const vals = await fetchUbidotsVar(deviceID, s.address, 1);
+        const ts = vals?.[0]?.timestamp || null;
+        if (ts && new Date(ts).toISOString().slice(0,10) === today) { hasActivity = true; break; }
+      }
+    }
+  } catch(e){
+    console.warn('maint bulk check failed, falling back:', e);
+    // Fallback to per-variable
+    for (const s of SENSORS){
+      if(!s.address) continue;
+      const vals = await fetchUbidotsVar(deviceID, s.address, 1);
+      const ts = vals?.[0]?.timestamp || null;
+      if (ts && new Date(ts).toISOString().slice(0,10) === today) { hasActivity = true; break; }
     }
   }
+
   if (hasActivity) {
     if (state.filterDays>0)  state.filterDays--;
     if (state.serviceDays>0) state.serviceDays--;
@@ -990,7 +1195,8 @@ async function renderMaintenanceBox(truckLabel, deviceID){
 }
 
 /* =================== CSV download =================== */
-async function fetchCsvRows(deviceID, varLabel, start, end){
+async function fetchCsvRows(deviceID, varLabel, start, end, signal){
+
   try{
     await ensureVarCache(deviceID);
     const id = variableCache[deviceID][varLabel];
@@ -998,7 +1204,10 @@ async function fetchCsvRows(deviceID, varLabel, start, end){
     let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${id}/values/?page_size=1000`;
     if(start) url += `&start=${start}`;
     if(end)   url += `&end=${end}`;
-    const res = await fetch(url, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
+   const init = { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN } };
+if (signal) init.signal = signal;
+const res = await fetch(url, init);
+
     if(!res.ok) return [];
     return (await res.json()).results||[];
   }catch{ return []; }
@@ -1131,6 +1340,12 @@ async function downloadCsvForCurrentSelection(){
 // part 4
 /* =================== Breadcrumb route drawing =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
+    const myTok = ++__crumbToken; // stamp this run
+// Abort any in-flight breadcrumb work from a previous run
+if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
+__crumbAbort = new AbortController();
+const __crumbSignal = __crumbAbort.signal;
+
   try{
     if(!map) initMap();
     segmentPolylines.forEach(p=>p.remove());
@@ -1146,7 +1361,8 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
 
     const gpsLabel = await resolveGpsLabel(deviceID);
     let gpsRows = [];
-    if (gpsLabel) gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTime, nowMs);
+  if (gpsLabel) gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTime, nowMs, __crumbSignal);
+
 
 
     const gpsPoints = gpsRows
@@ -1156,13 +1372,15 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       // No usable points in the selected range
       return;
     }
+  // If a newer call started while we were fetching, stop now
+  if (myTok !== __crumbToken) return;
 
 
     const tempData = {};
     const tempAvg  = {};
     for(const s of SENSORS){
       if(!s.address) continue;
-      const rows = await fetchCsvRows(deviceID, s.address, startTime, nowMs);
+      const rows = await fetchCsvRows(deviceID, s.address, startTime, nowMs, __crumbSignal);
       for(const r of rows){
         const ts = r.timestamp;
         let v = parseFloat(r.value);
@@ -1276,21 +1494,55 @@ function wireRangeButtons(){
   const buttons = document.querySelectorAll(".rangeBtn");
   buttons.forEach(btn=>{
     btn.onclick = async function(){
+      // Visual selection
       buttons.forEach(b=>{
         b.style.backgroundColor = '';
         b.style.color = '';
       });
       this.style.backgroundColor = '#10b981';
       this.style.color = '#ffffff';
-      const modeAttr = this.getAttribute('data-mode') || 'range';
-      const valAttr = parseInt(this.getAttribute('data-range'), 10);
-      selectedRangeMinutes = isFinite(valAttr) ? valAttr : 60;
-      selectedRangeMode = modeAttr;
-      HIST_POINTS = selectedRangeMinutes;
-      await updateAll();
+
+      // Update selection model
+      // Update selection model
+const modeAttr = this.getAttribute('data-mode') || 'range';
+const valAttr  = parseInt(this.getAttribute('data-range'), 10);
+
+// No-op if the selection didn't actually change
+const newMinutes = Number.isFinite(valAttr) ? valAttr : 60;
+if (selectedRangeMode === modeAttr && selectedRangeMinutes === newMinutes) {
+  return; // nothing to do
+}
+selectedRangeMinutes = newMinutes;
+selectedRangeMode    = modeAttr;
+HIST_POINTS          = selectedRangeMinutes;
+
+// Fast path: only refresh charts + defer breadcrumbs (no full updateAll)
+const devSel      = document.getElementById('deviceSelect');
+const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
+const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
+
+if (deviceID) {
+  await updateCharts(deviceID, SENSORS);
+  const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+  idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
+}
+
+
+      // Fast path: only refresh charts + defer breadcrumbs (no full updateAll)
+      const devSel      = document.getElementById('deviceSelect');
+      const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
+      const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
+
+      if (deviceID) {
+        await updateCharts(deviceID, SENSORS);                             // redraw charts quickly
+       const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
+
+      }
     };
   });
 }
+
 
 /* =================== Date inputs: instant commit =================== */
 function wireDateInputsCommit(){
@@ -1534,7 +1786,8 @@ await poll(deviceID, SENSORS);       // 1) show current values immediately
 await updateCharts(deviceID, SENSORS); // 2) then fetch history for charts
 await renderMaintenanceBox(deviceLabel, deviceID);
  // Defer breadcrumbs so they don't block first paint
-  setTimeout(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); }, 0);
+   const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+  idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
 } else {
   console.error("Device ID not found for", deviceLabel);
 }
