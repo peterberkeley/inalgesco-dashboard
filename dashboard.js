@@ -417,12 +417,14 @@ function initCharts(SENSORS){
 }
 
 async function updateCharts(deviceID, SENSORS){
+    const seriesByAddr = new Map(); // address -> ordered history (oldest..newest)
   // ORIGINAL per-sensor plotting (unchanged)
   await Promise.all(SENSORS.map(async s=>{
     if(!s.address || !s.chart) return;
     const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
     if(!rows.length) return;
     const ordered = rows.slice().reverse();
+        seriesByAddr.set(s.address, ordered);
     s.chart.data.labels = ordered.map(r=>
       new Date(r.timestamp).toLocaleTimeString('en-GB', {
         hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London'
@@ -450,66 +452,66 @@ async function updateCharts(deviceID, SENSORS){
     s.chart.update();
   }));
 
-  // === NEW: Build & render "Chillrail Avg" using minute buckets; no forward-fill ===
-  try{
-    // 1) Gather per-sensor short series (again) for a clean union
-    const series = [];
-    for(const s of SENSORS){
-      if(!s.address) continue;
-      const rows = await fetchUbidotsVar(deviceID, s.address, HIST_POINTS);
-      if(!rows || !rows.length) continue;
-      const ordered = rows.slice().reverse();
-      const items = ordered.map(r=>{
-        let v = parseFloat(r.value);
-        if(typeof s.calibration==="number") v += s.calibration;
-        return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v)?null:v };
-      }).filter(o=>o.v!=null);
-      if(items.length) series.push(items);
-    }
+  // Build & render "Chillrail Avg" using cached series; no extra fetch
+try{
+  // Collect per-sensor series from seriesByAddr (already fetched above)
+  const series = [];
+  for (const s of SENSORS){
+    if (!s.address) continue;
+    const ordered = seriesByAddr.get(s.address);
+    if (!ordered || !ordered.length) continue;
 
-    // 2) Union per-minute buckets
-    const bucketSet = new Set();
-    series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
-    const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
-
-    // 3) Fast minute->value maps
-    const maps = series.map(arr=>{
-      const m = new Map();
-      arr.forEach(o => m.set(o.ts, o.v));
-      return m;
-    });
-
-    // 4) Compute averages
-    const avgLabels = buckets.map(ts =>
-      new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'}));
-    const avgData   = buckets.map(ts=>{
-      const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
-      if(!vals.length) return null;
-      return vals.reduce((a,b)=>a+b,0)/vals.length;
-    });
-
-    // 5) Paint the preprended "avg" chart
-    const avgSlot = SENSORS.find(x=>x.id==="avg");
-    if(avgSlot && avgSlot.chart){
-      avgSlot.chart.data.labels = avgLabels;
-      avgSlot.chart.data.datasets[0].data = avgData;
-      avgSlot.chart.data.datasets[0].fill = false;
-      avgSlot.chart.data.datasets[0].backgroundColor = 'transparent';
-      const good = avgData.filter(v=>v!=null && isFinite(v));
-      if(good.length){
-        const vmin = Math.min(...good), vmax = Math.max(...good);
-        const pad  = Math.max(0.5,(vmax-vmin)*0.10);
-        avgSlot.chart.options.scales.y.min = vmin - pad;
-        avgSlot.chart.options.scales.y.max = vmax + pad;
-      }else{
-        delete avgSlot.chart.options.scales.y.min;
-        delete avgSlot.chart.options.scales.y.max;
-      }
-      avgSlot.chart.update();
-    }
-  }catch(e){
-    console.error("avg-build failed:", e);
+    const items = ordered.map(r=>{
+      let v = parseFloat(r.value);
+      if (typeof s.calibration === 'number') v += s.calibration;
+      return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
+    }).filter(o => o.v != null);
+    if (items.length) series.push(items);
   }
+
+  // Union minute buckets
+  const bucketSet = new Set();
+  series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
+  const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
+
+  // Fast maps for each sensor
+  const maps = series.map(arr=>{
+    const m = new Map();
+    arr.forEach(o => m.set(o.ts, o.v));
+    return m;
+  });
+
+  // Compute averages per bucket
+  const avgLabels = buckets.map(ts =>
+    new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' })
+  );
+  const avgData = buckets.map(ts=>{
+    const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
+    return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+  });
+
+  // Paint the "avg" chart
+  const avgSlot = SENSORS.find(x=>x.id==="avg");
+  if (avgSlot && avgSlot.chart){
+    avgSlot.chart.data.labels = avgLabels;
+    avgSlot.chart.data.datasets[0].data = avgData;
+    avgSlot.chart.data.datasets[0].fill = false;
+    avgSlot.chart.data.datasets[0].backgroundColor = 'transparent';
+
+    const good = avgData.filter(v=>v!=null && isFinite(v));
+    if (good.length){
+      const vmin = Math.min(...good), vmax = Math.max(...good);
+      const pad  = Math.max(0.5,(vmax - vmin) * 0.10);
+      avgSlot.chart.options.scales.y.min = vmin - pad;
+      avgSlot.chart.options.scales.y.max = vmax + pad;
+    } else {
+      delete avgSlot.chart.options.scales.y.min;
+      delete avgSlot.chart.options.scales.y.max;
+    }
+    avgSlot.chart.update();
+  }
+} catch(e){ console.error('avg-build failed:', e); }
+
 
   // ORIGINAL range banner
   let minTs = Infinity, maxTs = -Infinity;
