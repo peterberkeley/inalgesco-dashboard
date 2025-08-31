@@ -55,6 +55,7 @@ function onReady(fn){
 const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
 // Fast HH:MM formatter with per-timezone Intl cache
 const __dtfCache = {};
+const __tzCache = {};  // deviceLabel -> IANA tz
 function fmtTimeHHMM(ts, tz='Europe/London'){
   let fmt = __dtfCache[tz];
   if (!fmt){
@@ -293,7 +294,6 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
     return [];
   }
 }
-const __tzCache = {};  // deviceLabel -> IANA tz
 
 /* =================== GPS variable auto-detect =================== */
 const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
@@ -331,6 +331,36 @@ async function resolveGpsLabel(deviceID){
   gpsLabelCache[deviceID] = null; // cache miss so we never rescan for this device
   console.warn('[gps label] none found for device', deviceID, labels);
   return null;
+}
+// --- Ubidots v2 helpers (location + bulk last values) ---
+async function fetchDeviceLocationV2(deviceID){
+  try{
+    const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/?fields=location`, {
+      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if(!r.ok) return null;
+    const j = await r.json();
+    const lat = j?.location?.lat;
+    const lng = j?.location?.lng;
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      return { lat, lon: lng };
+    }
+  }catch(e){ /* ignore */ }
+  return null;
+}
+
+async function fetchDeviceLastValuesV2(deviceID){
+  try{
+    const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`, {
+      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if(!r.ok) return null;
+    const j = await r.json();
+    return (j && typeof j === 'object') ? j : null;
+  }catch(e){
+    console.warn('last-values v2 failed', e);
+    return null;
+  }
 }
 
 
@@ -793,6 +823,154 @@ async function updateCharts(deviceID, SENSORS){
       setTimeout(() => updateCharts(deviceID, SENSORS), 0);
     }
   }
+}
+// Part 3 — FAST live paint: bulk last values, then fallback
+async function poll(deviceID, SENSORS){
+  // ---- FAST PATH: one call gets all last values; draw immediately if available ----
+  const bulk = await fetchDeviceLastValuesV2(deviceID);
+  if (bulk) {
+    const readings = {};
+    // Dallas temps by address (16-hex labels defined in SENSORS)
+    for (const s of SENSORS){
+      if (!s.address) continue;
+      const obj = bulk[s.address];
+      if (obj && obj.value != null) {
+        const v = parseFloat(obj.value);
+        if (!Number.isNaN(v)) readings[s.address] = v;
+      }
+    }
+    // Common single-value vars
+    const pickVal = (...keys) => {
+      for (const k of keys) {
+        const o = bulk[k];
+        if (o && o.value != null && isFinite(o.value)) return Number(o.value);
+      }
+      return null;
+    };
+    const iccid  = (bulk.iccid && bulk.iccid.value != null) ? String(bulk.iccid.value) : null;
+    const signal = pickVal('signal','rssi','csq');
+    const volt   = pickVal('volt','vbatt','battery','batt');
+
+    // GPS from any of these labels
+    const gpsObj = bulk.gps || bulk.position || bulk.location || null;
+    let lat=null, lon=null, speedVal=null, lastLat=null, lastLon=null, lastGpsAgeMin=null;
+    let tsGps = null;
+    if (gpsObj) {
+      const c = gpsObj.context || {};
+      const candLat = c.lat;
+      const candLon = (c.lng!=null ? c.lng : c.lon);
+      if (typeof candLat === 'number' && typeof candLon === 'number') {
+        lat = lastLat = candLat;
+        lon = lastLon = candLon;
+      }
+      if (typeof c.speed === 'number') speedVal = c.speed;
+      if (gpsObj.timestamp) tsGps = gpsObj.timestamp;
+    }
+
+    // Compose a "best" timestamp from available points
+    const tsList = [];
+    const pushTs = o => { if (o && o.timestamp && isFinite(o.timestamp)) tsList.push(o.timestamp); };
+    ['signal','rssi','csq','volt','vbatt','battery','batt','iccid'].forEach(k => pushTs(bulk[k]));
+    if (gpsObj) pushTs(gpsObj);
+    for (const s of SENSORS){
+      if (!s.address) continue;
+      pushTs(bulk[s.address]);
+    }
+    const nowMs = Date.now();
+    const ts = tsList.length ? Math.max(...tsList) : nowMs;
+    if (tsGps) lastGpsAgeMin = Math.round((nowMs - tsGps)/60000);
+
+    // Resolve timezone and paint
+    const deviceLabel = document.getElementById("deviceSelect")?.value || null;
+    const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
+    drawLive({
+      ts,
+      iccid,
+      lat, lon,
+      lastLat, lastLon, lastGpsAgeMin,
+      speed:  speedVal,
+      signal, volt,
+      tz,
+      readings
+    }, SENSORS);
+
+    // Done via fast path
+    return;
+  }
+  // ---- END FAST PATH ----
+
+  // Prefer Ubidots device.location (v2) first to avoid GPS label scans
+  let lat = null, lon = null, speedVal = null;
+  let lastLat = null, lastLon = null, lastGpsAgeMin = null;
+  let tsGps = null;
+  let gpsArr = [];
+
+  const devLoc = await fetchDeviceLocationV2(deviceID);
+  if (devLoc) {
+    lastLat = devLoc.lat; lastLon = devLoc.lon;
+    lat = devLoc.lat;  lon = devLoc.lon;
+  } else {
+    // No device.location → fall back to scanning for a GPS variable once
+    const gpsLabel = await resolveGpsLabel(deviceID);
+    if (gpsLabel) {
+      gpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
+      tsGps = gpsArr[0]?.timestamp || null;
+      if (gpsArr[0]?.context) {
+        lastLat = gpsArr[0].context.lat;
+        lastLon = gpsArr[0].context.lng;
+      }
+    }
+  }
+
+  // GPS freshness gate (only applies to variable-based GPS)
+  const FRESH_GPS_MS = 15 * 60 * 1000;          // 15 minutes
+  const gpsIsFresh = tsGps && (Date.now() - tsGps) <= FRESH_GPS_MS;
+  if (!lat && gpsIsFresh && lastLat != null && lastLon != null) {
+    lat = lastLat; lon = lastLon;
+  }
+  if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
+
+  // Latest values for ICCID, sensors, signal, volt
+  const iccArr = await fetchUbidotsVar(deviceID, "iccid", 1);
+  let tsIccid = iccArr[0]?.timestamp || null;
+
+  const readings = {};
+  let tsSensorMax = null;
+  await Promise.all(SENSORS.filter(s => s.address).map(async s => {
+    const v = await fetchUbidotsVar(deviceID, s.address, 1);
+    if (v.length && v[0].value != null) {
+      readings[s.address] = parseFloat(v[0].value);
+      const tsVal = v[0]?.timestamp;
+      if (tsVal != null && (tsSensorMax == null || tsVal > tsSensorMax)) tsSensorMax = tsVal;
+    }
+  }));
+  const [signalArr, voltArr] = await Promise.all([
+    fetchUbidotsVar(deviceID, "signal", 1),
+    fetchUbidotsVar(deviceID, "volt", 1)
+  ]);
+  let tsSignal = signalArr[0]?.timestamp || null;
+  let tsVolt   = voltArr[0]?.timestamp || null;
+
+  // Compose "best" ts for the live panel
+  let ts = Date.now();
+  const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => x != null);
+  if (candidates.length > 0) ts = Math.max(...candidates);
+
+  // Resolve timezone and paint
+  const deviceLabel = document.getElementById("deviceSelect")?.value || null;
+  const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
+  drawLive({
+    ts,
+    iccid: iccArr[0]?.value ?? null,
+    lat,
+    lon,
+    lastLat, lastLon, lastGpsAgeMin,
+    speed: speedVal,
+    signal: signalArr[0]?.value ?? null,
+    volt:  voltArr[0]?.value ?? null,
+    tz,
+    readings
+  }, SENSORS);
 }
 
 /* =================== Live panel + map =================== */
