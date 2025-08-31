@@ -492,14 +492,16 @@ function initCharts(SENSORS){
       data:{
         labels:[],
         datasets:[{
-          data:[],
-          borderColor:s.col,
-          borderWidth:2,
-          fill:false,
-          backgroundColor:'transparent',
-          parsing:false,
-          spanGaps:true
-        }]
+  data:[],
+  borderColor:s.col,
+  borderWidth:3,
+  fill:false,
+  backgroundColor:'transparent',
+  // parsing:false,  // ← remove this line
+  pointRadius:2,            // TEMP: make dots visible while testing
+  pointHoverRadius:4,
+  spanGaps:true
+}]
       },
       options:{
         responsive:true,
