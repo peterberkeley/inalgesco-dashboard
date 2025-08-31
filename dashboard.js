@@ -1396,10 +1396,12 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
     // 6) Render everything for the selected device
       delete variableCache[deviceID];  // rebuild freshest varId map for this device
     if (deviceID){
-      const liveDallas = await fetchDallasAddresses(deviceID);
-     SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+     const liveDallas = await fetchDallasAddresses(deviceID);
+SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
 ensureCharts(SENSORS, deviceLabel);
 await updateCharts(deviceID, SENSORS);
+if(!map) initMap();
+await poll(deviceID, SENSORS);
       if(!map) initMap();
       await poll(deviceID, SENSORS);
       await renderMaintenanceBox(deviceLabel, deviceID);
