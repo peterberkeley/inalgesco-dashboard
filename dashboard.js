@@ -35,6 +35,10 @@ let legendControl = null;
 
 // holds the most recent devices context so the CSV click handler can resolve deviceID
 window.__deviceMap = {};
+// Prevent overlapping updateAll() runs (timer + device change, etc.)
+let __updateInFlight = false;
+let __updateQueued   = false;
+
 
 
 /* =================== Helpers =================== */
@@ -242,12 +246,11 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   }
 }
 /* =================== GPS variable auto-detect =================== */
-const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
-
-// Return cached result even if it's null (null = "no GPS label; don't rescan")
-if (Object.prototype.hasOwnProperty.call(gpsLabelCache, deviceID)) {
-  return gpsLabelCache[deviceID]; // may be string or null
-}
+async function resolveGpsLabel(deviceID){
+  // Return cached result even if it's null (null = "no GPS label; don't rescan")
+  if (Object.prototype.hasOwnProperty.call(gpsLabelCache, deviceID)) {
+    return gpsLabelCache[deviceID]; // may be string or null
+  }
 
   await ensureVarCache(deviceID);
   const labels = Object.keys(variableCache[deviceID] || {});
@@ -256,25 +259,27 @@ if (Object.prototype.hasOwnProperty.call(gpsLabelCache, deviceID)) {
   const preferred = ['gps','position','location'];
   const order = preferred.concat(labels.filter(l => !preferred.includes(l)));
 
-   // Choose the freshest label whose latest value includes lat/lng
-let bestLab = null, bestTs = -Infinity;
-for (const lab of order){
-  const rows = await fetchUbidotsVar(deviceID, lab, 1);
-  const r = rows?.[0];
-  const lat = r?.context?.lat, lng = r?.context?.lng;
-  const ts  = r?.timestamp || 0;
-  if (typeof lat === 'number' && typeof lng === 'number' && ts > bestTs) {
-    bestTs = ts; bestLab = lab;
+  // Choose the freshest label whose latest value includes lat/lng
+  let bestLab = null, bestTs = -Infinity;
+  for (const lab of order){
+    const rows = await fetchUbidotsVar(deviceID, lab, 1);
+    const r = rows?.[0];
+    const lat = r?.context?.lat, lng = r?.context?.lng;
+    const ts  = r?.timestamp || 0;
+    if (typeof lat === 'number' && typeof lng === 'number' && ts > bestTs) {
+      bestTs = ts; bestLab = lab;
+    }
   }
+
+  if (bestLab) {
+    gpsLabelCache[deviceID] = bestLab;
+    console.log('[gps label]', deviceID, '→', bestLab);
+    return bestLab;
+  }
+  gpsLabelCache[deviceID] = null; // cache miss so we never rescan for this device
+  console.warn('[gps label] none found for device', deviceID, labels);
+  return null;
 }
-if (bestLab) {
-  gpsLabelCache[deviceID] = bestLab;
-  console.log('[gps label]', deviceID, '→', bestLab);
-  return bestLab;
-}
-gpsLabelCache[deviceID] = null;
-console.warn('[gps label] none found for device', deviceID, labels);
-return null;
 
 
 }
@@ -293,6 +298,21 @@ async function fetchDeviceLocationV2(deviceID){
     }
   }catch(e){ /* ignore */ }
   return null;
+}
+// Fetch all last values for a device in one call (v2). Returns an object keyed by variable label.
+// Falls back to null if not available.
+async function fetchDeviceLastValuesV2(deviceID){
+  try{
+    const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`, {
+      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if(!r.ok) return null;
+    const j = await r.json();
+    return (j && typeof j === 'object') ? j : null;
+  }catch(e){
+    console.warn('last-values v2 failed', e);
+    return null;
+  }
 }
 
 
@@ -391,6 +411,7 @@ function initCharts(SENSORS){
   ctr.innerHTML = "";
   SENSORS.forEach(s=>{
     const box = document.createElement("div");
+        box.setAttribute('data-addr', (s.address || s.id || ''));
     box.className = "chart-box";
     box.innerHTML = `<h3>${s.label||""}</h3><canvas></canvas>`;
     ctr.appendChild(box);
@@ -419,16 +440,43 @@ function initCharts(SENSORS){
 // Layout key = deviceLabel + ordered addresses (ignores the "avg" slot).
 function ensureCharts(SENSORS, deviceLabel){
   const chartsEl = document.getElementById('charts');
-  const addrs = SENSORS.filter(s => s.address).map(s => s.address).join(',');
-  const key = `${deviceLabel}|${addrs}`;
+  // Order-independent key: same set of addresses → reuse
+  const addrsSorted = SENSORS
+    .filter(s => s.address)
+    .map(s => s.address)
+    .sort()
+    .join(',');
+  const key = `${deviceLabel}|${addrsSorted}`;
+
+  // If layout unchanged and canvases exist, re-bind Chart instances to the new SENSORS
   if (window.__chartsKey === key && chartsEl && chartsEl.children && chartsEl.children.length){
-    console.log('[charts] reuse existing canvas');
-    return; // keep existing Chart instances & canvases
+    // Build a map addr/id → existing Chart instance from current DOM
+    const boxes = chartsEl.querySelectorAll('.chart-box');
+    const instByAddr = new Map();
+    boxes.forEach(box => {
+      const addr = box.getAttribute('data-addr') || '';
+      const canvas = box.querySelector('canvas');
+      if (!canvas) return;
+      const inst = Chart.getChart(canvas);  // Chart.js v4 API
+      if (inst) instByAddr.set(addr, inst);
+    });
+
+    // Re-bind: attach existing instances to the new SENSORS array
+    SENSORS.forEach(s => {
+      const addr = s.address || s.id || '';
+      s.chart = instByAddr.get(addr) || null;
+    });
+
+    console.log('[charts] reuse existing canvas (rebound)');
+    return; // keep existing canvases & chart instances
   }
+
+  // Layout changed (different addresses set or first load) → rebuild
   window.__chartsKey = key;
   console.log('[charts] rebuild canvas (new layout or device)');
   initCharts(SENSORS);
 }
+
 
 async function updateCharts(deviceID, SENSORS){
 
@@ -692,6 +740,80 @@ if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
 
 // Part 3
 async function poll(deviceID, SENSORS){
+    // ---- FAST PATH: one call gets all last values; draw immediately if available ----
+  const bulk = await fetchDeviceLastValuesV2(deviceID);
+  if (bulk) {
+    const readings = {};
+    // Dallas temps by address (16-hex labels defined in SENSORS)
+    for (const s of SENSORS){
+      if (!s.address) continue;
+      const obj = bulk[s.address];
+      if (obj && obj.value != null) {
+        const v = parseFloat(obj.value);
+        if (!Number.isNaN(v)) readings[s.address] = v;
+      }
+    }
+
+    // Common single-value vars
+    const pickVal = (...keys) => {
+      for (const k of keys) {
+        const o = bulk[k];
+        if (o && o.value != null && isFinite(o.value)) return Number(o.value);
+      }
+      return null;
+    };
+    const iccid  = (bulk.iccid && bulk.iccid.value != null) ? String(bulk.iccid.value) : null;
+    const signal = pickVal('signal','rssi','csq');
+    const volt   = pickVal('volt','vbatt','battery','batt');
+
+    // GPS from any of these labels
+    const gpsObj = bulk.gps || bulk.position || bulk.location || null;
+    let lat=null, lon=null, speedVal=null, lastLat=null, lastLon=null, lastGpsAgeMin=null;
+    let tsGps = null;
+    if (gpsObj) {
+      const c = gpsObj.context || {};
+      const candLat = c.lat;
+      const candLon = (c.lng!=null ? c.lng : c.lon);
+      if (typeof candLat === 'number' && typeof candLon === 'number') {
+        lat = lastLat = candLat;
+        lon = lastLon = candLon;
+      }
+      if (typeof c.speed === 'number') speedVal = c.speed;
+      if (gpsObj.timestamp) tsGps = gpsObj.timestamp;
+    }
+
+    // Compose a "best" timestamp from available points
+    const tsList = [];
+    const pushTs = o => { if (o && o.timestamp && isFinite(o.timestamp)) tsList.push(o.timestamp); };
+    ['signal','rssi','csq','volt','vbatt','battery','batt','iccid'].forEach(k => pushTs(bulk[k]));
+    if (gpsObj) pushTs(gpsObj);
+    for (const s of SENSORS){
+      if (!s.address) continue;
+      pushTs(bulk[s.address]);
+    }
+    const nowMs = Date.now();
+    const ts = tsList.length ? Math.max(...tsList) : nowMs;
+    if (tsGps) lastGpsAgeMin = Math.round((nowMs - tsGps)/60000);
+
+    // Resolve timezone and paint
+    const deviceLabel = document.getElementById("deviceSelect")?.value || null;
+    const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
+    drawLive({
+      ts,
+      iccid,
+      lat, lon,
+      lastLat, lastLon, lastGpsAgeMin,
+      speed:  speedVal,
+      signal, volt,
+      tz,
+      readings
+    }, SENSORS);
+
+    // We’re done; skip the slower per-variable path below
+    return;
+  }
+  // ---- END FAST PATH ----
+
   const gpsLabel = await resolveGpsLabel(deviceID);
   let gpsArr = [];
   if (gpsLabel) gpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
@@ -1206,6 +1328,14 @@ onReady(() => {
 });
 
 async function updateAll(){
+    if (__updateInFlight) {
+    __updateQueued = true;
+    console.log('[updateAll] skipped (already running)');
+    return;
+  }
+  __updateInFlight = true;
+  const __t0 = performance.now();
+
   try{
     // 1) Fetch mapping + devices
     await fetchSensorMapMapping();
@@ -1395,27 +1525,35 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
     // 6) Render everything for the selected device
     if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID];  // optional rebuild; default off
-    if (deviceID){
-     const liveDallas = await fetchDallasAddresses(deviceID);
-SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+if (deviceID){
+  const liveDallas = await fetchDallasAddresses(deviceID);
+  SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
 ensureCharts(SENSORS, deviceLabel);
-await updateCharts(deviceID, SENSORS);
-if(!map) initMap();
-await poll(deviceID, SENSORS);
-      if(!map) initMap();
-      await poll(deviceID, SENSORS);
-      await renderMaintenanceBox(deviceLabel, deviceID);
-      await updateBreadcrumbs(deviceID, selectedRangeMinutes);
-    } else {
-      console.error("Device ID not found for", deviceLabel);
-    }
+if (!map) initMap();                 // ensure map/marker exists BEFORE we draw
+await poll(deviceID, SENSORS);       // 1) show current values immediately
+await updateCharts(deviceID, SENSORS); // 2) then fetch history for charts
+await renderMaintenanceBox(deviceLabel, deviceID);
+ // Defer breadcrumbs so they don't block first paint
+  setTimeout(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); }, 0);
+} else {
+  console.error("Device ID not found for", deviceLabel);
+}
+
 
     // 7) Re-wire buttons in case DOM changed
     wireRangeButtons();
-  }catch(err){
+   }catch(err){
     console.error("updateAll fatal error (patched):", err);
+  } finally {
+    __updateInFlight = false;
+    console.log('[updateAll] done in', Math.round(performance.now()-__t0), 'ms');
+    if (__updateQueued) {
+      __updateQueued = false;
+      setTimeout(updateAll, 0); // run one more pass to catch the latest state
+    }
   }
 }
+
 // EOF
 
 
