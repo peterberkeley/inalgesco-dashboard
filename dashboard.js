@@ -10,6 +10,7 @@ let REFRESH_INTERVAL = 60_000;      // poll live every 60s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 const ONLINE_WINDOW_SEC = 300;      // online if seen within last 5 minutes
 const USE_V16_HEARTBEAT_FALLBACK = false;  // TEMP: dropdown uses devices v2 only
+const FORCE_VARCACHE_REFRESH = false;      // set true only if debugging var-id mismatches
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981", "#f97316"];
 
 /* =================== State =================== */
@@ -1395,7 +1396,7 @@ console.log('[lastSeen]', {
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
     // 6) Render everything for the selected device
-      delete variableCache[deviceID];  // rebuild freshest varId map for this device
+    if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID];  // optional rebuild; default off
     if (deviceID){
      const liveDallas = await fetchDallasAddresses(deviceID);
 SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
