@@ -124,8 +124,7 @@ async function resolveDeviceTz(deviceLabel, lat, lon){
 /* =================== Admin mapping (context) =================== */
 async function fetchSensorMapMapping(){
   try{
-    const res = await fetch(`${UBIDOTS_V1}/devices/config/sensor_map/values?page_size=1`,
-      { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
+    const res = await fetch(`${UBIDOTS_V1}/devices/config/sensor_map/values?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
     const js = await res.json();
     sensorMapConfig = (js.results?.[0]?.context) || {};
     aliasMap = sensorMapConfig.__aliases || {};
@@ -252,50 +251,6 @@ async function ensureVarCache(deviceID){
 }
 
 
-  const url = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`;
-
-  __varCachePromises[deviceID] = (async () => {
-    try{
-      const rs = await fetch(url, { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }});
-      if(!rs.ok){ variableCache[deviceID]={}; return; }
-      const jl = await rs.json();
-
-      // Group by label; if duplicates exist, pick the varId whose *latest value* has the newest timestamp.
-      const groups = new Map(); // label -> [varId...]
-      (jl.results || []).forEach(v => {
-        if (!groups.has(v.label)) groups.set(v.label, []);
-        groups.get(v.label).push(v.id);
-      });
-
-      // Build the map; only probe values for labels that actually have duplicates
-      const map = {};
-      for (const [label, ids] of groups.entries()) {
-        if (ids.length === 1) { map[label] = ids[0]; continue; }
-
-        // Duplicate label: choose freshest by latest value timestamp
-        let bestId = ids[0], bestTs = -Infinity;
-        for (const id of ids) {
-          const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1`, {
-            headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-          });
-          if (!r.ok) continue;
-          const j = await r.json();
-          const ts = j?.results?.[0]?.timestamp || 0;
-          if (ts > bestTs) { bestTs = ts; bestId = id; }
-        }
-        map[label] = bestId;
-      }
-
-      variableCache[deviceID] = map;
-    }catch(e){
-      console.error("ensureVarCache", e);
-      variableCache[deviceID] = {};
-    }
-  })();
-
-  try { await __varCachePromises[deviceID]; }
-  finally { delete __varCachePromises[deviceID]; }
-}
 
 async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   try{
@@ -310,62 +265,6 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
         if (rows.length) return rows;
       }
     }
-
-    // Lazy duplicate resolution: scan ids for this label only if needed
-    const list = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-    if (!list.ok) return [];
-    const jl = await list.json();
-    const ids = (jl.results || []).filter(v => v.label === varLabel).map(v => v.id);
-
-    for (const id of ids) {
-      if (id === varId) continue; // already tried
-      const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-      if (!r.ok) continue;
-      const j = await r.json();
-      const rows = j.results || [];
-      if (rows.length) {
-        // Update mapping to the working id for future calls
-        variableCache[deviceID][varLabel] = id;
-        return rows;
-      }
-    }
-
-    // Nothing found
-    return [];
-  }catch(e){
-    console.error("fetchUbidotsVar", e);
-    return [];
-  }
-}
-
-
-    // Lazy duplicate resolution: scan ids for this label only if needed
-    const list = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-    if (!list.ok) return [];
-    const jl = await list.json();
-    const ids = (jl.results || []).filter(v => v.label === varLabel).map(v => v.id);
-
-    for (const id of ids) {
-      if (id === varId) continue; // already tried
-      const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-      if (!r.ok) continue;
-      const j = await r.json();
-      const rows = j.results || [];
-      if (rows.length) {
-        // Update mapping to the working id for future calls
-        variableCache[deviceID][varLabel] = id;
-        return rows;
-      }
-    }
-
-    // Nothing found
-    return [];
-  }catch(e){
-    console.error("fetchUbidotsVar", e);
-    return [];
-  }
-}
-
 
 /* =================== GPS variable auto-detect =================== */
 const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
@@ -472,9 +371,8 @@ async function fetchDallasAddresses(deviceID){
     }
 
     // 3) Fallback (should rarely run): direct variables listing as a last resort
-    const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000`, {
-      headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-    });
+   const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+
     if(!res.ok) return [];
     const js = await res.json();
     const labels = (js.results || []).map(v => v.label).filter(l => /^[0-9a-fA-F]{16}$/.test(l));
@@ -1307,9 +1205,10 @@ async function fetchCsvRows(deviceID, varLabel, start, end, signal){
     let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${id}/values/?page_size=1000`;
     if(start) url += `&start=${start}`;
     if(end)   url += `&end=${end}`;
-   const init = { headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN } };
+   const init = {};
 if (signal) init.signal = signal;
-const res = await fetch(url, init);
+const res = await fetch(url + `&token=${UBIDOTS_ACCOUNT_TOKEN}`, init);
+
 
     if(!res.ok) return [];
     return (await res.json()).results||[];
@@ -1751,9 +1650,8 @@ async function updateAll(){
     for (const lab of hb) {
       const varId = caps[lab];
       if (!varId) continue;
-      const r = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
-        headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-      });
+     const r = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+
       if (!r.ok) continue;
       const j = await r.json();
       const ts = j?.results?.[0]?.timestamp || 0; // ms
@@ -1797,9 +1695,7 @@ async function updateAll(){
         for (const lab of labelsToCheck) {
           const varId = variableCache[deviceID]?.[lab];
           if (!varId) continue;
-          const vs = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1`, {
-            headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-          });
+         const vs = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
           if (!vs.ok) continue;
           const vr = await vs.json();
           const ts = vr?.results?.[0]?.timestamp || 0;   // v1.6 values endpoint
