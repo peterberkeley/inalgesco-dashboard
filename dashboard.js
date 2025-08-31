@@ -515,15 +515,19 @@ try{
 
   // ORIGINAL range banner
   let minTs = Infinity, maxTs = -Infinity;
-  await Promise.all(SENSORS.map(async s=>{
-    if(!s.address) return;
-    const peek = await fetchUbidotsVar(deviceID, s.address, Math.min(HIST_POINTS, 10));
-    if(!peek.length) return;
-    const newest = peek[0].timestamp;
-    const oldest = peek[peek.length-1].timestamp;
+  // Reuse the cached per-sensor series (seriesByAddr) — no extra network
+for (const s of SENSORS){
+  if (!s.address) continue;
+  const ord = seriesByAddr.get(s.address);
+  if (!ord || !ord.length) continue;
+  const oldest = ord[0].timestamp;
+  const newest = ord[ord.length - 1].timestamp;
+  if (isFinite(oldest) && isFinite(newest)) {
     minTs = Math.min(minTs, oldest, newest);
     maxTs = Math.max(maxTs, oldest, newest);
-  }));
+  }
+}
+
   const rng = document.getElementById("chartRange");
   if (rng && isFinite(minTs) && isFinite(maxTs)) {
     const a=new Date(minTs), b=new Date(maxTs);
