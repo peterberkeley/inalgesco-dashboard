@@ -415,8 +415,24 @@ function initCharts(SENSORS){
     });
   });
 }
+// Only (re)build chart canvases when the chart layout changes.
+// Layout key = deviceLabel + ordered addresses (ignores the "avg" slot).
+function ensureCharts(SENSORS, deviceLabel){
+  const chartsEl = document.getElementById('charts');
+  const addrs = SENSORS.filter(s => s.address).map(s => s.address).join(',');
+  const key = `${deviceLabel}|${addrs}`;
+  if (window.__chartsKey === key && chartsEl && chartsEl.children && chartsEl.children.length){
+    console.log('[charts] reuse existing canvas');
+    return; // keep existing Chart instances & canvases
+  }
+  window.__chartsKey = key;
+  console.log('[charts] rebuild canvas (new layout or device)');
+  initCharts(SENSORS);
+}
 
 async function updateCharts(deviceID, SENSORS){
+
+
     const seriesByAddr = new Map(); // address -> ordered history (oldest..newest)
   // ORIGINAL per-sensor plotting (unchanged)
   await Promise.all(SENSORS.map(async s=>{
@@ -1381,9 +1397,9 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
       delete variableCache[deviceID];  // rebuild freshest varId map for this device
     if (deviceID){
       const liveDallas = await fetchDallasAddresses(deviceID);
-      SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
-      initCharts(SENSORS);
-      await updateCharts(deviceID, SENSORS);
+     SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+ensureCharts(SENSORS, deviceLabel);
+await updateCharts(deviceID, SENSORS);
       if(!map) initMap();
       await poll(deviceID, SENSORS);
       await renderMaintenanceBox(deviceLabel, deviceID);
