@@ -35,6 +35,7 @@ let legendControl = null;
 // holds the most recent devices context so the CSV click handler can resolve deviceID
 window.__deviceMap = {};
 
+
 /* =================== Helpers =================== */
 function onReady(fn){
   if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(fn,1);
