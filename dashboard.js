@@ -449,37 +449,49 @@ function initCharts(SENSORS){
   ctr.innerHTML = "";
   SENSORS.forEach(s=>{
     const box = document.createElement("div");
-        box.setAttribute('data-addr', (s.address || s.id || ''));
+    box.setAttribute('data-addr', (s.address || s.id || ''));
     box.className = "chart-box";
     box.innerHTML = `<h3>${s.label||""}</h3><canvas></canvas>`;
     ctr.appendChild(box);
+
     const ctx = box.querySelector("canvas").getContext("2d");
     // Keep canvas background white; dataset will not fill
     ctx.canvas.style.backgroundColor = "#ffffff";
+
     s.chart = new Chart(ctx,{
       type:"line",
-     data:{ labels:[], datasets:[{ data:[], borderColor:s.col, borderWidth:2, fill:false, backgroundColor:'transparent', parsing:false, spanGaps:true }]},
+      data:{
+        labels:[],
+        datasets:[{
+          data:[],
+          borderColor:s.col,
+          borderWidth:2,
+          fill:false,
+          backgroundColor:'transparent',
+          parsing:false,
+          spanGaps:true
+        }]
+      },
       options:{
         responsive:true,
         maintainAspectRatio:false,
-      animation:false,
+        animation:false,
         normalized:true,
-
-
         interaction:{ intersect:false, mode:'index' },
         scales:{
           x:{ ticks:{ display:false }, grid:{ color:'rgba(17,24,39,.05)' } },
           y:{ beginAtZero:false, ticks:{ callback:v=>Number(v).toFixed(1) }, grid:{ color:'rgba(17,24,39,.06)' } }
         },
         elements:{ line:{ tension:0.22 }, point:{ radius:0 } },
-     plugins:{ legend:{ display:false }, decimation:{ enabled:false } }
-    // Keep a direct handle for fast, version-agnostic rebinding
-    ctx.canvas.__chart = s.chart;
-
+        plugins:{ legend:{ display:false }, decimation:{ enabled:false } }
       }
     });
+
+    // Keep a direct handle for fast, version-agnostic rebinding
+    ctx.canvas.__chart = s.chart;
   });
 }
+
 // Only (re)build chart canvases when the chart layout changes.
 // Layout key = deviceLabel + ordered addresses (ignores the "avg" slot).
 function ensureCharts(SENSORS, deviceLabel){
@@ -530,411 +542,249 @@ async function updateCharts(deviceID, SENSORS){
   }
   __chartsInFlight = true;
   const __chartsT0 = performance.now();
+
   try{
-
-
     const seriesByAddr = new Map(); // address -> ordered history (oldest..newest)
     const QUICK_POINTS = Math.min(HIST_POINTS, 20);   // fast-first paint
-  const FULL_POINTS  = HIST_POINTS;                 // target history length
-  const NEEDS_BACKFILL = FULL_POINTS > QUICK_POINTS;
-  const expectedKey = window.__chartsKey;           // guard against device/layout changes
-      // If there are no sensor addresses, skip chart work (fast no-op)
-  if (!SENSORS.some(s => s.address)) {
-    const rng = document.getElementById('chartRange');
-    if (rng) rng.textContent = '';
-    const avgSlot = SENSORS.find(x => x.id === 'avg');
-    if (avgSlot && avgSlot.chart) {
-      avgSlot.chart.data.labels = [];
-      avgSlot.chart.data.datasets[0].data = [];
-      avgSlot.chart.update('none');
-    }
-    return;
-  }
+    const FULL_POINTS  = HIST_POINTS;                 // target history length
+    const NEEDS_BACKFILL = FULL_POINTS > QUICK_POINTS;
+    const expectedKey = window.__chartsKey;           // guard against device/layout changes
 
-  // ORIGINAL per-sensor plotting (unchanged)
-  await Promise.all(SENSORS.map(async s=>{
-    if(!s.address || !s.chart) return;
-   const rows = await fetchUbidotsVar(deviceID, s.address, QUICK_POINTS);
-    if(!rows.length) return;
-    const ordered = rows.slice().reverse();
-        seriesByAddr.set(s.address, ordered);
-    s.chart.data.labels = ordered.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
-
-    s.chart.data.datasets[0].data = ordered.map(r=>{
-      let v = parseFloat(r.value);
-      if(typeof s.calibration==="number") v += s.calibration;
-      return isNaN(v)?null:v;
-    });
-
-    // Dynamic y-scale (never clip top/bottom)
-    const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
-    if (vals.length) {
-      const vmin = Math.min(...vals);
-      const vmax = Math.max(...vals);
-      const pad  = Math.max(0.5, (vmax - vmin) * 0.10); // 10% or ≥0.5°
-      s.chart.options.scales.y.min = vmin - pad;
-      s.chart.options.scales.y.max = vmax + pad;
-    } else {
-      delete s.chart.options.scales.y.min;
-      delete s.chart.options.scales.y.max;
+    // If there are no sensor addresses, skip chart work (fast no-op)
+    if (!SENSORS.some(s => s.address)) {
+      const rng0 = document.getElementById('chartRange');
+      if (rng0) rng0.textContent = '';
+      const avg0 = SENSORS.find(x => x.id === 'avg');
+      if (avg0 && avg0.chart) {
+        avg0.chart.data.labels = [];
+        avg0.chart.data.datasets[0].data = [];
+        avg0.chart.update('none');
+      }
+      return;
     }
 
-   s.chart.update('none');
-  }));
+    // Per-sensor quick slice
+    await Promise.all(SENSORS.map(async s=>{
+      if(!s.address || !s.chart) return;
+      const rows = await fetchUbidotsVar(deviceID, s.address, QUICK_POINTS);
+      if(!rows.length) return;
+      const ordered = rows.slice().reverse();
+      seriesByAddr.set(s.address, ordered);
 
-  // Build & render "Chillrail Avg" using cached series; no extra fetch
-try{
-  // Collect per-sensor series from seriesByAddr (already fetched above)
-  const series = [];
-  for (const s of SENSORS){
-    if (!s.address) continue;
-    const ordered = seriesByAddr.get(s.address);
-    if (!ordered || !ordered.length) continue;
+      s.chart.data.labels = ordered.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+      s.chart.data.datasets[0].data = ordered.map(r=>{
+        let v = parseFloat(r.value);
+        if(typeof s.calibration==="number") v += s.calibration;
+        return isNaN(v)?null:v;
+      });
 
-    const items = ordered.map(r=>{
-      let v = parseFloat(r.value);
-      if (typeof s.calibration === 'number') v += s.calibration;
-      return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
-    }).filter(o => o.v != null);
-    if (items.length) series.push(items);
-  }
+      // Dynamic y-scale (never clip top/bottom)
+      const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
+      if (vals.length) {
+        const vmin = Math.min(...vals);
+        const vmax = Math.max(...vals);
+        const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
+        s.chart.options.scales.y.min = vmin - pad;
+        s.chart.options.scales.y.max = vmax + pad;
+      } else {
+        delete s.chart.options.scales.y.min;
+        delete s.chart.options.scales.y.max;
+      }
 
-  // Union minute buckets
-  const bucketSet = new Set();
-  series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
-  const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
+      s.chart.update('none');
+    }));
 
-  // Fast maps for each sensor
-  const maps = series.map(arr=>{
-    const m = new Map();
-    arr.forEach(o => m.set(o.ts, o.v));
-    return m;
-  });
+    // Build & render "Chillrail Avg" using cached series; no extra fetch
+    try{
+      const series = [];
+      for (const s of SENSORS){
+        if (!s.address) continue;
+        const ordered = seriesByAddr.get(s.address);
+        if (!ordered || !ordered.length) continue;
 
-  // Compute averages per bucket
- const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
+        const items = ordered.map(r=>{
+          let v = parseFloat(r.value);
+          if (typeof s.calibration === 'number') v += s.calibration;
+          return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
+        }).filter(o => o.v != null);
+        if (items.length) series.push(items);
+      }
 
-  const avgData = buckets.map(ts=>{
-    const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
-    return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
-  });
+      const bucketSet = new Set();
+      series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
+      const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
 
-  // Paint the "avg" chart
-  const avgSlot = SENSORS.find(x=>x.id==="avg");
-  if (avgSlot && avgSlot.chart){
-    avgSlot.chart.data.labels = avgLabels;
-    avgSlot.chart.data.datasets[0].data = avgData;
-    avgSlot.chart.data.datasets[0].fill = false;
-    avgSlot.chart.data.datasets[0].backgroundColor = 'transparent';
+      const maps = series.map(arr=>{
+        const m = new Map();
+        arr.forEach(o => m.set(o.ts, o.v));
+        return m;
+      });
 
-    const good = avgData.filter(v=>v!=null && isFinite(v));
-    if (good.length){
-      const vmin = Math.min(...good), vmax = Math.max(...good);
-      const pad  = Math.max(0.5,(vmax - vmin) * 0.10);
-      avgSlot.chart.options.scales.y.min = vmin - pad;
-      avgSlot.chart.options.scales.y.max = vmax + pad;
-    } else {
-      delete avgSlot.chart.options.scales.y.min;
-      delete avgSlot.chart.options.scales.y.max;
+      const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
+      const avgData = buckets.map(ts=>{
+        const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
+        return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+      });
+
+      const avgSlot = SENSORS.find(x=>x.id==="avg");
+      if (avgSlot && avgSlot.chart){
+        avgSlot.chart.data.labels = avgLabels;
+        avgSlot.chart.data.datasets[0].data = avgData;
+        avgSlot.chart.data.datasets[0].fill = false;
+        avgSlot.chart.data.datasets[0].backgroundColor = 'transparent';
+
+        const good = avgData.filter(v=>v!=null && isFinite(v));
+        if (good.length){
+          const vmin = Math.min(...good), vmax = Math.max(...good);
+          const pad  = Math.max(0.5,(vmax - vmin) * 0.10);
+          avgSlot.chart.options.scales.y.min = vmin - pad;
+          avgSlot.chart.options.scales.y.max = vmax + pad;
+        } else {
+          delete avgSlot.chart.options.scales.y.min;
+          delete avgSlot.chart.options.scales.y.max;
+        }
+        avgSlot.chart.update('none');
+      }
+    } catch(e){ console.error('avg-build failed:', e); }
+
+    // Range banner from cached series
+    let minTs = Infinity, maxTs = -Infinity;
+    for (const s of SENSORS){
+      if (!s.address) continue;
+      const ord = seriesByAddr.get(s.address);
+      if (!ord || !ord.length) continue;
+      const oldest = ord[0].timestamp;
+      const newest = ord[ord.length - 1].timestamp;
+      if (isFinite(oldest) && isFinite(newest)) {
+        minTs = Math.min(minTs, oldest, newest);
+        maxTs = Math.max(maxTs, oldest, newest);
+      }
     }
-   avgSlot.chart.update('none');
-  }
-} catch(e){ console.error('avg-build failed:', e); }
-
-
-  // ORIGINAL range banner
-  let minTs = Infinity, maxTs = -Infinity;
-  // Reuse the cached per-sensor series (seriesByAddr) — no extra network
-for (const s of SENSORS){
-  if (!s.address) continue;
-  const ord = seriesByAddr.get(s.address);
-  if (!ord || !ord.length) continue;
-  const oldest = ord[0].timestamp;
-  const newest = ord[ord.length - 1].timestamp;
-  if (isFinite(oldest) && isFinite(newest)) {
-    minTs = Math.min(minTs, oldest, newest);
-    maxTs = Math.max(maxTs, oldest, newest);
-  }
-}
-
-  const rng = document.getElementById("chartRange");
     const rng = document.getElementById("chartRange");
-  if (rng && isFinite(minTs) && isFinite(maxTs)) {
-    const a=new Date(minTs), b=new Date(maxTs);
-    const same = a.toDateString()===b.toDateString();
-    const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
-    const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-    rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
-  }
+    if (rng && isFinite(minTs) && isFinite(maxTs)) {
+      const a=new Date(minTs), b=new Date(maxTs);
+      const same = a.toDateString()===b.toDateString();
+      const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
+      const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+      rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+    }
 
-  // Background backfill to FULL_POINTS (if more than quick slice requested)
-  if (NEEDS_BACKFILL) {
-    setTimeout(async () => {
-      // If layout changed, skip backfill
-      if (window.__chartsKey !== expectedKey) return;
+    // Background backfill to FULL_POINTS
+    if (NEEDS_BACKFILL) {
+      setTimeout(async () => {
+        if (window.__chartsKey !== expectedKey) return;
 
-      try {
-        // 1) Fetch full series per sensor and update charts
-        await Promise.all(SENSORS.map(async s => {
-          if (!s.address || !s.chart) return;
-          const rowsFull = await fetchUbidotsVar(deviceID, s.address, FULL_POINTS);
-          if (!rowsFull || !rowsFull.length) return;
-          const orderedFull = rowsFull.slice().reverse();
-          seriesByAddr.set(s.address, orderedFull);
-
-          // Update labels and data
-          s.chart.data.labels = orderedFull.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
-
-          s.chart.data.datasets[0].data = orderedFull.map(r => {
-            let v = parseFloat(r.value);
-            if (typeof s.calibration === 'number') v += s.calibration;
-            return isNaN(v) ? null : v;
-          });
-
-          // Dynamic y-scale
-          const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
-          if (vals.length) {
-            const vmin = Math.min(...vals);
-            const vmax = Math.max(...vals);
-            const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
-            s.chart.options.scales.y.min = vmin - pad;
-            s.chart.options.scales.y.max = vmax + pad;
-          } else {
-            delete s.chart.options.scales.y.min;
-            delete s.chart.options.scales.y.max;
-          }
-
-avgSlot.chart.update('none');
-        }));
-
-        // 2) Rebuild "Chillrail Avg" using the now-complete series
         try {
-          const series = [];
-          for (const s of SENSORS){
-            if (!s.address) continue;
-            const ordered = seriesByAddr.get(s.address);
-            if (!ordered || !ordered.length) continue;
-            const items = ordered.map(r=>{
+          // Full series per sensor
+          await Promise.all(SENSORS.map(async s => {
+            if (!s.address || !s.chart) return;
+            const rowsFull = await fetchUbidotsVar(deviceID, s.address, FULL_POINTS);
+            if (!rowsFull || !rowsFull.length) return;
+            const orderedFull = rowsFull.slice().reverse();
+            seriesByAddr.set(s.address, orderedFull);
+
+            s.chart.data.labels = orderedFull.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+            s.chart.data.datasets[0].data = orderedFull.map(r => {
               let v = parseFloat(r.value);
               if (typeof s.calibration === 'number') v += s.calibration;
-              return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
-            }).filter(o => o.v != null);
-            if (items.length) series.push(items);
-          }
+              return isNaN(v) ? null : v;
+            });
 
-          const bucketSet = new Set();
-          series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
-          const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
-
-          const maps = series.map(arr=>{
-            const m = new Map();
-            arr.forEach(o => m.set(o.ts, o.v));
-            return m;
-          });
-
-          const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
-
-          const avgData = buckets.map(ts=>{
-            const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
-            return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
-          });
-
-          const avgSlot = SENSORS.find(x=>x.id==="avg");
-          if (avgSlot && avgSlot.chart){
-            avgSlot.chart.data.labels = avgLabels;
-            avgSlot.chart.data.datasets[0].data = avgData;
-            const good = avgData.filter(v=>v!=null && isFinite(v));
-            if (good.length){
-              const vmin = Math.min(...good), vmax = Math.max(...good);
-              const pad  = Math.max(0.5,(vmax - vmin) * 0.10);
-              avgSlot.chart.options.scales.y.min = vmin - pad;
-              avgSlot.chart.options.scales.y.max = vmax + pad;
+            const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
+            if (vals.length) {
+              const vmin = Math.min(...vals);
+              const vmax = Math.max(...vals);
+              const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
+              s.chart.options.scales.y.min = vmin - pad;
+              s.chart.options.scales.y.max = vmax + pad;
             } else {
-              delete avgSlot.chart.options.scales.y.min;
-              delete avgSlot.chart.options.scales.y.max;
+              delete s.chart.options.scales.y.min;
+              delete s.chart.options.scales.y.max;
             }
-            avgSlot.chart.update();
+
+            s.chart.update('none');
+          }));
+
+          // Rebuild Avg on full data
+          try {
+            const series = [];
+            for (const s of SENSORS){
+              if (!s.address) continue;
+              const ordered = seriesByAddr.get(s.address);
+              if (!ordered || !ordered.length) continue;
+              const items = ordered.map(r=>{
+                let v = parseFloat(r.value);
+                if (typeof s.calibration === 'number') v += s.calibration;
+                return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
+              }).filter(o => o.v != null);
+              if (items.length) series.push(items);
+            }
+
+            const bucketSet = new Set();
+            series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
+            const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
+
+            const maps = series.map(arr=>{
+              const m = new Map();
+              arr.forEach(o => m.set(o.ts, o.v));
+              return m;
+            });
+
+            const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
+            const avgData = buckets.map(ts=>{
+              const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
+              return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+            });
+
+            const avgSlot = SENSORS.find(x=>x.id==="avg");
+            if (avgSlot && avgSlot.chart){
+              avgSlot.chart.data.labels = avgLabels;
+              avgSlot.chart.data.datasets[0].data = avgData;
+              const good = avgData.filter(v=>v!=null && isFinite(v));
+              if (good.length){
+                const vmin = Math.min(...good), vmax = Math.max(...good);
+                const pad  = Math.max(0.5,(vmax - vmin) * 0.10);
+                avgSlot.chart.options.scales.y.min = vmin - pad;
+                avgSlot.chart.options.scales.y.max = vmax + pad;
+              } else {
+                delete avgSlot.chart.options.scales.y.min;
+                delete avgSlot.chart.options.scales.y.max;
+              }
+              avgSlot.chart.update('none');
+            }
+          } catch(e) {
+            console.error('avg backfill failed:', e);
           }
+
+          // Update range banner on full data
+          let minTs2 = Infinity, maxTs2 = -Infinity;
+          for (const s of SENSORS){
+            if (!s.address) continue;
+            const ord = seriesByAddr.get(s.address);
+            if (!ord || !ord.length) continue;
+            const oldest = ord[0].timestamp;
+            const newest = ord[ord.length-1].timestamp;
+            if (isFinite(oldest) && isFinite(newest)) {
+              minTs2 = Math.min(minTs2, oldest, newest);
+              maxTs2 = Math.max(maxTs2, oldest, newest);
+            }
+          }
+          const rng2 = document.getElementById("chartRange");
+          if (rng2 && isFinite(minTs2) && isFinite(maxTs2)) {
+            const a=new Date(minTs2), b=new Date(maxTs2);
+            const same = a.toDateString()===b.toDateString();
+            const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
+            const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+            rng2.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+          }
+
+          // free memory after successful backfill
+          seriesByAddr.clear();
         } catch(e) {
-          console.error('avg backfill failed:', e);
+          console.error('backfill error:', e);
         }
-
-        // 3) Update range banner from fully backfilled series
-        let minTs = Infinity, maxTs = -Infinity;
-        for (const s of SENSORS){
-          if (!s.address) continue;
-          const ord = seriesByAddr.get(s.address);
-          if (!ord || !ord.length) continue;
-          const oldest = ord[0].timestamp;
-          const newest = ord[ord.length-1].timestamp;
-          if (isFinite(oldest) && isFinite(newest)) {
-            minTs = Math.min(minTs, oldest, newest);
-            maxTs = Math.max(maxTs, oldest, newest);
-          }
-        }
-        const rng2 = document.getElementById("chartRange");
-        if (rng2 && isFinite(minTs) && isFinite(maxTs)) {
-          const a=new Date(minTs), b=new Date(maxTs);
-          const same = a.toDateString()===b.toDateString();
-          const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
-          const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-          rng2.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
-        }
-                seriesByAddr.clear();  // free memory after successful backfill
-      } catch(e) {
-        console.error('backfill error:', e);
-      }
-    }, 0);
-  }
-}
-// Part 3
-async function poll(deviceID, SENSORS){
-  // ---- FAST PATH: one call gets all last values; draw immediately if available ----
-  const bulk = await fetchDeviceLastValuesV2(deviceID);
-  if (bulk) {
-    const readings = {};
-    // Dallas temps by address (16-hex labels defined in SENSORS)
-    for (const s of SENSORS){
-      if (!s.address) continue;
-      const obj = bulk[s.address];
-      if (obj && obj.value != null) {
-        const v = parseFloat(obj.value);
-        if (!Number.isNaN(v)) readings[s.address] = v;
-      }
+      }, 0);
     }
-
-    // Common single-value vars
-    const pickVal = (...keys) => {
-      for (const k of keys) {
-        const o = bulk[k];
-        if (o && o.value != null && isFinite(o.value)) return Number(o.value);
-      }
-      return null;
-    };
-    const iccid  = (bulk.iccid && bulk.iccid.value != null) ? String(bulk.iccid.value) : null;
-    const signal = pickVal('signal','rssi','csq');
-    const volt   = pickVal('volt','vbatt','battery','batt');
-
-    // GPS from any of these labels
-    const gpsObj = bulk.gps || bulk.position || bulk.location || null;
-    let lat=null, lon=null, speedVal=null, lastLat=null, lastLon=null, lastGpsAgeMin=null;
-    let tsGps = null;
-    if (gpsObj) {
-      const c = gpsObj.context || {};
-      const candLat = c.lat;
-      const candLon = (c.lng!=null ? c.lng : c.lon);
-      if (typeof candLat === 'number' && typeof candLon === 'number') {
-        lat = lastLat = candLat;
-        lon = lastLon = candLon;
-      }
-      if (typeof c.speed === 'number') speedVal = c.speed;
-      if (gpsObj.timestamp) tsGps = gpsObj.timestamp;
-    }
-
-    // Compose a "best" timestamp from available points
-    const tsList = [];
-    const pushTs = o => { if (o && o.timestamp && isFinite(o.timestamp)) tsList.push(o.timestamp); };
-    ['signal','rssi','csq','volt','vbatt','battery','batt','iccid'].forEach(k => pushTs(bulk[k]));
-    if (gpsObj) pushTs(gpsObj);
-    for (const s of SENSORS){
-      if (!s.address) continue;
-      pushTs(bulk[s.address]);
-    }
-    const nowMs = Date.now();
-    const ts = tsList.length ? Math.max(...tsList) : nowMs;
-    if (tsGps) lastGpsAgeMin = Math.round((nowMs - tsGps)/60000);
-
-    // Resolve timezone and paint
-    const deviceLabel = document.getElementById("deviceSelect")?.value || null;
-    const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
-    drawLive({
-      ts,
-      iccid,
-      lat, lon,
-      lastLat, lastLon, lastGpsAgeMin,
-      speed:  speedVal,
-      signal, volt,
-      tz,
-      readings
-    }, SENSORS);
-
-    // Done via fast path
-    return;
-  }
-  // ---- END FAST PATH ----
-
-  // Prefer Ubidots device.location (v2) first to avoid GPS label scans
-  let lat = null, lon = null, speedVal = null;
-  let lastLat = null, lastLon = null, lastGpsAgeMin = null;
-  let tsGps = null;
-  let gpsArr = [];
-
-  const devLoc = await fetchDeviceLocationV2(deviceID);
-  if (devLoc) {
-    lastLat = devLoc.lat; lastLon = devLoc.lon;
-    lat = devLoc.lat;  lon = devLoc.lon;
-  } else {
-    // No device.location → fall back to scanning for a GPS variable once
-    const gpsLabel = await resolveGpsLabel(deviceID);
-    if (gpsLabel) {
-      gpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
-      tsGps = gpsArr[0]?.timestamp || null;
-      if (gpsArr[0]?.context) {
-        lastLat = gpsArr[0].context.lat;
-        lastLon = gpsArr[0].context.lng;
-      }
-    }
-  }
-
-  // GPS freshness gate (only applies to variable-based GPS)
-  const FRESH_GPS_MS = 15 * 60 * 1000;          // 15 minutes
-  const gpsIsFresh = tsGps && (Date.now() - tsGps) <= FRESH_GPS_MS;
-  if (!lat && gpsIsFresh && lastLat != null && lastLon != null) {
-    lat = lastLat; lon = lastLon;
-  }
-  if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
-
-  // Latest values for ICCID, sensors, signal, volt
-  const iccArr = await fetchUbidotsVar(deviceID, "iccid", 1);
-  let tsIccid = iccArr[0]?.timestamp || null;
-
-  const readings = {};
-  let tsSensorMax = null;
-  await Promise.all(SENSORS.filter(s => s.address).map(async s => {
-    const v = await fetchUbidotsVar(deviceID, s.address, 1);
-    if (v.length && v[0].value != null) {
-      readings[s.address] = parseFloat(v[0].value);
-      const tsVal = v[0]?.timestamp;
-      if (tsVal != null && (tsSensorMax == null || tsVal > tsSensorMax)) tsSensorMax = tsVal;
-    }
-  }));
-  const [signalArr, voltArr] = await Promise.all([
-    fetchUbidotsVar(deviceID, "signal", 1),
-    fetchUbidotsVar(deviceID, "volt", 1)
-  ]);
-  let tsSignal = signalArr[0]?.timestamp || null;
-  let tsVolt   = voltArr[0]?.timestamp || null;
-
-  // Compose "best" ts for the live panel
-  let ts = Date.now();
-  const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => x != null);
-  if (candidates.length > 0) ts = Math.max(...candidates);
-
-  // Resolve timezone and paint
-  const deviceLabel = document.getElementById("deviceSelect")?.value || null;
-  const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
-  drawLive({
-    ts,
-    iccid: iccArr[0]?.value ?? null,
-    lat,
-    lon,
-    lastLat, lastLon, lastGpsAgeMin,
-    speed: speedVal,
-    signal: signalArr[0]?.value ?? null,
-    volt:  voltArr[0]?.value ?? null,
-    tz,
-    readings
-  }, SENSORS);
   } finally {
     __chartsInFlight = false;
     console.log('[charts] done in', Math.round(performance.now()-__chartsT0), 'ms');
@@ -943,6 +793,7 @@ async function poll(deviceID, SENSORS){
       setTimeout(() => updateCharts(deviceID, SENSORS), 0);
     }
   }
+}
 
 /* =================== Live panel + map =================== */
 let map, marker;
@@ -1503,30 +1354,17 @@ function wireRangeButtons(){
       this.style.color = '#ffffff';
 
       // Update selection model
-      // Update selection model
-const modeAttr = this.getAttribute('data-mode') || 'range';
-const valAttr  = parseInt(this.getAttribute('data-range'), 10);
+      const modeAttr = this.getAttribute('data-mode') || 'range';
+      const valAttr  = parseInt(this.getAttribute('data-range'), 10);
 
-// No-op if the selection didn't actually change
-const newMinutes = Number.isFinite(valAttr) ? valAttr : 60;
-if (selectedRangeMode === modeAttr && selectedRangeMinutes === newMinutes) {
-  return; // nothing to do
-}
-selectedRangeMinutes = newMinutes;
-selectedRangeMode    = modeAttr;
-HIST_POINTS          = selectedRangeMinutes;
-
-// Fast path: only refresh charts + defer breadcrumbs (no full updateAll)
-const devSel      = document.getElementById('deviceSelect');
-const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
-const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
-
-if (deviceID) {
-  await updateCharts(deviceID, SENSORS);
-  const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
-  idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
-}
-
+      // No-op if the selection didn't actually change
+      const newMinutes = Number.isFinite(valAttr) ? valAttr : 60;
+      if (selectedRangeMode === modeAttr && selectedRangeMinutes === newMinutes) {
+        return; // nothing to do
+      }
+      selectedRangeMinutes = newMinutes;
+      selectedRangeMode    = modeAttr;
+      HIST_POINTS          = selectedRangeMinutes;
 
       // Fast path: only refresh charts + defer breadcrumbs (no full updateAll)
       const devSel      = document.getElementById('deviceSelect');
@@ -1534,14 +1372,14 @@ if (deviceID) {
       const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
 
       if (deviceID) {
-        await updateCharts(deviceID, SENSORS);                             // redraw charts quickly
-       const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
-idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
-
+        await updateCharts(deviceID, SENSORS); // redraw charts quickly
+        const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+        idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
       }
     };
   });
 }
+
 
 
 /* =================== Date inputs: instant commit =================== */
