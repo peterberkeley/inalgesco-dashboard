@@ -9,7 +9,7 @@ const UBIDOTS_V1   = "https://industrial.api.ubidots.com/api/v1.6";   // variabl
 let REFRESH_INTERVAL = 60_000;      // poll live every 60s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 const ONLINE_WINDOW_SEC = 300;      // online if seen within last 5 minutes
-
+const USE_V16_HEARTBEAT_FALLBACK = false;  // TEMP: dropdown uses devices v2 only
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981", "#f97316"];
 
 /* =================== State =================== */
@@ -1224,7 +1224,7 @@ async function updateAll(){
       if (!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
     }
     // 2b) Re-evaluate stale dropdown items using gps/signal/volt only (narrow heartbeat)
-    if (sel) {
+   if (USE_V16_HEARTBEAT_FALLBACK && sel) {
       const nowSec = Math.floor(Date.now() / 1000);
 
       const updates = Array.from(sel.options).map(async (opt) => {
