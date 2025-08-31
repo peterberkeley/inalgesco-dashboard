@@ -10,6 +10,8 @@ let REFRESH_INTERVAL = 60_000;      // poll live every 60s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 const ONLINE_WINDOW_SEC = 300;      // online if seen within last 5 minutes
 const USE_V16_HEARTBEAT_FALLBACK = false;  // TEMP: dropdown uses devices v2 only
+const USE_V2_BULK = false;                 // browser CORS: disable v2 fetches
+
 const FORCE_VARCACHE_REFRESH = false;      // set true only if debugging var-id mismatches
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981", "#f97316"];
 
@@ -334,6 +336,7 @@ async function resolveGpsLabel(deviceID){
 }
 // --- Ubidots v2 helpers (location + bulk last values) ---
 async function fetchDeviceLocationV2(deviceID){
+    if (!USE_V2_BULK) return null;
   try{
     const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/?fields=location`, {
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
@@ -350,6 +353,7 @@ async function fetchDeviceLocationV2(deviceID){
 }
 
 async function fetchDeviceLastValuesV2(deviceID){
+    if (!USE_V2_BULK) return null;
   try{
     const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`, {
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
