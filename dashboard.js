@@ -1102,6 +1102,7 @@ if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
   marker.setLatLng([lastLat, lastLon]);
   map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
 }
+  }
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
 
