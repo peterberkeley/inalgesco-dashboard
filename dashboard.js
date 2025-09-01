@@ -1089,26 +1089,19 @@ function drawLive(data, SENSORS){
     }).join("");
 
   // --- Final: map/marker handling (race-proof, no duplication) ---
-  // Ensure Leaflet marker exists (handles init race; do NOT re-init map here)
-  if (!marker || typeof marker.setLatLng !== 'function') {
-    if (map && typeof map.addLayer === 'function') {
-      try { marker = L.marker([0,0]).addTo(map); } catch (_) {}
-    } else {
-      // Map not ready; skip pin update silently
-      return;
-    }
-  }
+// Idempotent: ensure map + marker right now (safe every tick)
+try { initMap(); } catch (_) {}
+if (!map || typeof map.addLayer !== 'function') return;
+if (!marker || typeof marker.setLatLng !== 'function') return;
 
-  // Place pin: prefer fresh, else last-known
-  if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
-    marker.setLatLng([lat, lon]);
-    if (map) map.setView([lat, lon], Math.max(map.getZoom(), 13));
-  } else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
-    marker.setLatLng([lastLat, lastLon]);
-    if (map) map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
-  }
+// Place pin: prefer fresh, else last-known
+if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
+  marker.setLatLng([lat, lon]);
+  map.setView([lat, lon], Math.max(map.getZoom(), 13));
+} else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
+  marker.setLatLng([lastLat, lastLon]);
+  map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
 }
-
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
 
