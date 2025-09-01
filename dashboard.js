@@ -975,18 +975,6 @@ async function poll(deviceID, SENSORS){
 }
 
 /* =================== Live panel + map =================== */
-let map, marker;
-function initMap(){
-  map = L.map("map").setView([0,0], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
-  marker = L.marker([0,0]).addTo(map);
-}
-
-function signalBarsFrom(value){
-  if (value==null || isNaN(value)) return 0;
-  return Math.max(0, Math.min(5, Math.round((value/31)*5)));
-}
-
 function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
 
@@ -1000,7 +988,6 @@ function drawLive(data, SENSORS){
   const devSel = document.getElementById("deviceSelect");
   const deviceKey = devSel ? devSel.value : '';
   const displayName = getDisplayName(deviceKey);
-
   document.getElementById("kpiTruck").textContent = displayName;
   // KPI date/time is set in updateAll() from lastSeenSec. Do not write kpiSeen here.
 
@@ -1027,12 +1014,8 @@ function drawLive(data, SENSORS){
 
   // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
   const hasFresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
-  const useLat = hasFresh
-    ? lat
-    : ((lastLat != null && isFinite(lastLat)) ? lastLat : null);
-  const useLon = hasFresh
-    ? lon
-    : ((lastLon != null && isFinite(lastLon)) ? lastLon : null);
+  const useLat = hasFresh ? lat : ((lastLat != null && isFinite(lastLat)) ? lastLat : null);
+  const useLon = hasFresh ? lon : ((lastLon != null && isFinite(lastLon)) ? lastLon : null);
 
   let locationHtml = "—";
   if (useLat != null && useLon != null) {
@@ -1054,7 +1037,6 @@ function drawLive(data, SENSORS){
   const rows = [];
   rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
 
-  // If no fresh pin but we know the last GPS, add a stale note just under Local Time
   if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
     const mins = (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)) ? lastGpsAgeMin : null;
     const staleNote = mins != null ? `Last GPS (${mins} min ago)` : 'Last GPS (stale)';
@@ -1062,9 +1044,10 @@ function drawLive(data, SENSORS){
   }
 
   rows.push(["ICCID", iccid || "—"]);
+
   const _fresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
-  const _lat   = _fresh ? Number(lat)    : (isFinite(lastLat) ? Number(lastLat) : null);
-  const _lon   = _fresh ? Number(lon)    : (isFinite(lastLon) ? Number(lastLon) : null);
+  const _lat   = _fresh ? Number(lat) : (isFinite(lastLat) ? Number(lastLat) : null);
+  const _lon   = _fresh ? Number(lon) : (isFinite(lastLon) ? Number(lastLon) : null);
 
   let _locationHtml = "—";
   if (_lat != null && _lon != null) {
@@ -1089,42 +1072,27 @@ function drawLive(data, SENSORS){
       const wrap = (lab === "Local Time") ? ' style="white-space:normal"' : '';
       return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
     }).join("");
-  // Ensure Leaflet marker exists (handles rare init race; do NOT re-init map here)
-  if (!(typeof marker !== 'undefined' && marker && typeof marker.setLatLng === 'function')) {
-    if (typeof map !== 'undefined' && map && typeof map.addLayer === 'function') {
-      try { marker = L.marker([0,0]).addTo(map); } catch(_) {}
-    }
-  }
-  // Ensure Leaflet marker exists (handles rare init race)
+
+  // --- Final: map/marker handling (race-proof, no duplication) ---
+  // Ensure Leaflet marker exists (handles init race; do NOT re-init map here)
   if (!marker || typeof marker.setLatLng !== 'function') {
     if (map && typeof map.addLayer === 'function') {
       try { marker = L.marker([0,0]).addTo(map); } catch (_) {}
+    } else {
+      // Map not ready; skip pin update silently
+      return;
     }
   }
 
-  // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
+  // Place pin: prefer fresh, else last-known
   if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
     marker.setLatLng([lat, lon]);
     if (map) map.setView([lat, lon], Math.max(map.getZoom(), 13));
   } else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
     marker.setLatLng([lastLat, lastLon]);
     if (map) map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
-  }
-
-  // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
-  if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
-    // Fresh pin
-    marker.setLatLng([lat, lon]);
-    if (map) map.setView([lat, lon], Math.max(map.getZoom(), 13));
-  } else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
-    // Last-known (stale) pin
-    marker.setLatLng([lastLat, lastLon]);
-    if (map) map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
-  } else {
-    // No coords at all — keep current view (do not re-center)
   }
 }
-
 
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
