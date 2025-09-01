@@ -1382,7 +1382,7 @@ __crumbAbort = new AbortController();
 const __crumbSignal = __crumbAbort.signal;
 
   try{
-    if(!map) initMap();
+  initMap(); // idempotent
     segmentPolylines.forEach(p=>p.remove());
     segmentMarkers.forEach(m=>m.remove());
     segmentPolylines = [];
@@ -1800,7 +1800,7 @@ if (deviceID){
   const liveDallas = await fetchDallasAddresses(deviceID);
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
 ensureCharts(SENSORS, deviceLabel);
-if (!map) initMap();                 // ensure map/marker exists BEFORE we draw
+initMap();                           // idempotent: also recreates marker if missing
 await poll(deviceID, SENSORS);       // 1) show current values immediately
 await updateCharts(deviceID, SENSORS); // 2) then fetch history for charts
 await renderMaintenanceBox(deviceLabel, deviceID);
