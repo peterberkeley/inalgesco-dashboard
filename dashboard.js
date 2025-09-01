@@ -332,7 +332,6 @@ async function resolveGpsLabel(deviceID){
 }
 // --- Ubidots v2 helpers (location + bulk last values) ---
 async function fetchDeviceLocationV2(deviceID){
-    if (!USE_V2_BULK) return null;
   try{
     const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/?fields=location`, {
       headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
