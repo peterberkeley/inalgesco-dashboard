@@ -1089,6 +1089,21 @@ function drawLive(data, SENSORS){
       const wrap = (lab === "Local Time") ? ' style="white-space:normal"' : '';
       return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
     }).join("");
+  // Ensure Leaflet marker exists (handles rare init race; do NOT re-init map here)
+  if (!(typeof marker !== 'undefined' && marker && typeof marker.setLatLng === 'function')) {
+    if (typeof map !== 'undefined' && map && typeof map.addLayer === 'function') {
+      try { marker = L.marker([0,0]).addTo(map); } catch(_) {}
+    }
+  }
+
+  // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
+  if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
+    marker.setLatLng([lat, lon]);
+    if (map) map.setView([lat, lon], Math.max(map.getZoom(), 13));
+  } else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
+    marker.setLatLng([lastLat, lastLon]);
+    if (map) map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
+  }
 
   // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
   if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
