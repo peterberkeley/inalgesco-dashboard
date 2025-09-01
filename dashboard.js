@@ -989,6 +989,12 @@ function initMap(){
     marker = L.marker([0, 0]).addTo(map);
   }
 }
+// Helper: 0..31 CSQ → 0..5 bars
+function signalBarsFrom(value){
+  if (value == null || isNaN(value)) return 0;
+  const v = Number(value);
+  return Math.max(0, Math.min(5, Math.round((v / 31) * 5)));
+}
 
 function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
