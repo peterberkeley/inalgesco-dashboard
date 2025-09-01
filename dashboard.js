@@ -1095,6 +1095,12 @@ function drawLive(data, SENSORS){
       try { marker = L.marker([0,0]).addTo(map); } catch(_) {}
     }
   }
+  // Ensure Leaflet marker exists (handles rare init race)
+  if (!marker || typeof marker.setLatLng !== 'function') {
+    if (map && typeof map.addLayer === 'function') {
+      try { marker = L.marker([0,0]).addTo(map); } catch (_) {}
+    }
+  }
 
   // Map pin: prefer fresh lat/lon; otherwise fall back to last-known (stale)
   if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
