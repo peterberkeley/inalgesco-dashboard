@@ -6,7 +6,7 @@ const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";   // devices via v2.0
 const UBIDOTS_V1   = "https://industrial.api.ubidots.com/api/v1.6";   // variables via v1.6 (CORS-safe)
 
-let REFRESH_INTERVAL = 60_000;      // poll live every 60s
+let REFRESH_INTERVAL = 15_000;      // poll live every 15s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 const ONLINE_WINDOW_SEC = 300;      // online if seen within last 5 minutes
 const USE_V16_HEARTBEAT_FALLBACK = false;  // TEMP: dropdown uses devices v2 only
