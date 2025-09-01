@@ -975,6 +975,21 @@ async function poll(deviceID, SENSORS){
 }
 
 /* =================== Live panel + map =================== */
+// Ensure we use a lexical Leaflet map/marker (not window.map DOM element)
+let map, marker;
+
+function initMap(){
+  // Create the Leaflet map once
+  if (!(map && typeof map.addLayer === 'function' && typeof map.setView === 'function')) {
+    map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+  }
+  // Ensure a marker exists
+  if (!(marker && typeof marker.setLatLng === 'function')) {
+    marker = L.marker([0, 0]).addTo(map);
+  }
+}
+
 function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
 
