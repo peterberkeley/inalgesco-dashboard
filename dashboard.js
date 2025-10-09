@@ -1905,63 +1905,84 @@ async function openMapAll(){
 
   const nowSec = Math.floor(Date.now()/1000);
   const boundsLatLngs = [];
+  const cutoffMs = Date.now() - (48 * 60 * 60 * 1000); // 48h window
+
 
   // For each device, try v2 location first, then GPS variable fallback
-  for (const [devLabel, info] of entries) {
-    const deviceID = info?.id;
-    if (!deviceID) continue;
+ for (const [devLabel, info] of entries) {
+  const deviceID = info?.id;
+  if (!deviceID) continue;
 
-    // 1) device.location (v2) is fastest/cors-safe
-    let loc = await fetchDeviceLocationV2(deviceID);
-    let lat = loc?.lat ?? null;
-    let lon = loc?.lon ?? null;
+  let lat = null, lon = null, tsMs = null;
 
-    // 2) Fallback: resolve GPS label and fetch 1 last sample
-    if (lat == null || lon == null) {
-      const gpsLab = await resolveGpsLabel(deviceID);
-      if (gpsLab) {
-        const r = await fetchUbidotsVar(deviceID, gpsLab, 1);
-        const g = r?.[0]?.context;
-        if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
-          lat = g.lat;
-          lon = (g.lng != null ? g.lng : g.lon);
-        }
+  // Prefer latest GPS point so timestamp matches the location
+  try {
+    const gpsLab = await resolveGpsLabel(deviceID);
+    if (gpsLab) {
+      const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
+      const r = rows && rows[0];
+      const g = r && r.context;
+      if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
+        lat  = g.lat;
+        lon  = (g.lng != null ? g.lng : g.lon);
+        tsMs = (typeof r.timestamp === 'number') ? r.timestamp : Date.parse(r.timestamp);
       }
     }
+  } catch(_) {}
 
-    if (typeof lat === 'number' && typeof lon === 'number' && isFinite(lat) && isFinite(lon)) {
-      const disp = getDisplayName(devLabel);
-      const lastSeenSec = info?.last_seen || 0;
-      const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
-
-      // Online = green, Offline = grey
-      const color = isOnline ? '#16a34a' : '#9ca3af';
-
-      const mk = L.circleMarker([lat, lon], {
-        radius: 7,
-        color,
-        fillColor: color,
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.9
-      })
-      .bindTooltip(`${disp} • ${isOnline ? 'Online' : 'Offline'}`, { direction:'top', offset:[0,-10] })
-      .addTo(mapAllLayerGroup);
-
-      // Click-through: select this truck, close overlay, and refresh dashboard
-      mk.on('click', () => {
-        const sel = document.getElementById('deviceSelect');
-        if (sel) {
-          sel.value = devLabel;
-          // Trigger existing change handler (wired in onReady)
-          sel.dispatchEvent(new Event('change', { bubbles:true }));
-        }
-        closeMapAll();
-      });
-
-      boundsLatLngs.push([lat, lon]);
-    }
+  // Fallback: device.location (v2) for coords; and last_seen for timestamp
+  if (lat == null || lon == null) {
+    try {
+      const loc = await fetchDeviceLocationV2(deviceID);
+      if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+        lat = loc.lat; lon = loc.lon;
+      }
+    } catch(_) {}
   }
+  if (tsMs == null) {
+    const lastSeenSec = info?.last_seen || 0;
+    tsMs = lastSeenSec ? (lastSeenSec * 1000) : null;
+  }
+
+  // Require both coords and a timestamp
+  if (!(typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon) && tsMs != null && isFinite(tsMs))) {
+    continue;
+  }
+
+  // Enforce the 48h activity window
+  if (tsMs < cutoffMs) continue;
+
+  // Keep current colour logic (online = green, offline = grey)
+  const lastSeenSec = info?.last_seen || 0;
+  const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
+  const color = isOnline ? '#16a34a' : '#9ca3af';
+
+  const disp = getDisplayName(devLabel);
+  const uploadedStr = new Date(tsMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false });
+
+  const mk = L.circleMarker([lat, lon], {
+    radius: 7,
+    color,
+    fillColor: color,
+    weight: 2,
+    opacity: 1,
+    fillOpacity: 0.9
+  })
+  .bindTooltip(`${disp}<br>Uploaded: ${uploadedStr}`, { direction:'top', offset:[0,-10] })
+  .addTo(mapAllLayerGroup);
+
+  // Click-through: focus this truck on the main dashboard
+  mk.on('click', () => {
+    const sel = document.getElementById('deviceSelect');
+    if (sel) {
+      sel.value = devLabel;
+      sel.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+    closeMapAll();
+  });
+
+  boundsLatLngs.push([lat, lon]);
+}
 
   // Fit bounds if we plotted anything; else show world
   if (boundsLatLngs.length) {
