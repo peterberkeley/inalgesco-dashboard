@@ -1989,7 +1989,8 @@ async function openMapAll(){
   };
   mapAllLegend.addTo(mapAll);
 }
-
+ /** Close overlay */
+function closeMapAll(){
   const ov = document.getElementById('mapAllOverlay');
   if (ov) ov.style.display = 'none';
 }
