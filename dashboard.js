@@ -1827,6 +1827,8 @@ await renderMaintenanceBox(deviceLabel, deviceID);
 /* =================== "All Trucks" Map UI =================== */
 // Reuses your existing helpers: fetchSensorMapConfig, fetchDeviceLocationV2, resolveGpsLabel, fetchUbidotsVar, getDisplayName
 let mapAll, mapAllLayerGroup;
+let mapAllLegend = null;
+
 
 function installAllTrucksMapUI(){
   // 1) Find the existing "Admin" button and clone its visual style
@@ -1879,6 +1881,7 @@ function installAllTrucksMapUI(){
 
 /** Open overlay and render all truck markers */
 async function openMapAll(){
+  
   const ov = document.getElementById('mapAllOverlay');
   const div = document.getElementById('mapAll');
   if (!ov || !div) return;
