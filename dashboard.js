@@ -1592,7 +1592,7 @@ function wireDateInputsCommit(){
 onReady(() => {
   wireRangeButtons();
   wireDateInputsCommit();   // commit date instantly
-
+    installAllTrucksMapUI();
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
 
@@ -1823,6 +1823,128 @@ await renderMaintenanceBox(deviceLabel, deviceID);
       setTimeout(updateAll, 0); // run one more pass to catch the latest state
     }
   }
+}
+/* =================== "All Trucks" Map UI =================== */
+// Reuses your existing helpers: fetchSensorMapConfig, fetchDeviceLocationV2, resolveGpsLabel, fetchUbidotsVar, getDisplayName
+let mapAll, mapAllLayerGroup;
+
+function installAllTrucksMapUI(){
+  // 1) Find the existing "Admin" button and clone its visual style
+  //    We locate by text content "Admin" (case-insensitive). If not found, we fall back to a basic style.
+  const adminBtn = Array.from(document.querySelectorAll('button'))
+    .find(b => (b.textContent || '').trim().toLowerCase() === 'admin');
+
+  // Create "Map" button
+  const mapBtn = document.createElement('button');
+  mapBtn.id = 'mapBtn';
+  mapBtn.textContent = 'Map';
+
+  if (adminBtn) {
+    // Copy class list to match Admin styling exactly
+    mapBtn.className = adminBtn.className || '';
+    // Insert right after Admin
+    adminBtn.insertAdjacentElement('afterend', mapBtn);
+  } else {
+    // Fallback styling (close to your Admin style if not found)
+    mapBtn.className = 'bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded';
+    // Try to place in a sensible header container; else append to body
+    const headerHost = document.querySelector('#header, .header, #topbar, .topbar') || document.body;
+    headerHost.appendChild(mapBtn);
+    console.warn('[Map] Admin button not found; placed Map button in header/body fallback.');
+  }
+
+  // 2) Create the full-screen overlay (once)
+  if (!document.getElementById('mapAllOverlay')) {
+    const ov = document.createElement('div');
+    ov.id = 'mapAllOverlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:70;background:#fff;';
+    ov.innerHTML = `
+      <button id="mapClose"
+              class="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-1 px-3 rounded"
+              style="position:absolute;top:12px;right:12px;">
+        Close
+      </button>
+      <div id="mapAll" style="position:absolute;inset:0;top:50px;"></div>
+    `;
+    document.body.appendChild(ov);
+  }
+
+  // 3) Wire events
+  const ov = document.getElementById('mapAllOverlay');
+  const btn = document.getElementById('mapBtn');
+  const close = document.getElementById('mapClose');
+  if (btn)   btn.addEventListener('click', openMapAll);
+  if (close) close.addEventListener('click', closeMapAll);
+}
+
+/** Open overlay and render all truck markers */
+async function openMapAll(){
+  const ov = document.getElementById('mapAllOverlay');
+  const div = document.getElementById('mapAll');
+  if (!ov || !div) return;
+
+  ov.style.display = 'block';
+
+  // Lazily create the Leaflet map instance for the overlay
+  if (!(mapAll && typeof mapAll.addLayer === 'function')) {
+    mapAll = L.map('mapAll').setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(mapAll);
+    mapAllLayerGroup = L.layerGroup().addTo(mapAll);
+  } else {
+    mapAllLayerGroup.clearLayers();
+  }
+
+  // Fetch devices list (v2) with ids + last_seen
+  const sensorMap = await fetchSensorMapConfig();
+  const entries = Object.entries(sensorMap);
+  if (!entries.length) return;
+
+  const boundsLatLngs = [];
+
+  // For each device, try v2 location first, then GPS variable fallback
+  for (const [devLabel, info] of entries) {
+    const deviceID = info?.id;
+    if (!deviceID) continue;
+
+    // 1) device.location (v2) is fastest/cors-safe
+    let loc = await fetchDeviceLocationV2(deviceID);
+    let lat = loc?.lat ?? null;
+    let lon = loc?.lon ?? null;
+
+    // 2) Fallback: resolve GPS label and fetch 1 last sample
+    if (lat == null || lon == null) {
+      const gpsLab = await resolveGpsLabel(deviceID);
+      if (gpsLab) {
+        const r = await fetchUbidotsVar(deviceID, gpsLab, 1);
+        const g = r?.[0]?.context;
+        if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
+          lat = g.lat;
+          lon = (g.lng != null ? g.lng : g.lon);
+        }
+      }
+    }
+
+    if (typeof lat === 'number' && typeof lon === 'number' && isFinite(lat) && isFinite(lon)) {
+      const disp = getDisplayName(devLabel);
+      const marker = L.marker([lat, lon]).bindTooltip(disp, {direction:'top', offset:[0,-10]});
+      marker.addTo(mapAllLayerGroup);
+      boundsLatLngs.push([lat, lon]);
+    }
+  }
+
+  // Fit bounds if we plotted anything; else show world
+  if (boundsLatLngs.length) {
+    const b = L.latLngBounds(boundsLatLngs);
+    mapAll.fitBounds(b, { padding:[30,30] });
+  } else {
+    mapAll.setView([20, 0], 2);
+  }
+}
+
+/** Close overlay */
+function closeMapAll(){
+  const ov = document.getElementById('mapAllOverlay');
+  if (ov) ov.style.display = 'none';
 }
 
 // EOF
