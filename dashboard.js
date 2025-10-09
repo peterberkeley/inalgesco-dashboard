@@ -1881,7 +1881,6 @@ function installAllTrucksMapUI(){
 
 /** Open overlay and render all truck markers */
 async function openMapAll(){
-  
   const ov = document.getElementById('mapAllOverlay');
   const div = document.getElementById('mapAll');
   if (!ov || !div) return;
@@ -1896,12 +1895,15 @@ async function openMapAll(){
   } else {
     mapAllLayerGroup.clearLayers();
   }
+  // Reset legend if it exists
+  if (mapAllLegend) { try { mapAll.removeControl(mapAllLegend); } catch(_){} mapAllLegend = null; }
 
   // Fetch devices list (v2) with ids + last_seen
   const sensorMap = await fetchSensorMapConfig();
   const entries = Object.entries(sensorMap);
   if (!entries.length) return;
 
+  const nowSec = Math.floor(Date.now()/1000);
   const boundsLatLngs = [];
 
   // For each device, try v2 location first, then GPS variable fallback
@@ -1929,8 +1931,34 @@ async function openMapAll(){
 
     if (typeof lat === 'number' && typeof lon === 'number' && isFinite(lat) && isFinite(lon)) {
       const disp = getDisplayName(devLabel);
-      const marker = L.marker([lat, lon]).bindTooltip(disp, {direction:'top', offset:[0,-10]});
-      marker.addTo(mapAllLayerGroup);
+      const lastSeenSec = info?.last_seen || 0;
+      const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
+
+      // Online = green, Offline = grey
+      const color = isOnline ? '#16a34a' : '#9ca3af';
+
+      const mk = L.circleMarker([lat, lon], {
+        radius: 7,
+        color,
+        fillColor: color,
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.9
+      })
+      .bindTooltip(`${disp} • ${isOnline ? 'Online' : 'Offline'}`, { direction:'top', offset:[0,-10] })
+      .addTo(mapAllLayerGroup);
+
+      // Click-through: select this truck, close overlay, and refresh dashboard
+      mk.on('click', () => {
+        const sel = document.getElementById('deviceSelect');
+        if (sel) {
+          sel.value = devLabel;
+          // Trigger existing change handler (wired in onReady)
+          sel.dispatchEvent(new Event('change', { bubbles:true }));
+        }
+        closeMapAll();
+      });
+
       boundsLatLngs.push([lat, lon]);
     }
   }
@@ -1942,10 +1970,26 @@ async function openMapAll(){
   } else {
     mapAll.setView([20, 0], 2);
   }
+
+  // Legend (Online/Offline)
+  mapAllLegend = L.control({ position: 'bottomright' });
+  mapAllLegend.onAdd = function(){
+    const div = L.DomUtil.create('div');
+    div.style.cssText = 'background:rgba(255,255,255,0.9);padding:8px 10px;border-radius:6px;font-size:12px;box-shadow:0 2px 4px rgba(0,0,0,0.1)';
+    div.innerHTML = `
+      <div style="font-weight:600;margin-bottom:4px;">Status</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span style="display:inline-block;width:12px;height:12px;background:#16a34a;border-radius:50%;margin-right:6px;"></span>Online
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:4px;">
+        <span style="display:inline-block;width:12px;height:12px;background:#9ca3af;border-radius:50%;margin-right:6px;"></span>Offline
+      </div>
+    `;
+    return div;
+  };
+  mapAllLegend.addTo(mapAll);
 }
 
-/** Close overlay */
-function closeMapAll(){
   const ov = document.getElementById('mapAllOverlay');
   if (ov) ov.style.display = 'none';
 }
