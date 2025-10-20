@@ -286,8 +286,8 @@ if (flightsBtn) {
   <script>
 
 window.addEventListener('DOMContentLoaded', () => {
-  const PASSWORD = "Skycafe8971";
-
+ // allow-list for dashboard (case-sensitive)
+const ALLOWED_PASSWORDS = new Set(["Skycafe8971", "Dispatch239!"]);
   const overlay = document.getElementById("auth-overlay");
   const form    = document.getElementById("auth-form");
   const pass    = document.getElementById("auth-pass");
@@ -317,7 +317,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // Handle submit
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (pass.value.trim() === PASSWORD) {
+   if (ALLOWED_PASSWORDS.has(pass.value.trim())) {
       hideLock();
     } else {
       err.textContent = "Incorrect password";
