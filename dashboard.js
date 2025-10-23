@@ -394,42 +394,55 @@ async function fetchDeviceLastValuesV2(deviceID){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    // Get all variables for the device; filter DS18B20 by freshness
-    const url = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
+    // 1) List all variables for this device (v1.6)
+    const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+    const listRes = await fetch(listUrl);
+    if (!listRes.ok) return [];
+    const listJs = await listRes.json();
 
-    const js = await res.json();
+    // 2) Keep only DS18B20 labels (16 hex) with their variable IDs
+    const hexVars = (listJs.results || [])
+      .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
+      .map(v => ({ id: v.id, label: v.label }));
+
+    if (!hexVars.length) return [];
+
+    // 3) For each hex variable, fetch its latest value (1-per-var)
     const now = Date.now();
-    const FRESH_MS  = 60 * 60 * 1000;   // live if updated in last 60 minutes (was 10)
-    const FALLBACK_MS = 24 * 60 * 60 * 1000; // accept top-3 within last 24h as fallback
+    const FRESH_MS    = 60 * 60 * 1000;      // live if updated in last 60 minutes
+    const FALLBACK_MS = 24 * 60 * 60 * 1000; // fallback: accept top-3 within last 24h
 
-    // Pass 1: strict "fresh" set (<= FRESH_MS)
-    const seen = new Set();
+    const results = await Promise.all(hexVars.map(async hv => {
+      try{
+        const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+        if (!r.ok) return { label: hv.label, ts: 0 };
+        const j = await r.json();
+        const ts = j?.results?.[0]?.timestamp || 0; // ms
+        return { label: hv.label, ts };
+      }catch{ return { label: hv.label, ts: 0 }; }
+    }));
+
+    // 4) Fresh first
     const fresh = [];
-    for (const v of (js.results || [])){
-      const lab = v?.label;
-      if (!/^[0-9a-fA-F]{16}$/.test(lab)) continue;
-      const ts = v?.lastValue?.timestamp || 0;  // v1.6 returns ms
-      if (ts && (now - ts) <= FRESH_MS){
-        const key = String(lab).toLowerCase();
-        if (!seen.has(key)){ seen.add(key); fresh.push(lab); }
+    const seen  = new Set();
+    for (const r of results){
+      if (r.ts && (now - r.ts) <= FRESH_MS){
+        const key = String(r.label).toLowerCase();
+        if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
       }
     }
     if (fresh.length) return fresh;
 
-    // Pass 2 (fallback): choose up to 3 freshest within last 24h
-    const recent = (js.results || [])
-      .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
-      .map(v => ({ lab: v.label, ts: v?.lastValue?.timestamp || 0 }))
-      .filter(x => x.ts && (now - x.ts) <= FALLBACK_MS)
+    // 5) Fallback: pick up to 3 freshest within 24h
+    const recent = results
+      .filter(r => r.ts && (now - r.ts) <= FALLBACK_MS)
       .sort((a,b) => b.ts - a.ts)
       .slice(0, 3)
-      .map(x => x.lab);
+      .map(r => r.label);
 
-    return recent; // may be []
+    return recent;
   }catch(e){
-    console.error("fetchDallasAddresses (fresh+fallback) failed:", e);
+    console.error("fetchDallasAddresses (per-var check) failed:", e);
     return [];
   }
 }
