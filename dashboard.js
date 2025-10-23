@@ -401,7 +401,7 @@ async function fetchDallasAddresses(deviceID){
 
     const js = await res.json();
     const now = Date.now();
-    const FRESH_MS = 10 * 60 * 1000;   // consider a probe "live" if updated in last 10 minutes
+    const FRESH_MS = 10 * 60 * 1000;   // live if updated in last 10 minutes
 
     const seen = new Set();
     const live = [];
@@ -409,7 +409,7 @@ async function fetchDallasAddresses(deviceID){
       const lab = v?.label;
       if (!/^[0-9a-fA-F]{16}$/.test(lab)) continue;
 
-      const ts = v?.lastValue?.timestamp || 0;  // v1.6 returns ms here
+      const ts = v?.lastValue?.timestamp || 0;  // v1.6 returns ms
       if (ts && (now - ts) <= FRESH_MS){
         const key = String(lab).toLowerCase();
         if (!seen.has(key)){ seen.add(key); live.push(lab); }
@@ -418,36 +418,6 @@ async function fetchDallasAddresses(deviceID){
     return live;   // only truly live probes (no ghosts)
   }catch(e){
     console.error("fetchDallasAddresses (fresh-only) failed:", e);
-    return [];
-  }
-}
-
-    // 2) Build the var map once; then derive addresses (still only ONE network call)
-    await ensureVarCache(deviceID);
-    if (variableCache[deviceID] && Object.keys(variableCache[deviceID]).length) {
-      const labels = Object.keys(variableCache[deviceID]);
-      const seen = new Set();
-      const uniq = [];
-      for (const l of labels) {
-        if (/^[0-9a-fA-F]{16}$/.test(l) && !seen.has(l)) {
-          seen.add(l);
-          uniq.push(l);
-        }
-      }
-      return uniq;
-    }
-
-    // 3) Fallback (should rarely run): direct variables listing as a last resort
-   const res = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-
-    if(!res.ok) return [];
-    const js = await res.json();
-    const labels = (js.results || []).map(v => v.label).filter(l => /^[0-9a-fA-F]{16}$/.test(l));
-    const seen = new Set(); const uniq = [];
-    for (const l of labels) { if (!seen.has(l)) { seen.add(l); uniq.push(l); } }
-    return uniq;
-  }catch(e){
-    console.error("fetchDallasAddresses", e);
     return [];
   }
 }
