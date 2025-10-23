@@ -468,6 +468,17 @@ function getAdminMapFor(deviceLabel){
   );
   return keyMatch ? cfg[keyMatch] : {};
 }
+// --- Helper: resolve correct admin mapping even if device label case differs ---
+function getAdminMapFor(deviceLabel){
+  const cfg = sensorMapConfig || {};
+  if (cfg[deviceLabel]) return cfg[deviceLabel];
+  const keyMatch = Object.keys(cfg).find(
+    x => String(x).toLowerCase() === String(deviceLabel).toLowerCase()
+  );
+  return keyMatch ? cfg[keyMatch] : {};
+}
+// Expose for console/tests
+window.getAdminMapFor = getAdminMapFor;
 
 /* =================== Sensor slots =================== */
 function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
