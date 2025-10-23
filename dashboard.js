@@ -1620,8 +1620,8 @@ async function updateAll(){
 
   try{
     // 1) Fetch mapping + devices
-    await fetchSensorMapMapping();
-    const sensorMap = await fetchSensorMapConfig();
+  const sensorMap = await fetchSensorMapConfig();
+await fetchSensorMapMapping();   // load aliases *after* device list, ensures fresh __aliases
     window.__deviceMap = sensorMap; // expose to CSV click handler
 
     // 2) Build the device dropdown from Devices v2 last_seen ONLY (no bulk re-check)
