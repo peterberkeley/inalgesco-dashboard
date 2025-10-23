@@ -482,44 +482,60 @@ window.getAdminMapFor = getAdminMapFor;
 
 /* =================== Sensor slots =================== */
 function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
-const mapped = SENSOR_MAP[deviceLabel] || {};
-const cfg    = sensorMapConfig || {};
-const devKey = Object.keys(cfg).find(k => String(k).toLowerCase() === String(deviceLabel).toLowerCase()) || deviceLabel;
-const adminMap = (cfg[devKey] && typeof cfg[devKey] === 'object') ? cfg[devKey] : {};
+  // --- Case-insensitive device-level mapping (skycafe-warehouse vs skycafe-Warehouse)
+  const mapped = SENSOR_MAP[deviceLabel] || {};
+  const cfg    = sensorMapConfig || {};
+  const devKey = Object.keys(cfg).find(k => String(k).toLowerCase() === String(deviceLabel).toLowerCase()) || deviceLabel;
+  const adminMap = (cfg[devKey] && typeof cfg[devKey] === 'object') ? cfg[devKey] : {};
 
+  // --- Case-insensitive per-address maps (handle 28D7... vs 28d7...)
+  const adminByAddr = new Map(
+    Object.entries(adminMap)
+      .filter(([k]) => /^[0-9a-fA-F]{16}$/.test(String(k)))
+      .map(([k, v]) => [String(k).toLowerCase(), v])
+  );
+  const mappedByAddr = new Map(
+    Object.entries(mapped)
+      .filter(([k]) => /^[0-9a-fA-F]{16}$/.test(String(k)))
+      .map(([k, v]) => [String(k).toLowerCase(), v])
+  );
 
-  // Take the first 5 live DS18B20 addresses from Ubidots
-  const addrs = [...liveDallas.slice(0,5)];
-  while (addrs.length < 5) addrs.push(null);
+  // --- Use ONLY live Dallas addresses to avoid ghost sensors; dedupe & keep order
+  const addrs = Array.from(new Set(
+    (liveDallas || []).filter(a => /^[0-9a-fA-F]{16}$/.test(String(a)))
+  ));
 
+  // --- Build slots from the live addresses
   const slots = addrs.map((addr, idx) => {
-    if (!addr) {
-      return { id:`empty${idx}`, label:"", col:SENSOR_COLORS[idx], chart:null, address:null, calibration:0 };
-    }
+    const key = String(addr).toLowerCase();
+    const entryA = adminByAddr.get(key) || null;  // from admin mapping (preferred)
+    const entryM = mappedByAddr.get(key) || null; // from runtime SENSOR_MAP fallback
+
     const label =
-      (adminMap[addr]?.label && String(adminMap[addr].label).trim()) ||
-      (mapped[addr]?.label   && String(mapped[addr].label).trim())   ||
+      (entryA && entryA.label && String(entryA.label).trim()) ||
+      (entryM && entryM.label && String(entryM.label).trim()) ||
       addr;
 
     const offset =
-      (typeof adminMap[addr]?.offset === "number") ? adminMap[addr].offset :
-      (typeof mapped[addr]?.offset   === "number") ? mapped[addr].offset   : 0;
+      (entryA && typeof entryA.offset === 'number') ? entryA.offset :
+      (entryM && typeof entryM.offset === 'number') ? entryM.offset : 0;
 
     return {
       id: addr,
       label,
-      col: SENSOR_COLORS[idx],
+      col: SENSOR_COLORS[idx % SENSOR_COLORS.length],
       chart: null,
       address: addr,
       calibration: offset
     };
   });
 
-  // Keep synthetic average first
-  slots.unshift({ id:"avg", label:"Chillrail Avg", col:SENSOR_COLORS[5], chart:null, address:null, calibration:0 });
+  // --- Keep synthetic average first
+  slots.unshift({ id: "avg", label: "Chillrail Avg", col: SENSOR_COLORS[5], chart: null, address: null, calibration: 0 });
 
   return slots;
 }
+
 //Part 2
 /* =================== Charts =================== */
 function initCharts(SENSORS){
