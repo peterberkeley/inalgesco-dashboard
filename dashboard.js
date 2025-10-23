@@ -459,11 +459,20 @@ function pickHeartbeatLabels(deviceId, deviceLabel){
   }
   return hb;
 }
+// --- Helper: resolve correct admin mapping even if device label case differs ---
+function getAdminMapFor(deviceLabel){
+  const cfg = sensorMapConfig || {};
+  if (cfg[deviceLabel]) return cfg[deviceLabel];
+  const keyMatch = Object.keys(cfg).find(
+    x => String(x).toLowerCase() === String(deviceLabel).toLowerCase()
+  );
+  return keyMatch ? cfg[keyMatch] : {};
+}
 
 /* =================== Sensor slots =================== */
 function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
-  const mapped   = SENSOR_MAP[deviceLabel]||{};
-  const adminMap = sensorMapConfig[deviceLabel]||{};
+const mapped   = SENSOR_MAP[deviceLabel] || {};
+const adminMap = getAdminMapFor(deviceLabel);
 
   // Take the first 5 live DS18B20 addresses from Ubidots
   const addrs = [...liveDallas.slice(0,5)];
