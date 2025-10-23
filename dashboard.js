@@ -513,6 +513,7 @@ async function fetchDallasAddresses(deviceID){
     return [];
   }
 }
+window.fetchDallasAddresses = fetchDallasAddresses;
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
