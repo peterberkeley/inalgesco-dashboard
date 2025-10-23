@@ -437,7 +437,7 @@ async function fetchDallasAddresses(deviceID){
     const recent = results
       .filter(r => r.ts && (now - r.ts) <= FALLBACK_MS)
       .sort((a,b) => b.ts - a.ts)
-      .slice(0, 3)
+      .slice(0, 5)
       .map(r => r.label);
 
     return recent;
