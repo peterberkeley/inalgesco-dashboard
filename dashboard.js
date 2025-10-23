@@ -408,9 +408,21 @@ async function fetchDallasAddresses(deviceID){
     if (!hexVars.length) return [];
 
     // 3) For each hex variable, fetch its latest value (1-per-var)
-    const now = Date.now();
-    const FRESH_MS    = 60 * 60 * 1000;      // live if updated in last 60 minutes
-    const FALLBACK_MS = 24 * 60 * 60 * 1000; // else pick top-3 within last 24h
+    // Anchor to device's last seen time if available; else now
+const base = (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs))
+  ? window.__lastSeenMs
+  : Date.now();
+
+// Use the UI-selected history window (minutes) to drive recency
+const rangeMin = (typeof window.selectedRangeMinutes === 'number' && isFinite(window.selectedRangeMinutes))
+  ? window.selectedRangeMinutes
+  : 60;
+
+// Convert to ms; enforce a sensible floor and cap
+const rangeMs = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000);   // at least 15 min
+const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);         // “live” up to 2h max
+const FALLBACK_MS = rangeMs;                                       // top-up window = graph window
+
 
     const results = await Promise.all(hexVars.map(async hv => {
       try{
@@ -426,7 +438,7 @@ async function fetchDallasAddresses(deviceID){
 const fresh = [];
 const seen  = new Set();
 for (const r of results){
-  if (r.ts && (now - r.ts) <= FRESH_MS){
+   if (r.ts && (base - r.ts) <= FRESH_MS){
     const key = String(r.label).toLowerCase();
     if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
   }
@@ -435,7 +447,7 @@ for (const r of results){
 // 5) If fewer than 5, top-up with freshest within 24 h (no duplicates)
 if (fresh.length < 5){
   const topups = results
-    .filter(r => r.ts && (now - r.ts) <= FALLBACK_MS)
+    .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS
     .sort((a,b) => b.ts - a.ts)
     .map(r => r.label)
     .filter(lab => !seen.has(String(lab).toLowerCase()));
