@@ -401,23 +401,35 @@ async function fetchDallasAddresses(deviceID){
 
     const js = await res.json();
     const now = Date.now();
-    const FRESH_MS = 10 * 60 * 1000;   // live if updated in last 10 minutes
+    const FRESH_MS  = 60 * 60 * 1000;   // live if updated in last 60 minutes (was 10)
+    const FALLBACK_MS = 24 * 60 * 60 * 1000; // accept top-3 within last 24h as fallback
 
+    // Pass 1: strict "fresh" set (<= FRESH_MS)
     const seen = new Set();
-    const live = [];
+    const fresh = [];
     for (const v of (js.results || [])){
       const lab = v?.label;
       if (!/^[0-9a-fA-F]{16}$/.test(lab)) continue;
-
       const ts = v?.lastValue?.timestamp || 0;  // v1.6 returns ms
       if (ts && (now - ts) <= FRESH_MS){
         const key = String(lab).toLowerCase();
-        if (!seen.has(key)){ seen.add(key); live.push(lab); }
+        if (!seen.has(key)){ seen.add(key); fresh.push(lab); }
       }
     }
-    return live;   // only truly live probes (no ghosts)
+    if (fresh.length) return fresh;
+
+    // Pass 2 (fallback): choose up to 3 freshest within last 24h
+    const recent = (js.results || [])
+      .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
+      .map(v => ({ lab: v.label, ts: v?.lastValue?.timestamp || 0 }))
+      .filter(x => x.ts && (now - x.ts) <= FALLBACK_MS)
+      .sort((a,b) => b.ts - a.ts)
+      .slice(0, 3)
+      .map(x => x.lab);
+
+    return recent; // may be []
   }catch(e){
-    console.error("fetchDallasAddresses (fresh-only) failed:", e);
+    console.error("fetchDallasAddresses (fresh+fallback) failed:", e);
     return [];
   }
 }
