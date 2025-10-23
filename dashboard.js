@@ -392,8 +392,7 @@ async function fetchDeviceLastValuesV2(deviceID){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    // ---- 0) Read dynamic window + base time safely ----
-    // selectedRangeMinutes is a top-level let in your file (not reliably on window in Safari)
+    // ---- 0) Range + base time ----
     const rangeMin = (function(){
       try {
         return (typeof selectedRangeMinutes !== 'undefined' && isFinite(selectedRangeMinutes))
@@ -402,118 +401,106 @@ async function fetchDallasAddresses(deviceID){
       } catch(_) { return 60; }
     })();
 
-    // Anchor recency to device last-seen if available; else now.
     const base = (typeof window !== 'undefined' && typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs))
       ? window.__lastSeenMs
       : Date.now();
 
-    // Convert to ms; keep a sane floor and cap for the "fresh" band
-    const rangeMs     = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000); // ≥15 min
-    const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);          // live ≤2h
-    const FALLBACK_MS = rangeMs;                                         // top-up window = UI window
+    const rangeMs     = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000);
+    const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);
+    const FALLBACK_MS = Math.max(rangeMs, 24 * 60 * 60 * 1000);   // at least one day for late probes
 
-    // ---- 1) List all variables for this device (v1.6) ----
+    // ---- 1) List all variables for this device ----
     const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
     const listJs = await listRes.json();
 
-    // ---- 2) Keep only DS18B20 labels (16 hex) with their variable IDs ----
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
       .map(v => ({ id: v.id, label: v.label }));
     if (!hexVars.length) return [];
 
-    // ---- 3) Fetch the latest value for each hex variable (1-per-var) ----
+    // ---- 2) Get latest timestamp per hex variable ----
     const results = await Promise.all(hexVars.map(async hv => {
       try{
         const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
         if (!r.ok) return { label: hv.label, ts: 0 };
         const j = await r.json();
-        const ts = j?.results?.[0]?.timestamp || 0; // ms
+        const ts = j?.results?.[0]?.timestamp || 0;
         return { label: hv.label, ts };
       }catch{ return { label: hv.label, ts: 0 }; }
     }));
 
-    // ---- 4) Resolve admin-mapped addresses for this device (to prefer/limit addresses) ----
+    // ---- 3) Resolve admin map (true number of probes + labels) ----
     let adminHexSet = null;
-    try {
+    let maxSensors = 5;
+    try{
       const entries = Object.entries(window.__deviceMap || {});
       const match = entries.find(([,info]) => info && info.id === deviceID);
       const deviceLabel = match ? match[0] : null;
-
-      if (deviceLabel && sensorMapConfig) {
+      if (deviceLabel && sensorMapConfig){
         const want = String(deviceLabel).toLowerCase();
         const keys = Object.keys(sensorMapConfig).filter(k => k !== '__aliases' && String(k).toLowerCase() === want);
-        let bestKey = keys[0] || null;
-        if (keys.length > 1) {
-          bestKey = keys
-            .map(k => ({ k, n: Object.keys(sensorMapConfig[k] || {}).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).length }))
-            .sort((a,b)=>b.n-a.n)[0].k;
-        }
+        const bestKey = keys.length
+          ? keys.map(k => ({
+              k,
+              n: Object.keys(sensorMapConfig[k] || {})
+                .filter(x => /^[0-9a-fA-F]{16}$/.test(x)).length
+            }))
+            .sort((a,b)=>b.n-a.n)[0].k
+          : null;
         const adminMap = bestKey ? (sensorMapConfig[bestKey] || {}) : {};
-        adminHexSet = new Set(
-          Object.keys(adminMap).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).map(x => x.toLowerCase())
-        );
+        const hexes = Object.keys(adminMap).filter(x => /^[0-9a-fA-F]{16}$/.test(x));
+        adminHexSet = new Set(hexes.map(x => x.toLowerCase()));
+        if (hexes.length) maxSensors = hexes.length;  // exact probe count from admin
       }
-    } catch(_) { /* ignore */ }
+    }catch(_){}
 
-    // Only restrict to admin map if it already lists all 5;
-    // otherwise allow topping-up beyond admin entries
-    const allowRestrict = (adminHexSet && adminHexSet.size >= 5);
-    const MAX_SENSORS   = 5;
-
-    // ---- 5) Fresh first (≤ FRESH_MS from base) ----
+    // ---- 4) Collect recent addresses ----
     const fresh = [];
     const seen  = new Set();
     for (const r of results){
       if (r.ts && (base - r.ts) <= FRESH_MS){
         const key = String(r.label).toLowerCase();
-        if (allowRestrict && !adminHexSet.has(key)) continue;
+        if (adminHexSet && !adminHexSet.has(key)) continue;
         if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
       }
     }
 
-    // ---- 6) Top-up to MAX_SENSORS within the UI window (≤ FALLBACK_MS), no dups ----
-    if (fresh.length < MAX_SENSORS){
+    // ---- 5) Top-up within fallback window ----
+    if (fresh.length < maxSensors){
       const topups = results
         .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS)
-        .sort((a,b) => b.ts - a.ts)
+        .sort((a,b)=>b.ts - a.ts)
         .map(r => r.label);
-
       for (const lab of topups){
         const key = String(lab).toLowerCase();
-        if (allowRestrict && !adminHexSet.has(key)) continue;
+        if (adminHexSet && !adminHexSet.has(key)) continue;
         if (seen.has(key)) continue;
         seen.add(key);
         fresh.push(lab);
-        if (fresh.length >= MAX_SENSORS) break;
+        if (fresh.length >= maxSensors) break;
       }
     }
 
-    // ---- 7) Final top-up (no time limit): fill any remaining by overall recency ----
-    if (fresh.length < MAX_SENSORS){
-      const byRecency = results
-        .slice().sort((a,b) => (b.ts||0) - (a.ts||0))
-        .map(r => r.label);
-
-      for (const lab of byRecency){
-        const key = String(lab).toLowerCase();
-        if (allowRestrict && !adminHexSet.has(key)) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
+    // ---- 6) Final fill from admin order if still short ----
+    if (fresh.length < maxSensors && adminHexSet){
+      for (const lab of adminHexSet){
+        if (seen.has(lab)) continue;
+        seen.add(lab);
         fresh.push(lab);
-        if (fresh.length >= MAX_SENSORS) break;
+        if (fresh.length >= maxSensors) break;
       }
     }
 
-    return fresh;  // 0..5 addresses (Avg row is added elsewhere)
+    return fresh;
   }catch(e){
-    console.error("fetchDallasAddresses (dynamic window) failed:", e);
+    console.error("fetchDallasAddresses (clean)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
