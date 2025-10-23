@@ -71,10 +71,19 @@ function fmtTimeHHMM(ts, tz='Europe/London'){
 
 // Get the *displayed* name seen on the dashboard for a given device label
 function getDisplayName(deviceLabel){
-  return (aliasMap && aliasMap[deviceLabel])
-      || (sensorMapConfig[deviceLabel] && sensorMapConfig[deviceLabel].label)
-      || deviceLabel;
+  // Always check the __aliases sub-object first (most up-to-date)
+  const alias =
+    (sensorMapConfig.__aliases && sensorMapConfig.__aliases[deviceLabel]) ||
+    (aliasMap && aliasMap[deviceLabel]);
+  if (alias && typeof alias === 'string' && alias.trim()) return alias.trim();
+
+  // Fallbacks
+  const confLabel = sensorMapConfig[deviceLabel]?.label;
+  if (confLabel && typeof confLabel === 'string' && confLabel.trim()) return confLabel.trim();
+
+  return deviceLabel;
 }
+
 /* =================== Timezone helpers =================== */
 /* Rule:
  * 1) If admin set sensorMapConfig[deviceLabel].tz (IANA), use it.
