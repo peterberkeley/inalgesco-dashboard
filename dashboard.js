@@ -69,20 +69,38 @@ function fmtTimeHHMM(ts, tz='Europe/London'){
 }
 
 
-// Get the *displayed* name seen on the dashboard for a given device label
+/// Get the *displayed* name seen on the dashboard for a given device label
 function getDisplayName(deviceLabel){
-  // Always check the __aliases sub-object first (most up-to-date)
-  const alias =
-    (sensorMapConfig.__aliases && sensorMapConfig.__aliases[deviceLabel]) ||
-    (aliasMap && aliasMap[deviceLabel]);
-  if (alias && typeof alias === 'string' && alias.trim()) return alias.trim();
+  if (!deviceLabel) return deviceLabel;
 
-  // Fallbacks
-  const confLabel = sensorMapConfig[deviceLabel]?.label;
-  if (confLabel && typeof confLabel === 'string' && confLabel.trim()) return confLabel.trim();
+  const aliases = (sensorMapConfig && sensorMapConfig.__aliases) || aliasMap || {};
+  // 1) Exact match first (fast path)
+  if (aliases[deviceLabel]) {
+    const v = String(aliases[deviceLabel]).trim();
+    if (v) return v;
+  }
+  // 2) Case-insensitive lookup (fixes "skycafe-warehouse" vs "skycafe-Warehouse")
+  const want = String(deviceLabel).toLowerCase();
+  for (const k of Object.keys(aliases)){
+    if (String(k).toLowerCase() === want){
+      const v = String(aliases[k]).trim();
+      if (v) return v;
+    }
+  }
+
+  // 3) Fallbacks (also case-insensitive into sensorMapConfig)
+  const cfg = sensorMapConfig || {};
+  if (cfg[deviceLabel]?.label && String(cfg[deviceLabel].label).trim()) {
+    return String(cfg[deviceLabel].label).trim();
+  }
+  const k2 = Object.keys(cfg).find(k => String(k).toLowerCase() === want);
+  if (k2 && cfg[k2]?.label && String(cfg[k2].label).trim()) {
+    return String(cfg[k2].label).trim();
+  }
 
   return deviceLabel;
 }
+
 
 /* =================== Timezone helpers =================== */
 /* Rule:
