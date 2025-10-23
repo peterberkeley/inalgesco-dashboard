@@ -482,8 +482,11 @@ window.getAdminMapFor = getAdminMapFor;
 
 /* =================== Sensor slots =================== */
 function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
-const mapped   = SENSOR_MAP[deviceLabel] || {};
-const adminMap = getAdminMapFor(deviceLabel);
+const mapped = SENSOR_MAP[deviceLabel] || {};
+const cfg    = sensorMapConfig || {};
+const devKey = Object.keys(cfg).find(k => String(k).toLowerCase() === String(deviceLabel).toLowerCase()) || deviceLabel;
+const adminMap = (cfg[devKey] && typeof cfg[devKey] === 'object') ? cfg[devKey] : {};
+
 
   // Take the first 5 live DS18B20 addresses from Ubidots
   const addrs = [...liveDallas.slice(0,5)];
