@@ -389,14 +389,11 @@ async function fetchDeviceLastValuesV2(deviceID){
   }
 }
 
-
-
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
     // ---- 0) Read dynamic window + base time safely ----
-    // selectedRangeMinutes is a top-level `let` in your file (not a window prop in Safari),
-    // so read it without assuming window.*.
+    // selectedRangeMinutes is a top-level let (not on window in Safari).
     const rangeMin = (function(){
       try {
         return (typeof selectedRangeMinutes !== 'undefined' && isFinite(selectedRangeMinutes))
@@ -405,15 +402,15 @@ async function fetchDallasAddresses(deviceID){
       } catch(_) { return 60; }
     })();
 
-    // Anchor "recency" to device last-seen if available; else now.
+    // Anchor recency to device last-seen if available; else now.
     const base = (typeof window !== 'undefined' && typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs))
       ? window.__lastSeenMs
       : Date.now();
 
-    // Convert to ms; keep a sane floor and cap for "fresh" band
-    const rangeMs   = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000); // ≥15 min
-    const FRESH_MS  = Math.min(rangeMs, 2 * 60 * 60 * 1000);          // live ≤2h
-    const FALLBACK_MS = rangeMs;                                       // top-up window = UI window
+    // Convert to ms; keep a sane floor and cap for the "fresh" band
+    const rangeMs     = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000); // ≥15 min
+    const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);          // live ≤2h
+    const FALLBACK_MS = rangeMs;                                         // top-up window = UI window
 
     // ---- 1) List all variables for this device (v1.6) ----
     const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
@@ -425,10 +422,9 @@ async function fetchDallasAddresses(deviceID){
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
       .map(v => ({ id: v.id, label: v.label }));
-
     if (!hexVars.length) return [];
 
-    // ---- 3) For each hex variable, fetch its latest value (1-per-var) ----
+    // ---- 3) Fetch the latest value for each hex variable (1-per-var) ----
     const results = await Promise.all(hexVars.map(async hv => {
       try{
         const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
@@ -456,7 +452,6 @@ async function fetchDallasAddresses(deviceID){
         .sort((a,b) => b.ts - a.ts)
         .map(r => r.label)
         .filter(lab => !seen.has(String(lab).toLowerCase()));
-
       for (const lab of topups){
         if (fresh.length >= 5) break;
         seen.add(String(lab).toLowerCase());
@@ -470,7 +465,6 @@ async function fetchDallasAddresses(deviceID){
     return [];
   }
 }
-
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
