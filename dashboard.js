@@ -393,7 +393,7 @@ async function fetchDeviceLastValuesV2(deviceID){
 async function fetchDallasAddresses(deviceID){
   try{
     // ---- 0) Read dynamic window + base time safely ----
-    // selectedRangeMinutes is a top-level let (not on window in Safari).
+    // selectedRangeMinutes is a top-level let in your file (not reliably on window in Safari)
     const rangeMin = (function(){
       try {
         return (typeof selectedRangeMinutes !== 'undefined' && isFinite(selectedRangeMinutes))
@@ -435,81 +435,84 @@ async function fetchDallasAddresses(deviceID){
       }catch{ return { label: hv.label, ts: 0 }; }
     }));
 
-    // ---- 4) Resolve admin-mapped addresses for this device (to avoid ghosts) ----
-let adminHexSet = null;
-try {
-  // Find deviceLabel by matching deviceID in window.__deviceMap
-  const entries = Object.entries(window.__deviceMap || {});
-  const match = entries.find(([,info]) => info && info.id === deviceID);
-  const deviceLabel = match ? match[0] : null;
+    // ---- 4) Resolve admin-mapped addresses for this device (to prefer/limit addresses) ----
+    let adminHexSet = null;
+    try {
+      const entries = Object.entries(window.__deviceMap || {});
+      const match = entries.find(([,info]) => info && info.id === deviceID);
+      const deviceLabel = match ? match[0] : null;
 
-  if (deviceLabel && sensorMapConfig) {
-    // case-insensitive device key selection; prefer the one with more hex entries
-    const want = String(deviceLabel).toLowerCase();
-    const keys = Object.keys(sensorMapConfig).filter(k => k !== '__aliases' && String(k).toLowerCase() === want);
-    let bestKey = keys[0] || null;
-    if (keys.length > 1) {
-      bestKey = keys
-        .map(k => ({ k, n: Object.keys(sensorMapConfig[k] || {}).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).length }))
-        .sort((a,b)=>b.n-a.n)[0].k;
+      if (deviceLabel && sensorMapConfig) {
+        const want = String(deviceLabel).toLowerCase();
+        const keys = Object.keys(sensorMapConfig).filter(k => k !== '__aliases' && String(k).toLowerCase() === want);
+        let bestKey = keys[0] || null;
+        if (keys.length > 1) {
+          bestKey = keys
+            .map(k => ({ k, n: Object.keys(sensorMapConfig[k] || {}).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).length }))
+            .sort((a,b)=>b.n-a.n)[0].k;
+        }
+        const adminMap = bestKey ? (sensorMapConfig[bestKey] || {}) : {};
+        adminHexSet = new Set(
+          Object.keys(adminMap).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).map(x => x.toLowerCase())
+        );
+      }
+    } catch(_) { /* ignore */ }
+
+    // Only restrict to admin map if it already lists all 5;
+    // otherwise allow topping-up beyond admin entries
+    const allowRestrict = (adminHexSet && adminHexSet.size >= 5);
+    const MAX_SENSORS   = 5;
+
+    // ---- 5) Fresh first (≤ FRESH_MS from base) ----
+    const fresh = [];
+    const seen  = new Set();
+    for (const r of results){
+      if (r.ts && (base - r.ts) <= FRESH_MS){
+        const key = String(r.label).toLowerCase();
+        if (allowRestrict && !adminHexSet.has(key)) continue;
+        if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
+      }
     }
-    const adminMap = bestKey ? (sensorMapConfig[bestKey] || {}) : {};
-    adminHexSet = new Set(
-      Object.keys(adminMap).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).map(x => x.toLowerCase())
-    );
-  }
-} catch(_) { /* ignore */ }
 
-// How many probes we want to show: default 5, but if admin map has fewer, cap to that
-const MAX_SENSORS = (adminHexSet && adminHexSet.size > 0) ? Math.min(5, adminHexSet.size) : 5;
+    // ---- 6) Top-up to MAX_SENSORS within the UI window (≤ FALLBACK_MS), no dups ----
+    if (fresh.length < MAX_SENSORS){
+      const topups = results
+        .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS)
+        .sort((a,b) => b.ts - a.ts)
+        .map(r => r.label);
 
-// ---- 5) Fresh first (≤ FRESH_MS from base) ----
-const fresh = [];
-const seen  = new Set();
-for (const r of results){
-  if (r.ts && (base - r.ts) <= FRESH_MS){
-    const key = String(r.label).toLowerCase();
-    // if we have an admin map, only allow addresses in it
-    if (adminHexSet && !adminHexSet.has(key)) continue;
-    if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
-  }
-}
+      for (const lab of topups){
+        const key = String(lab).toLowerCase();
+        if (allowRestrict && !adminHexSet.has(key)) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        fresh.push(lab);
+        if (fresh.length >= MAX_SENSORS) break;
+      }
+    }
 
-// ---- 6) Top-up to MAX_SENSORS within the UI window (≤ FALLBACK_MS), no dups ----
-if (fresh.length < MAX_SENSORS){
-  const topups = results
-    .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS)
-    .sort((a,b) => b.ts - a.ts)
-    .map(r => r.label);
+    // ---- 7) Final top-up (no time limit): fill any remaining by overall recency ----
+    if (fresh.length < MAX_SENSORS){
+      const byRecency = results
+        .slice().sort((a,b) => (b.ts||0) - (a.ts||0))
+        .map(r => r.label);
 
-  for (const lab of topups){
-    const key = String(lab).toLowerCase();
-    if (adminHexSet && !adminHexSet.has(key)) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    fresh.push(lab);
-    if (fresh.length >= MAX_SENSORS) break;
-  }
-}
+      for (const lab of byRecency){
+        const key = String(lab).toLowerCase();
+        if (allowRestrict && !adminHexSet.has(key)) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        fresh.push(lab);
+        if (fresh.length >= MAX_SENSORS) break;
+      }
+    }
 
-// ---- 7) Final top-up (no time limit): fill any remaining from admin-mapped addresses by recency ----
-if (fresh.length < MAX_SENSORS){
-  const byRecency = results
-    .slice().sort((a,b) => (b.ts||0) - (a.ts||0))
-    .map(r => r.label);
-
-  for (const lab of byRecency){
-    const key = String(lab).toLowerCase();
-    if (adminHexSet && !adminHexSet.has(key)) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    fresh.push(lab);
-    if (fresh.length >= MAX_SENSORS) break;
+    return fresh;  // 0..5 addresses (Avg row is added elsewhere)
+  }catch(e){
+    console.error("fetchDallasAddresses (dynamic window) failed:", e);
+    return [];
   }
 }
-
-return fresh;  // 0..MAX_SENSORS addresses (Avg added elsewhere)
-
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
