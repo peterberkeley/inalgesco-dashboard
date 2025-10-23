@@ -2042,6 +2042,42 @@ function closeMapAll(){
   const ov = document.getElementById('mapAllOverlay');
   if (ov) ov.style.display = 'none';
 }
+// --- Final override: ensure alias lookup is case-insensitive everywhere ---
+(function(){
+  function getDisplayNameCI(deviceLabel){
+    if (!deviceLabel) return deviceLabel;
+
+    const aliases = (sensorMapConfig && sensorMapConfig.__aliases) || aliasMap || {};
+    // 1) Exact match
+    if (aliases[deviceLabel]) {
+      const v = String(aliases[deviceLabel]).trim();
+      if (v) return v;
+    }
+    // 2) Case-insensitive match (handles "skycafe-warehouse" vs "skycafe-Warehouse")
+    const want = String(deviceLabel).toLowerCase();
+    for (const k in aliases){
+      if (Object.prototype.hasOwnProperty.call(aliases, k) &&
+          String(k).toLowerCase() === want){
+        const v = String(aliases[k]).trim();
+        if (v) return v;
+      }
+    }
+
+    // 3) Fallbacks into sensorMapConfig
+    const cfg = sensorMapConfig || {};
+    if (cfg[deviceLabel]?.label && String(cfg[deviceLabel].label).trim()) {
+      return String(cfg[deviceLabel].label).trim();
+    }
+    const k2 = Object.keys(cfg).find(x => String(x).toLowerCase() === want);
+    if (k2 && cfg[k2]?.label && String(cfg[k2].label).trim()) {
+      return String(cfg[k2].label).trim();
+    }
+
+    return deviceLabel;
+  }
+  // Force the global reference used by all call sites to this CI version.
+  window.getDisplayName = getDisplayNameCI;
+})();
 
 // EOF
 
