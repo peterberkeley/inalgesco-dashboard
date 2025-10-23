@@ -1929,7 +1929,31 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
     // 6) Render everything for the selected device
     if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID];  // optional rebuild; default off
 if (deviceID){
-  const liveDallas = await fetchDallasAddresses(deviceID);
+  // LIVE-ONLY clamp (device-anchored to __lastSeenMs, window = selectedRangeMinutes)
+let addrs = await fetchDallasAddresses(deviceID);
+
+try {
+  const rangeMin = (typeof selectedRangeMinutes === 'number' && isFinite(selectedRangeMinutes)) ? selectedRangeMinutes : 60;
+  const base     = (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : Date.now();
+  const rangeMs  = Math.max(15*60*1000, rangeMin*60*1000);
+  const FRESH_MS = Math.min(rangeMs, 2*60*60*1000); // cap “live” band at 2h
+
+  // verify recency per address (small N → cheap)
+  const keep = [];
+  for (const lab of (addrs || [])) {
+    try {
+      const rows = await fetchUbidotsVar(deviceID, lab, 1);
+      const ts   = rows?.[0]?.timestamp || 0;
+      if (ts && (base - ts) <= FRESH_MS) keep.push(lab);
+    } catch(_) {}
+  }
+  addrs = keep;
+} catch(_) { /* if anything fails, fall back to raw addrs */ }
+
+// use clamped addresses
+const liveDallas = addrs;
+
+  
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
 ensureCharts(SENSORS, deviceLabel);
 initMap();                           // idempotent: also recreates marker if missing
