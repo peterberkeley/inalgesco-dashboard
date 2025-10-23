@@ -410,7 +410,7 @@ async function fetchDallasAddresses(deviceID){
     // 3) For each hex variable, fetch its latest value (1-per-var)
     const now = Date.now();
     const FRESH_MS    = 60 * 60 * 1000;      // live if updated in last 60 minutes
-    const FALLBACK_MS = 24 * 60 * 60 * 1000; // fallback: accept top-3 within last 24h
+    const FALLBACK_MS = 24 * 60 * 60 * 1000; // else pick top-3 within last 24h
 
     const results = await Promise.all(hexVars.map(async hv => {
       try{
