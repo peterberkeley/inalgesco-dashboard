@@ -394,19 +394,33 @@ async function fetchDeviceLastValuesV2(deviceID){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    // 1) If we already have the var map, derive addresses from its labels (no network).
-    if (variableCache[deviceID]) {
-      const labels = Object.keys(variableCache[deviceID]);
-      const seen = new Set();
-      const uniq = [];
-      for (const l of labels) {
-        if (/^[0-9a-fA-F]{16}$/.test(l) && !seen.has(l)) {
-          seen.add(l);
-          uniq.push(l);
-        }
+    // Get all variables for the device; filter DS18B20 by freshness
+    const url = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+
+    const js = await res.json();
+    const now = Date.now();
+    const FRESH_MS = 10 * 60 * 1000;   // consider a probe "live" if updated in last 10 minutes
+
+    const seen = new Set();
+    const live = [];
+    for (const v of (js.results || [])){
+      const lab = v?.label;
+      if (!/^[0-9a-fA-F]{16}$/.test(lab)) continue;
+
+      const ts = v?.lastValue?.timestamp || 0;  // v1.6 returns ms here
+      if (ts && (now - ts) <= FRESH_MS){
+        const key = String(lab).toLowerCase();
+        if (!seen.has(key)){ seen.add(key); live.push(lab); }
       }
-      return uniq;
     }
+    return live;   // only truly live probes (no ghosts)
+  }catch(e){
+    console.error("fetchDallasAddresses (fresh-only) failed:", e);
+    return [];
+  }
+}
 
     // 2) Build the var map once; then derive addresses (still only ONE network call)
     await ensureVarCache(deviceID);
