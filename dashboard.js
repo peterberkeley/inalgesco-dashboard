@@ -392,7 +392,7 @@ async function fetchDeviceLastValuesV2(deviceID){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    // ---- 0) Read dynamic window + base time (UI-driven, device-anchored) ----
+    // ---- 0) Range + base time (UI-driven, device-anchored) ----
     const rangeMin = (function(){
       try {
         return (typeof selectedRangeMinutes !== 'undefined' && isFinite(selectedRangeMinutes))
@@ -405,25 +405,26 @@ async function fetchDallasAddresses(deviceID){
       ? window.__lastSeenMs
       : Date.now();
 
-    const rangeMs     = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000); // ≥ 15 min
-    const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);          // "live" ≤ 2 h
-    const FALLBACK_MS = rangeMs;                                         // top-up window = UI window
+    // Live window = selectedRange (min 15 min, live band capped at 2 h)
+    const rangeMs   = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000);
+    const FRESH_MS  = Math.min(rangeMs, 2 * 60 * 60 * 1000); // what we call "live" probes
+    const FALL_MS   = rangeMs;                               // we DO NOT exceed liveCount with older probes
 
     // ---- 1) List all variables for this device (v1.6) ----
     const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
-    const listJs = await listRes.json();
+    const listJs  = await listRes.json();
 
+    // DS18B20 variables on this device (by label + id)
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
       .map(v => ({ id: v.id, label: v.label }));
     if (!hexVars.length) return [];
 
-    // Build set of addresses that ACTUALLY belong to this device (from listing)
     const availableSet = new Set(hexVars.map(v => String(v.label).toLowerCase()));
 
-    // ---- 2) Fetch the latest value timestamp per hex variable ----
+    // ---- 2) Latest timestamp per DS18B20 (1 value per var) ----
     const results = await Promise.all(hexVars.map(async hv => {
       try{
         const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
@@ -434,15 +435,11 @@ async function fetchDallasAddresses(deviceID){
       }catch{ return { label: hv.label, ts: 0 }; }
     }));
 
-    // ---- 3) Resolve ADMIN map for this device and CAP max sensors to that count ----
-    let adminHexSet = null;     // normalized (lowercase) admin addresses that exist on THIS device
-    let restrictToAdmin = false;
-    let MAX_SENSORS = 5;
-
+    // ---- 3) Admin-map intersection (optional; used to preserve aliases if present) ----
+    let adminHexSet = null;
     try{
-      // Find deviceLabel by matching deviceID in __deviceMap
       const entries = Object.entries(window.__deviceMap || {});
-      const match = entries.find(([,info]) => info && info.id === deviceID);
+      const match   = entries.find(([,info]) => info && info.id === deviceID);
       const deviceLabel = match ? match[0] : null;
 
       if (deviceLabel && sensorMapConfig){
@@ -450,98 +447,64 @@ async function fetchDallasAddresses(deviceID){
         const keys = Object.keys(sensorMapConfig)
           .filter(k => k !== '__aliases' && String(k).toLowerCase() === want);
 
-        // Pick the case-variant key with most hex entries
         let bestKey = keys[0] || null;
         if (keys.length > 1){
           bestKey = keys
             .map(k => ({ k, n: Object.keys(sensorMapConfig[k] || {}).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).length }))
             .sort((a,b)=>b.n-a.n)[0].k;
         }
-
-        const adminMapAll = bestKey ? (sensorMapConfig[bestKey] || {}) : {};
-        const adminHexAll = Object.keys(adminMapAll).filter(x => /^[0-9a-fA-F]{16}$/.test(x));
-
-        // INTERSECTION with addresses present on this device only
-        const adminActive = adminHexAll
-          .map(x => String(x).toLowerCase())
-          .filter(x => availableSet.has(x));
-
-        adminHexSet = new Set(adminActive);
-        if (adminActive.length > 0){
-          // CAP to EXACT number of admin-mapped probes actually present on this device
-          MAX_SENSORS = adminActive.length;
-          restrictToAdmin = true; // enforce only these addresses to preserve aliases & avoid ghosts
-        } else {
-          // No admin mapping → cap to number of addresses present (up to 5)
-          MAX_SENSORS = Math.min(5, availableSet.size);
-          restrictToAdmin = false;
-        }
-      } else {
-        // No deviceLabel/admin → cap to available addresses (up to 5)
-        MAX_SENSORS = Math.min(5, availableSet.size);
-        restrictToAdmin = false;
+        const adminMap = bestKey ? (sensorMapConfig[bestKey] || {}) : {};
+        const adminHex = Object.keys(adminMap).filter(x => /^[0-9a-fA-F]{16}$/.test(x));
+        // restrict admin entries to ones that actually exist on this device
+        adminHexSet = new Set(adminHex.map(x => x.toLowerCase()).filter(x => availableSet.has(x)));
       }
-    }catch(_){
-      MAX_SENSORS = Math.min(5, availableSet.size);
-      restrictToAdmin = false;
+    }catch(_){}
+
+    // ---- 4) Determine how many probes are actually LIVE in the selected window ----
+    // Live = ts within FRESH_MS of the base (device last-seen)
+    const liveKeys = new Set(
+      results
+        .filter(r => r.ts && (base - r.ts) <= FRESH_MS)
+        .map(r => String(r.label).toLowerCase())
+        .filter(k => availableSet.has(k))
+    );
+    // TARGET COUNT: how many are live right now (never exceed this)
+    const LIVE_TARGET = Math.max(0, liveKeys.size);
+
+    // If admin map exists, we prefer those addresses (keep aliases consistent) but still cap to live count
+    const preferSet = (adminHexSet && adminHexSet.size) ? adminHexSet : availableSet;
+
+    // ---- 5) Build result: pick LIVE addresses first (sorted by recency), capped to LIVE_TARGET ----
+    const byRecency = results
+      .slice().sort((a,b) => (b.ts||0) - (a.ts||0))
+      .map(r => String(r.label).toLowerCase());
+
+    const picked = [];
+    const seen   = new Set();
+
+    // First pass: strictly live & preferred
+    for (const k of byRecency){
+      if (!liveKeys.has(k)) continue;
+      if (!preferSet.has(k)) continue;  // keep to admin map if present; else all available
+      if (seen.has(k)) continue;
+      seen.add(k);
+      picked.push(k);
+      if (picked.length >= LIVE_TARGET) break;
     }
 
-    // ---- 4) Fresh first (≤ FRESH_MS from base), honoring admin restriction if enabled ----
-    const fresh = [];
-    const seen  = new Set();
-    for (const r of results){
-      if (r.ts && (base - r.ts) <= FRESH_MS){
-        const key = String(r.label).toLowerCase();
-        if (!availableSet.has(key)) continue;           // must belong to THIS device
-        if (restrictToAdmin && adminHexSet && !adminHexSet.has(key)) continue;
-        if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
-        if (fresh.length >= MAX_SENSORS) break;
-      }
-    }
+    // NOTE: We DO NOT top-up beyond LIVE_TARGET with older probes when admin map is empty.
+    // This is the key change: devices with only 3 currently reporting will show exactly 3.
 
-    // ---- 5) Top-up within FALLBACK_MS (UI window), still honoring admin restriction if enabled ----
-    if (fresh.length < MAX_SENSORS){
-      const topups = results
-        .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS)
-        .sort((a,b) => b.ts - a.ts)
-        .map(r => r.label);
+    // Convert back to original label case as stored in hexVars (so later code can map labels consistently)
+    const lowerToOriginal = new Map(hexVars.map(v => [String(v.label).toLowerCase(), v.label]));
+    return picked.map(k => lowerToOriginal.get(k)).filter(Boolean);
 
-      for (const lab of topups){
-        const key = String(lab).toLowerCase();
-        if (!availableSet.has(key)) continue;
-        if (restrictToAdmin && adminHexSet && !adminHexSet.has(key)) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        fresh.push(lab);
-        if (fresh.length >= MAX_SENSORS) break;
-      }
-    }
-
-    // ---- 6) (Optional) no-time-limit fill by device recency if still short (rare) ----
-    if (fresh.length < MAX_SENSORS){
-      const byRecency = results
-        .slice().sort((a,b) => (b.ts||0) - (a.ts||0))
-        .map(r => r.label);
-
-      for (const lab of byRecency){
-        const key = String(lab).toLowerCase();
-        if (!availableSet.has(key)) continue;
-        if (restrictToAdmin && adminHexSet && !adminHexSet.has(key)) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        fresh.push(lab);
-        if (fresh.length >= MAX_SENSORS) break;
-      }
-    }
-
-    return fresh;   // EXACTLY the admin-defined count for that device (if mapped), else up to 5 from actual device variables
   }catch(e){
-    console.error("fetchDallasAddresses (admin-capped)", e);
+    console.error("fetchDallasAddresses (live-capped)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
-
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
