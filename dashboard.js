@@ -131,9 +131,7 @@ async function resolveDeviceTz(deviceLabel, lat, lon){
 }
 
 /* =================== Admin mapping (context) =================== */
-async function fetchSensorMapMapping(){
-  try{
-    const res = await fetch(`${UBIDOTS_V1}/devices/config/sensor_map/values?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+    const res = await fetch(`${UBIDOTS_V1}/devices/config/sensor_map/values?page_size=1&_=${Date.now()}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
     const js = await res.json();
     sensorMapConfig = (js.results?.[0]?.context) || {};
     aliasMap = sensorMapConfig.__aliases || {};
