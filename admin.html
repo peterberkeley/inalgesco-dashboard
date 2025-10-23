@@ -354,25 +354,40 @@
       fullMapData[selectedDeviceLabel] = sensors;
     });
 
-    // ===== SAVE BUTTON =====
-    document.getElementById("saveBtn").onclick = async function() {
-      document.getElementById("saveBtn").disabled = true;
-      document.getElementById("statusMsg").textContent = "Saving...";
-      let payload = { value: 0, context: fullMapData };
-      try {
-        let res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_ACCOUNT_TOKEN}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error("Failed to save");
-        document.getElementById("statusMsg").textContent = "Saved to Ubidots!";
-      } catch (e) {
-        document.getElementById("statusMsg").textContent = "Failed to save. Check network/Ubidots.";
-      }
-      setTimeout(() => { document.getElementById("statusMsg").textContent = ""; }, 3000);
-      document.getElementById("saveBtn").disabled = false;
-    };
+  // ===== SAVE BUTTON =====
+document.getElementById("saveBtn").onclick = async function() {
+  const saveBtn = document.getElementById("saveBtn");
+  const status = document.getElementById("statusMsg");
+  saveBtn.disabled = true;
+  status.textContent = "Saving...";
+
+  // ensure alias map exists and include current alias explicitly
+  if (!fullMapData.__aliases) fullMapData.__aliases = {};
+  const aliasInput = document.getElementById("aliasInput").value.trim();
+  if (selectedDeviceLabel && aliasInput) {
+    fullMapData.__aliases[selectedDeviceLabel] = aliasInput;
+  }
+
+  // prepare payload
+  const payload = { value: 0, context: { ...fullMapData } };
+
+  try {
+    const res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_ACCOUNT_TOKEN}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error("Failed to save");
+    status.textContent = "Saved to Ubidots!";
+  } catch (e) {
+    status.textContent = "Failed to save. Check network/Ubidots.";
+    console.error(e);
+  }
+
+  setTimeout(() => { status.textContent = ""; }, 3000);
+  saveBtn.disabled = false;
+};
+
   </script>
 
 </body>
