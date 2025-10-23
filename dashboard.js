@@ -394,36 +394,41 @@ async function fetchDeviceLastValuesV2(deviceID){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    // 1) List all variables for this device (v1.6)
+    // ---- 0) Read dynamic window + base time safely ----
+    // selectedRangeMinutes is a top-level `let` in your file (not a window prop in Safari),
+    // so read it without assuming window.*.
+    const rangeMin = (function(){
+      try {
+        return (typeof selectedRangeMinutes !== 'undefined' && isFinite(selectedRangeMinutes))
+          ? selectedRangeMinutes
+          : (typeof window !== 'undefined' && isFinite(window.selectedRangeMinutes) ? window.selectedRangeMinutes : 60);
+      } catch(_) { return 60; }
+    })();
+
+    // Anchor "recency" to device last-seen if available; else now.
+    const base = (typeof window !== 'undefined' && typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs))
+      ? window.__lastSeenMs
+      : Date.now();
+
+    // Convert to ms; keep a sane floor and cap for "fresh" band
+    const rangeMs   = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000); // ≥15 min
+    const FRESH_MS  = Math.min(rangeMs, 2 * 60 * 60 * 1000);          // live ≤2h
+    const FALLBACK_MS = rangeMs;                                       // top-up window = UI window
+
+    // ---- 1) List all variables for this device (v1.6) ----
     const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
     const listJs = await listRes.json();
 
-    // 2) Keep only DS18B20 labels (16 hex) with their variable IDs
+    // ---- 2) Keep only DS18B20 labels (16 hex) with their variable IDs ----
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
       .map(v => ({ id: v.id, label: v.label }));
 
     if (!hexVars.length) return [];
 
-    // 3) For each hex variable, fetch its latest value (1-per-var)
-    // Anchor to device's last seen time if available; else now
-const base = (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs))
-  ? window.__lastSeenMs
-  : Date.now();
-
-// Use the UI-selected history window (minutes) to drive recency
-const rangeMin = (typeof window.selectedRangeMinutes === 'number' && isFinite(window.selectedRangeMinutes))
-  ? window.selectedRangeMinutes
-  : 60;
-
-// Convert to ms; enforce a sensible floor and cap
-const rangeMs = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000);   // at least 15 min
-const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);         // “live” up to 2h max
-const FALLBACK_MS = rangeMs;                                       // top-up window = graph window
-
-
+    // ---- 3) For each hex variable, fetch its latest value (1-per-var) ----
     const results = await Promise.all(hexVars.map(async hv => {
       try{
         const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
@@ -434,32 +439,38 @@ const FALLBACK_MS = rangeMs;                                       // top-up win
       }catch{ return { label: hv.label, ts: 0 }; }
     }));
 
-   // 4) Fresh first (≤ FRESH_MS)
-const fresh = [];
-const seen  = new Set();
-for (const r of results){
-   if (r.ts && (base - r.ts) <= FRESH_MS){
-    const key = String(r.label).toLowerCase();
-    if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
+    // ---- 4) Fresh first (≤ FRESH_MS from base) ----
+    const fresh = [];
+    const seen  = new Set();
+    for (const r of results){
+      if (r.ts && (base - r.ts) <= FRESH_MS){
+        const key = String(r.label).toLowerCase();
+        if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
+      }
+    }
+
+    // ---- 5) Top-up to 5 within UI window (≤ FALLBACK_MS from base), no dups ----
+    if (fresh.length < 5){
+      const topups = results
+        .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS)
+        .sort((a,b) => b.ts - a.ts)
+        .map(r => r.label)
+        .filter(lab => !seen.has(String(lab).toLowerCase()));
+
+      for (const lab of topups){
+        if (fresh.length >= 5) break;
+        seen.add(String(lab).toLowerCase());
+        fresh.push(lab);
+      }
+    }
+
+    return fresh; // 0..5 addresses
+  }catch(e){
+    console.error("fetchDallasAddresses (dynamic window) failed:", e);
+    return [];
   }
 }
 
-// 5) If fewer than 5, top-up with freshest within 24 h (no duplicates)
-if (fresh.length < 5){
-  const topups = results
-    .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS
-    .sort((a,b) => b.ts - a.ts)
-    .map(r => r.label)
-    .filter(lab => !seen.has(String(lab).toLowerCase()));
-
-  for (const lab of topups){
-    if (fresh.length >= 5) break;
-    seen.add(String(lab).toLowerCase());
-    fresh.push(lab);
-  }
-}
-
-return fresh;
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
