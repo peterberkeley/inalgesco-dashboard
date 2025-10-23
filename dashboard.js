@@ -422,31 +422,32 @@ async function fetchDallasAddresses(deviceID){
       }catch{ return { label: hv.label, ts: 0 }; }
     }));
 
-    // 4) Fresh first
-    const fresh = [];
-    const seen  = new Set();
-    for (const r of results){
-      if (r.ts && (now - r.ts) <= FRESH_MS){
-        const key = String(r.label).toLowerCase();
-        if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
-      }
-    }
-    if (fresh.length) return fresh;
-
-    // 5) Fallback: pick up to 3 freshest within 24h
-    const recent = results
-      .filter(r => r.ts && (now - r.ts) <= FALLBACK_MS)
-      .sort((a,b) => b.ts - a.ts)
-      .slice(0, 5)
-      .map(r => r.label);
-
-    return recent;
-  }catch(e){
-    console.error("fetchDallasAddresses (per-var check) failed:", e);
-    return [];
+   // 4) Fresh first (≤ FRESH_MS)
+const fresh = [];
+const seen  = new Set();
+for (const r of results){
+  if (r.ts && (now - r.ts) <= FRESH_MS){
+    const key = String(r.label).toLowerCase();
+    if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
   }
 }
 
+// 5) If fewer than 5, top-up with freshest within 24 h (no duplicates)
+if (fresh.length < 5){
+  const topups = results
+    .filter(r => r.ts && (now - r.ts) <= FALLBACK_MS)
+    .sort((a,b) => b.ts - a.ts)
+    .map(r => r.label)
+    .filter(lab => !seen.has(String(lab).toLowerCase()));
+
+  for (const lab of topups){
+    if (fresh.length >= 5) break;
+    seen.add(String(lab).toLowerCase());
+    fresh.push(lab);
+  }
+}
+
+return fresh;
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
