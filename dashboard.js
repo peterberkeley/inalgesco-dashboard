@@ -392,7 +392,7 @@ async function fetchDeviceLastValuesV2(deviceID){
 /* =================== Dallas addresses (v1.6) =================== */
 async function fetchDallasAddresses(deviceID){
   try{
-    // ---- 0) Range + base time ----
+    // ---- 0) Read dynamic window + base time (UI-driven, device-anchored) ----
     const rangeMin = (function(){
       try {
         return (typeof selectedRangeMinutes !== 'undefined' && isFinite(selectedRangeMinutes))
@@ -405,11 +405,11 @@ async function fetchDallasAddresses(deviceID){
       ? window.__lastSeenMs
       : Date.now();
 
-    const rangeMs     = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000);
-    const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);
-    const FALLBACK_MS = Math.max(rangeMs, 24 * 60 * 60 * 1000);   // at least one day for late probes
+    const rangeMs     = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000); // ≥ 15 min
+    const FRESH_MS    = Math.min(rangeMs, 2 * 60 * 60 * 1000);          // "live" ≤ 2 h
+    const FALLBACK_MS = rangeMs;                                         // top-up window = UI window
 
-    // ---- 1) List all variables for this device ----
+    // ---- 1) List all variables for this device (v1.6) ----
     const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
@@ -420,82 +420,123 @@ async function fetchDallasAddresses(deviceID){
       .map(v => ({ id: v.id, label: v.label }));
     if (!hexVars.length) return [];
 
-    // ---- 2) Get latest timestamp per hex variable ----
+    // Build set of addresses that ACTUALLY belong to this device (from listing)
+    const availableSet = new Set(hexVars.map(v => String(v.label).toLowerCase()));
+
+    // ---- 2) Fetch the latest value timestamp per hex variable ----
     const results = await Promise.all(hexVars.map(async hv => {
       try{
         const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
         if (!r.ok) return { label: hv.label, ts: 0 };
         const j = await r.json();
-        const ts = j?.results?.[0]?.timestamp || 0;
+        const ts = j?.results?.[0]?.timestamp || 0; // ms
         return { label: hv.label, ts };
       }catch{ return { label: hv.label, ts: 0 }; }
     }));
 
-    // ---- 3) Resolve admin map (true number of probes + labels) ----
-    let adminHexSet = null;
-    let maxSensors = 5;
+    // ---- 3) Resolve ADMIN map for this device and CAP max sensors to that count ----
+    let adminHexSet = null;     // normalized (lowercase) admin addresses that exist on THIS device
+    let restrictToAdmin = false;
+    let MAX_SENSORS = 5;
+
     try{
+      // Find deviceLabel by matching deviceID in __deviceMap
       const entries = Object.entries(window.__deviceMap || {});
       const match = entries.find(([,info]) => info && info.id === deviceID);
       const deviceLabel = match ? match[0] : null;
+
       if (deviceLabel && sensorMapConfig){
         const want = String(deviceLabel).toLowerCase();
-        const keys = Object.keys(sensorMapConfig).filter(k => k !== '__aliases' && String(k).toLowerCase() === want);
-        const bestKey = keys.length
-          ? keys.map(k => ({
-              k,
-              n: Object.keys(sensorMapConfig[k] || {})
-                .filter(x => /^[0-9a-fA-F]{16}$/.test(x)).length
-            }))
-            .sort((a,b)=>b.n-a.n)[0].k
-          : null;
-        const adminMap = bestKey ? (sensorMapConfig[bestKey] || {}) : {};
-        const hexes = Object.keys(adminMap).filter(x => /^[0-9a-fA-F]{16}$/.test(x));
-        adminHexSet = new Set(hexes.map(x => x.toLowerCase()));
-        if (hexes.length) maxSensors = hexes.length;  // exact probe count from admin
-      }
-    }catch(_){}
+        const keys = Object.keys(sensorMapConfig)
+          .filter(k => k !== '__aliases' && String(k).toLowerCase() === want);
 
-    // ---- 4) Collect recent addresses ----
+        // Pick the case-variant key with most hex entries
+        let bestKey = keys[0] || null;
+        if (keys.length > 1){
+          bestKey = keys
+            .map(k => ({ k, n: Object.keys(sensorMapConfig[k] || {}).filter(x => /^[0-9a-fA-F]{16}$/.test(x)).length }))
+            .sort((a,b)=>b.n-a.n)[0].k;
+        }
+
+        const adminMapAll = bestKey ? (sensorMapConfig[bestKey] || {}) : {};
+        const adminHexAll = Object.keys(adminMapAll).filter(x => /^[0-9a-fA-F]{16}$/.test(x));
+
+        // INTERSECTION with addresses present on this device only
+        const adminActive = adminHexAll
+          .map(x => String(x).toLowerCase())
+          .filter(x => availableSet.has(x));
+
+        adminHexSet = new Set(adminActive);
+        if (adminActive.length > 0){
+          // CAP to EXACT number of admin-mapped probes actually present on this device
+          MAX_SENSORS = adminActive.length;
+          restrictToAdmin = true; // enforce only these addresses to preserve aliases & avoid ghosts
+        } else {
+          // No admin mapping → cap to number of addresses present (up to 5)
+          MAX_SENSORS = Math.min(5, availableSet.size);
+          restrictToAdmin = false;
+        }
+      } else {
+        // No deviceLabel/admin → cap to available addresses (up to 5)
+        MAX_SENSORS = Math.min(5, availableSet.size);
+        restrictToAdmin = false;
+      }
+    }catch(_){
+      MAX_SENSORS = Math.min(5, availableSet.size);
+      restrictToAdmin = false;
+    }
+
+    // ---- 4) Fresh first (≤ FRESH_MS from base), honoring admin restriction if enabled ----
     const fresh = [];
     const seen  = new Set();
     for (const r of results){
       if (r.ts && (base - r.ts) <= FRESH_MS){
         const key = String(r.label).toLowerCase();
-        if (adminHexSet && !adminHexSet.has(key)) continue;
+        if (!availableSet.has(key)) continue;           // must belong to THIS device
+        if (restrictToAdmin && adminHexSet && !adminHexSet.has(key)) continue;
         if (!seen.has(key)){ seen.add(key); fresh.push(r.label); }
+        if (fresh.length >= MAX_SENSORS) break;
       }
     }
 
-    // ---- 5) Top-up within fallback window ----
-    if (fresh.length < maxSensors){
+    // ---- 5) Top-up within FALLBACK_MS (UI window), still honoring admin restriction if enabled ----
+    if (fresh.length < MAX_SENSORS){
       const topups = results
         .filter(r => r.ts && (base - r.ts) <= FALLBACK_MS)
-        .sort((a,b)=>b.ts - a.ts)
+        .sort((a,b) => b.ts - a.ts)
         .map(r => r.label);
+
       for (const lab of topups){
         const key = String(lab).toLowerCase();
-        if (adminHexSet && !adminHexSet.has(key)) continue;
+        if (!availableSet.has(key)) continue;
+        if (restrictToAdmin && adminHexSet && !adminHexSet.has(key)) continue;
         if (seen.has(key)) continue;
         seen.add(key);
         fresh.push(lab);
-        if (fresh.length >= maxSensors) break;
+        if (fresh.length >= MAX_SENSORS) break;
       }
     }
 
-    // ---- 6) Final fill from admin order if still short ----
-    if (fresh.length < maxSensors && adminHexSet){
-      for (const lab of adminHexSet){
-        if (seen.has(lab)) continue;
-        seen.add(lab);
+    // ---- 6) (Optional) no-time-limit fill by device recency if still short (rare) ----
+    if (fresh.length < MAX_SENSORS){
+      const byRecency = results
+        .slice().sort((a,b) => (b.ts||0) - (a.ts||0))
+        .map(r => r.label);
+
+      for (const lab of byRecency){
+        const key = String(lab).toLowerCase();
+        if (!availableSet.has(key)) continue;
+        if (restrictToAdmin && adminHexSet && !adminHexSet.has(key)) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
         fresh.push(lab);
-        if (fresh.length >= maxSensors) break;
+        if (fresh.length >= MAX_SENSORS) break;
       }
     }
 
-    return fresh;
+    return fresh;   // EXACTLY the admin-defined count for that device (if mapped), else up to 5 from actual device variables
   }catch(e){
-    console.error("fetchDallasAddresses (clean)", e);
+    console.error("fetchDallasAddresses (admin-capped)", e);
     return [];
   }
 }
