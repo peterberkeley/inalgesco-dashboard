@@ -415,16 +415,6 @@ async function fetchDeviceLastValuesV2(deviceID){
   }
 }
 
-/* =================== Dallas addresses (v1.6) =================== */
-/**
- * Select DS18B20 probe addresses for THIS device.
- * Priority:
- *   1) Admin-mapped addresses for this truck (order preserved), but only those that actually exist on this device.
- *   2) If no admin map, use on-device probes that have posted within the last 48h
- *      (per-device only, ordered by recency).
- *
- * Result: the number of charts = number of probes for THAT truck.
- */
 async function fetchDallasAddresses(deviceID){
   try{
     // ---- A) List all variables for this device (v1.6) ----
@@ -436,10 +426,8 @@ async function fetchDallasAddresses(deviceID){
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
       .map(v => ({ id: v.id, label: v.label }));
-
     if (!hexVars.length) return [];
 
-    // Lowercase helpers
     const lowerToOriginal = new Map(hexVars.map(v => [v.label.toLowerCase(), v.label]));
     const onDeviceSet     = new Set(hexVars.map(v => v.label.toLowerCase()));
 
@@ -449,13 +437,11 @@ async function fetchDallasAddresses(deviceID){
       const entry = Object.entries(window.__deviceMap || {})
         .find(([,info]) => info && info.id === deviceID);
       const deviceLabel = entry ? entry[0] : null;
-
       if (deviceLabel && sensorMapConfig){
         const wantCI = deviceLabel.toLowerCase();
         const keyCI  = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === wantCI);
         if (keyCI){
           const devMap = sensorMapConfig[keyCI] || {};
-          // Preserve admin declaration order and keep only hex keys
           adminOrderLower = Object.keys(devMap)
             .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
             .map(k => k.toLowerCase());
@@ -463,48 +449,41 @@ async function fetchDallasAddresses(deviceID){
       }
     }catch{ /* best effort */ }
 
-       // ---- C) Intersect admin map for this truck …
-    c    // ---- C) If an admin map exists for this truck, use it as the source of truth.
-    // Do NOT intersect with on-device variables — we want a stable panel count per truck.
+    // ---- C) If an admin map exists for this truck, use it as the source of truth. ----
+    // Do NOT intersect with on-device variables (stable panel count per truck).
     if (adminOrderLower.length) {
       return adminOrderLower.map(k => lowerToOriginal.get(k) || k);
     }
 
-
     // ---- D) Fallback: use on-device probes that have posted recently (48h) ----
-    // Build recency per address for THIS device only
     const lastTsByLower = new Map();
     await Promise.all(hexVars.map(async hv => {
       try{
         const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
         if (!r.ok) { lastTsByLower.set(hv.label.toLowerCase(), 0); return; }
         const j = await r.json();
-        const ts = j?.results?.[0]?.timestamp || 0; // ms
+        const ts = j?.results?.[0]?.timestamp || 0;
         lastTsByLower.set(hv.label.toLowerCase(), ts);
       }catch{
         lastTsByLower.set(hv.label.toLowerCase(), 0);
       }
     }));
 
-    const now   = Date.now();
-    const LIVE  = 48 * 60 * 60 * 1000; // 48h
+    const now = Date.now();
+    const LIVE_MS = 48 * 60 * 60 * 1000;
 
     const recentLower = Array.from(onDeviceSet)
-      .filter(k => (now - (lastTsByLower.get(k) || 0)) <= LIVE)
+      .filter(k => (now - (lastTsByLower.get(k) || 0)) <= LIVE_MS)
       .sort((a,b) => (lastTsByLower.get(b)||0) - (lastTsByLower.get(a)||0));
 
-    // If nothing is recent, return an empty list (offline truck → charts will be blank in "now" mode; "Last" still works)
-    if (!recentLower.length) return [];
-
-    return recentLower
-      .map(k => lowerToOriginal.get(k))
-      .filter(Boolean);
+    return recentLower.map(k => lowerToOriginal.get(k)).filter(Boolean);
   }catch(e){
     console.error("fetchDallasAddresses (admin-first)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
@@ -660,6 +639,7 @@ function initCharts(SENSORS){
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
+// Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
 function ensureCharts(SENSORS, deviceID){
   const chartsEl = document.getElementById('charts');
 
@@ -670,29 +650,29 @@ function ensureCharts(SENSORS, deviceID){
     .sort()
     .join(',');
   const key = `${String(deviceID)}|${addrsSorted}`;
- }
+
   // Reuse existing canvases only if device+layout is identical
-  if (chartsEl && window.__ch­artsKey === key && chartsEl.children && chartsEl.children.length){
-    const boxes = chartsEl.querySelectorAll('.metachart, .chart-box');
+  if (chartsEl && window.__chartsKey === key && chartsEl.children && chartsEl.children.length){
+    const boxes = chartsEl.querySelectorAll('.chart-box');
     const instByAddr = new Map();
     boxes.forEach(box => {
       const addr   = box.getAttribute('data-addr') || '';
       const canvas = box.querySelector('canvas');
       if (!canvas) return;
       const inst = canvas.__chart || (typeof Chart !== 'undefined' ? Chart.getChart?.(canvas) : null);
-      if (inst) instByAddr.put ? instByAddr.set(addr, inst) : instByAddr.set(addr, inst);
+      if (inst) instByAddr.set(addr, inst);
     });
     SENSORS.forEach(s => {
       const addr = s.address || s.id || '';
       s.chart = instByAddr.get(addr) || null;
     });
-    console.log('[charts] reuse existing canvas (rebound)', { key, count: boxes.length });
+    console.log('[charts] reuse existing canvas (rebound)', { key, count: chartsEl.children.length });
     return;
   }
 
   // Full rebuild
-  if (window.__currentCharts?.length) {
-    for (const c of window.__currentCharts) { try { c.destroy(); } catch {} }
+  if (Array.isArray(window.__currentCharts)) {
+    window.__currentCharts.forEach(c => { try { c.destroy(); } catch(_){} });
   }
   window.__currentCharts = [];
 
@@ -701,12 +681,13 @@ function ensureCharts(SENSORS, deviceID){
 
   const canvases = chartsEl ? chartsEl.getElementsByTagName('canvas') : [];
   for (const cv of canvases) {
-    if (cv && cv.__proto__ && cv.__chart) window.__currentCharts.push(cv.__chart);
+    if (cv && cv.__chart) window.__currentCharts.push(cv.__chart);
   }
 
-  window.__ch­artsKey = key;
+  window.__chartsKey = key;
   console.log('[charts] rebuild canvas (new device/layout)', { key, count: canvases.length });
 }
+
 
 async function updateCharts(deviceID, SENSORS){
   if (__chartsInFlight) { __chartsQueued = true; return; }
@@ -760,21 +741,20 @@ async function updateCharts(deviceID, SENSORS){
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
     } else {
       // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
-      let tLast = -Infinity;
-      // One quick pass to find newest ts across sensors
-                // One quick pass to find newest timestamp across this truck’s selected addresses
+            let tLast = -Infinity;
+
+      // One quick pass to find newest timestamp across this truck’s selected addresses
       await ensureVarCache(deviceID);
       for (const addr of addrs) {
         const id = getVarIdCI(deviceID, addr);
         if (!id) continue;
-        const r  = await e? // ← delete this token if present
         const r  = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
         if (!r.ok) continue;
-        const j  = await r.read? // ← delete if present
         const j  = await r.json();
         const ts = j?.results?.[0]?.timestamp;
         if (Number.isFinite(ts) && ts > tLast) tLast = ts;
       }
+
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         // No data at all → clear and exit
         SENSORS.forEach(s => {
@@ -2125,15 +2105,15 @@ console.log('[lastSeen]', {
     }
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
-  // 6) Render everything for the selected device
-if (FORCE_VARCACHE_REFRESH) delete (variableCache[deviceID]); // optional
+ // 6) Render everything for the selected device
+if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
-  // 6.1 Get per-device addresses (discovered)
+  // Discovered addresses for this device
   const discovered = await fetchDallasAddresses(deviceID);
 
-  // 6.2 Prefer admin-declared addresses (stable chart count per truck)
-  const adminAddrs = getAdminAddresses(deviceLabel); // uses sensorMapConfig
+  // Prefer admin-declared addresses (stable chart count per truck)
+  const adminAddrs = getAdminAddresses(deviceLabel);
   const liveDallas = (Array.isArray(adminAddrs) && adminAddrs.length > 0)
     ? adminAddrs
     : (Array.isArray(discovered) ? discovered : []);
@@ -2145,11 +2125,8 @@ if (deviceID) {
     liveDallas
   });
 
-  // 6.3 Build chart slots and render
-  SENSORS = build immersion ??? // ← IGNORE THIS LINE
-  SENSORS = buildSensorSlots(deviceLabel, live ∎?? // ← IGNORE
+  // Build chart slots and render
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
-
   ensureCharts(SENSORS, deviceID);   // key on unique deviceID
   initMap();                         // idempotent
   await poll(deviceID, SENSORS);     // KPI / quick last values
