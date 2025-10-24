@@ -781,27 +781,26 @@ async function updateCharts(deviceID, SENSORS){
       wndStart = tLast - (60 * 60 * 1000); // fixed 60 min for 'last'
     }
 
-    // --- 2) Time-window fetch per variable (not by point count) ---
-    // Helper: fetch all values within [start,end], paginating up to a cap.
     async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap=5000){
-      await ensureVarCache(deviceID);
-      const id = variableCache[deviceID]?.[varLabel];
-      if (!id) return [];
-      let url = `${UBIDOTS_V1}/variables/${id}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
-      const out = [];
-      // Ubidots v1.6 uses standard pagination via 'next' in the payload
-      while (url) {
-        const r = await fetch(url);
-        if (!r.ok) break;
-        const j = await r.json();
-        const rows = j?.results || [];
-        out.push(...rows);
-        if (out.length >= hardCap) break;
-        // Find "next" link if present (j.next) else stop
-        url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${UBIDOTS_ACCOUNT_TOKEN}` : null;
-      }
-      return out;
-    }
+  await ensureVarCache(deviceID);
+  const id = variableCache[deviceID]?.[varLabel];
+  // Strict: if this device has no variable id for this address, do NOT try to fetch anything.
+  if (!id || typeof id !== 'string') return [];
+
+  let url = `${UBIDOTS_V1}/variables/${id}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+  const out = [];
+  while (url) {
+    const r = await fetch(url);
+    if (!r.ok) break;
+    const j = await r.json();
+    const rows = j?.results || [];
+    out.push(...rows);
+    if (out.length >= hardCap) break;
+    url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${UBIDOTS_ACCOUNT_TOKEN}` : null;
+  }
+  return out;
+}
+
 
     // Fetch time-windowed series for each sensor in parallel
     const seriesByAddr = new Map();
@@ -2111,23 +2110,11 @@ if (deviceID){
   // LIVE-ONLY clamp (device-anchored to __lastSeenMs, window = selectedRangeMinutes)
 let addrs = await fetchDallasAddresses(deviceID);
 
+// Do NOT re-clamp: fetchDallasAddresses() already selected per-device live/valid addresses.
 try {
-  const rangeMin = (typeof selectedRangeMinutes === 'number' && isFinite(selectedRangeMinutes)) ? selectedRangeMinutes : 60;
-  const base     = (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : Date.now();
-  const rangeMs  = Math.max(15*60*1000, rangeMin*60*1000);
-  const FRESH_MS = Math.min(rangeMs, 2*60*60*1000); // cap “live” band at 2h
+  // leave addrs as-is to preserve per-device identity
+} catch(_) { /* no-op */ }
 
-  // verify recency per address (small N → cheap)
-  const keep = [];
-  for (const lab of (addrs || [])) {
-    try {
-      const rows = await fetchUbidotsVar(deviceID, lab, 1);
-      const ts   = rows?.[0]?.timestamp || 0;
-      if (ts && (base - ts) <= FRESH_MS) keep.push(lab);
-    } catch(_) {}
-  }
-  addrs = keep;
-} catch(_) { /* if anything fails, fall back to raw addrs */ }
 
 // use clamped addresses
 const liveDallas = addrs;
