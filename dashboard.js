@@ -746,12 +746,7 @@ await Promise.all(SENSORS.map(async s=>{
       wndEnd = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
     } else {
-      console.log('[charts window]', {
-  mode: window.selectedRangeMode,
-  minutes: window.selectedRangeMinutes,
-  start: new Date(wndStart).toISOString(),
-  end:   new Date(wndEnd).toISOString()
-});
+    
 
       // 'last' mode — anchor to the most recent timestamp we actually have
       let tLast = -Infinity;
@@ -811,6 +806,14 @@ await Promise.all(SENSORS.map(async s=>{
         delete s.chart.options.scales.y.min;
         delete s.chart.options.scales.y.max;
       }
+      // DEBUG: show the computed window once per updateCharts() pass
+console.log('[charts window]', {
+  mode: selectedRangeMode,
+  minutes: selectedRangeMinutes,
+  start: new Date(wndStart).toISOString(),
+  end:   new Date(wndEnd).toISOString()
+});
+
 
       s.chart.update('none');
     });
