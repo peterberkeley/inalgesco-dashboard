@@ -391,14 +391,17 @@ async function fetchDeviceLastValuesV2(deviceID){
 
 /* =================== Dallas addresses (v1.6) =================== */
 /**
- * Return only active DS18B20 addresses for this device:
- *   - Must have reported within the last 14 days.
- *   - Admin-mapped addresses are kept even if stale (to preserve alias layout).
- *   - Ordered: admin-mapped first, then others by recency.
+ * Select DS18B20 probe addresses for THIS device.
+ * Priority:
+ *   1) Admin-mapped addresses for this truck (order preserved), but only those that actually exist on this device.
+ *   2) If no admin map, use on-device probes that have posted within the last 48h
+ *      (per-device only, ordered by recency).
+ *
+ * Result: the number of charts = number of probes for THAT truck.
  */
 async function fetchDallasAddresses(deviceID){
   try{
-    // ---- 1) List all DS18B20 variables for this device ----
+    // ---- A) List all variables for this device (v1.6) ----
     const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
@@ -407,74 +410,77 @@ async function fetchDallasAddresses(deviceID){
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
       .map(v => ({ id: v.id, label: v.label }));
+
     if (!hexVars.length) return [];
 
-    // Lowercase map for quick lookup
+    // Lowercase helpers
     const lowerToOriginal = new Map(hexVars.map(v => [v.label.toLowerCase(), v.label]));
-    const onDeviceSet = new Set(hexVars.map(v => v.label.toLowerCase()));
+    const onDeviceSet     = new Set(hexVars.map(v => v.label.toLowerCase()));
 
-    // ---- 2) Get last timestamp per address ----
-    const lastTsByLower = new Map();
-    await Promise.all(hexVars.map(async hv => {
-      try {
-        const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-        if (!r.ok) { lastTsByLower.set(hv.label.toLowerCase(), 0); return; }
-        const j = await r.json();
-        const ts = j?.results?.[0]?.timestamp || 0;
-        lastTsByLower.set(hv.label.toLowerCase(), ts);
-      } catch { lastTsByLower.set(hv.label.toLowerCase(), 0); }
-    }));
-
-    const now = Date.now();
-    const ACTIVE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
-
-    // ---- 3) Admin map for this device ----
-    let adminOrder = [];
+    // ---- B) Resolve admin map for THIS device label, case-insensitive ----
+    let adminOrderLower = [];
     try{
-      const entries = Object.entries(window.__deviceMap || {});
-      const match   = entries.find(([,info]) => info && info.id === deviceID);
-      const deviceLabel = match ? match[0] : null;
+      const entry = Object.entries(window.__deviceMap || {})
+        .find(([,info]) => info && info.id === deviceID);
+      const deviceLabel = entry ? entry[0] : null;
 
       if (deviceLabel && sensorMapConfig){
         const wantCI = deviceLabel.toLowerCase();
-        const key = Object.keys(sensorMapConfig)
-          .find(k => k.toLowerCase() === wantCI);
-        if (key){
-          const devMap = sensorMapConfig[key] || {};
-          adminOrder = Object.keys(devMap)
+        const keyCI  = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === wantCI);
+        if (keyCI){
+          const devMap = sensorMapConfig[keyCI] || {};
+          // Preserve admin declaration order and keep only hex keys
+          adminOrderLower = Object.keys(devMap)
             .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
             .map(k => k.toLowerCase());
         }
       }
-    }catch{ /* ignore */ }
+    }catch{ /* best effort */ }
 
-    const adminExisting = adminOrder.filter(k => onDeviceSet.has(k));
-    const used = new Set(adminExisting);
+    // ---- C) Intersect admin map with variables that actually exist on THIS device ----
+    const adminExistingLower = adminOrderLower.filter(k => onDeviceSet.has(k));
 
-    // ---- 4) Active (non-admin) probes within window ----
-    const activeExtras = Array.from(onDeviceSet)
-      .filter(k => !used.has(k))
-      .filter(k => {
-        const ts = lastTsByLower.get(k) || 0;
-        return (now - ts) <= ACTIVE_MS;
-      })
+    // If admin map yields any probes -> RETURN them (preserve order)
+    if (adminExistingLower.length){
+      return adminExistingLower
+        .map(k => lowerToOriginal.get(k))
+        .filter(Boolean);
+    }
+
+    // ---- D) Fallback: use on-device probes that have posted recently (48h) ----
+    // Build recency per address for THIS device only
+    const lastTsByLower = new Map();
+    await Promise.all(hexVars.map(async hv => {
+      try{
+        const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+        if (!r.ok) { lastTsByLower.set(hv.label.toLowerCase(), 0); return; }
+        const j = await r.json();
+        const ts = j?.results?.[0]?.timestamp || 0; // ms
+        lastTsByLower.set(hv.label.toLowerCase(), ts);
+      }catch{
+        lastTsByLower.set(hv.label.toLowerCase(), 0);
+      }
+    }));
+
+    const now   = Date.now();
+    const LIVE  = 48 * 60 * 60 * 1000; // 48h
+
+    const recentLower = Array.from(onDeviceSet)
+      .filter(k => (now - (lastTsByLower.get(k) || 0)) <= LIVE)
       .sort((a,b) => (lastTsByLower.get(b)||0) - (lastTsByLower.get(a)||0));
 
-    // ---- 5) Build final ordered list ----
-    const orderedLower = adminExisting.concat(activeExtras);
-    const ordered = orderedLower
+    // If nothing is recent, return an empty list (offline truck → charts will be blank in "now" mode; "Last" still works)
+    if (!recentLower.length) return [];
+
+    return recentLower
       .map(k => lowerToOriginal.get(k))
       .filter(Boolean);
-
-    return ordered;
   }catch(e){
-    console.error("fetchDallasAddresses (active only)", e);
+    console.error("fetchDallasAddresses (admin-first)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
-
-
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
