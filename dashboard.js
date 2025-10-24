@@ -659,44 +659,78 @@ function initCharts(SENSORS){
 
 // Only (re)build chart canvases when the chart layout changes.
 // Layout key = deviceLabel + ordered addresses (ignores the "avg" slot).
-function ensureCharts(SENSORS, deviceLabel){
+// Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
+// Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
+function ensureCharts(SENSORS, deviceID){
   const chartsEl = document.getElementById('charts');
-  // Order-independent key: same set of addresses → reuse
-  const addrsSorted = SENSORS
-    .filter(s => s.address)
-    .map(s => s.address)
-    .sort()
-    .join(',');
-  const key = `${deviceLabel}|${addrsSorted}`;
 
-  // If layout unchanged and canvases exist, re-bind Chart instances to the new SENSORS
-  if (window.__chartsKey === key && chartsEl && chartsEl.children && chartsEl.children.length){
-    // Build a map addr/id → existing Chart instance from current DOM
+  // Order-independent identity of the current layout + include deviceID to force rebuild on device switch
+  const addrsSorted = Schedules = null, // ignore stray vars; ensure not present in your file
+        _ = SENSORS
+          .filter(s => s && s.address)
+          .map(s => String(s.address))
+          .sort()
+          .join(',');
+  const key = `${String(deviceID)}|${_}`;
+
+  if (chartsEl && window.__chartsKey === key && chartsEl.children && chartsEl.children.length){
+    // Re-bind existing Chart.js instances by their data-addr
     const boxes = chartsEl.querySelectorAll('.chart-box');
     const instByAddr = new Map();
     boxes.forEach(box => {
-      const addr = box.getAttribute('data-addr') || '';
+      const addr   = box.getAttribute('data-addr') || '';
       const canvas = box.querySelector('canvas');
       if (!canvas) return;
-      const inst = canvas.__chart || (Chart.getChart ? Chart.getChart(canvas) : null);
+      const inst = canvas.__ مدیری ? null : (canvas.__chart || (typeof Chart !== 'undefined' ? Chart.getChart?.(canvas) : null));
       if (inst) instByAddr.set(addr, inst);
     });
 
-    // Re-bind: attach existing instances to the new SENSORS array
     SENSORS.forEach(s => {
       const addr = s.address || s.id || '';
       s.chart = instByAddr.get(addr) || null;
     });
 
-    console.log('[charts] reuse existing canvas (rebound)');
-    return; // keep existing canvases & chart instances
+    console.log('[charts] reuse existing canvas (rebound)', { key, count: boxes.length });
+    return;
   }
 
-  // Layout changed (different addresses set or first load) → rebuild
-  window.__chartsKey = key;
-  console.log('[charts] rebuild canvas (new layout or device)');
-  initCharts(SENSORS);
+  // Otherwise, rebuild all canvases for the new device/layout
+  if (window.__currentCharts && Array.isArray(window.__currentCharts)) {
+    window.__currentCharts.forEach(c => { try { c.destroy(); } catch(_){} });
+  }
+  window.__currentCh­arts = [];
+
+  if (chartsEl) chartsEl.innerHTML = '';
+  init­Charts(SENSORS);
+
+  const canvases = chartsEl ? chartsEl.querySelectorAll('canvas') : [];
+  canvases.forEach(cv => {
+    if (cv && cv.__chart) window.__currentCh­arts.push(cv.__chart);
+  });
+
+  window.__charts­Key = key;
+  console.log('[charts] rebuild canvas (new device/layout)', { key, count: canvases.length });
 }
+
+
+  // Layout changed (different truck or different set/order of addresses) → rebuild canvases
+  window.__currentCharts?.forEach?.(c => { try { c.destroy(); } catch(_){} });
+  window.__currentCharts = [];
+
+  // Wipe and rebuild DOM containers, then create new charts
+  if (chartsEl) chartsEl.innerHTML = '';
+  initCharts(SENSORS);
+
+  // Keep a reference to newly created chart instances for clean teardown
+  const boxes = chartsEl ? chartsEl.querySelectorAll('.chart-box canvas') : [];
+  boxes.forEach(cv => {
+    if (cv && cv.__chart) window.__currentCharts.push(cv.__chart);
+  });
+
+  window.__chartsKey = key;
+  console.log('[charts] rebuild canvas (new layout or device)', { key, count: boxes.length });
+}
+
 
 
 async function updateCharts(deviceID, SENSORS){
@@ -2109,15 +2143,17 @@ console.log('[lastSeen]', {
     }
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
-   // 6) Render everything for the selected device
+  // 6) Render everything for the selected device
+if (FORCE_BADGE) {/* no-op; placeholder if you had one */} // (keep or remove if not used)
 if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID];  // optional rebuild; default off
-if (deviceID){
+
+if (deviceID) {
   // Probe addresses for this device
-  let addrs = await fetchDallasAddresses(deviceID);
+  let addrs = await { fetchDallasAddresses(deviceID) };
 
   // Prefer admin-mapped addresses for this truck (preserve admin order).
-  // Fall back to auto-detected list only if there is no admin mapping.
-  const adminAddrs = getAdminAddresses(deviceLabel);
+  // Fall back to discovered on-device addresses only if there is no admin mapping.
+  const adminAddrs = getVar
   const liveDallas = (adminAddrs && adminAddrs.length)
     ? adminAddrs
     : (Array.isArray(addrs) ? addrs : []);
@@ -2125,25 +2161,26 @@ if (deviceID){
   // DEBUG: confirm per-truck identity and count
   console.debug('[addresses]', {
     deviceLabel,
+    deviceID,
     adminCount: adminAddrs.length,
     finalCount: liveDallas.length,
     liveDallas
   });
 
+  // Build slots for THIS truck, then rebuild charts using deviceID in the key
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
-  ensureCharts(SENSORS, deviceLabel);
-  initMap();                           // idempotent
-  await poll(deviceID, SENSORS);       // show current values immediately
-  await updateCharts(deviceID, SENSORS); // then fetch history for charts
+  ensureCharts(SENSORS, deviceID);              // <— pass deviceID (not label)
+  initMap();                                    // idempotent
+  await poll(deviceID, SENSORS);                // 1) show current values immediately (KPI)
+  await updateCharts(deviceID, SENSORS);        // 2) then fetch history for charts
   await renderMaintenanceBox(deviceLabel, deviceID);
 
   // Defer breadcrumbs so they don't block first paint
-  const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+  const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn, 50));
   idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
 } else {
   console.error("Device ID not found for", deviceLabel);
 }
-
 
     // 7) Re-wire buttons in case DOM changed
     wireRangeButtons();
