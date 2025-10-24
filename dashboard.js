@@ -1882,16 +1882,19 @@ function wireRangeButtons(){
     this.style.backgroundColor = '#10b981';
     this.style.color = '#ffffff';
 
-    // Selection model:
-    // - data-range is HOURS (1,3,12,24,1 for "Last")
-    // - data-mode is "now" for 1/3/12/24 and "last" for Last
-    const modeAttr = (this.getAttribute('data-mode') || 'now').toLowerCase();
-    const hoursVal = Number(this.getAttribute('data-range'));
-    const hours    = (Number.isFinite(hoursVal) && hoursVal > 0) ? hoursVal : 1;
+        // Selection model (HTML uses minutes for range buttons)
+    const modeAttr = (this.getAttribute('data-mode') || 'range').toLowerCase();
+    const newMode  = (modeAttr === 'last') ? 'last' : 'now';
 
-    // Persist as minutes for backward compatibility elsewhere
-    const newMinutes = hours * 60;
-    const newMode    = (modeAttr === 'last') ? 'last' : 'now';
+    let newMinutes;
+    if (newMode === 'now') {
+      // Buttons 1/3/12/24 provide minutes: 60, 180, 720, 1440
+      const m = Number(this.getAttribute('data-range'));
+      newMinutes = (Number.isFinite(m) && m > 0) ? m : 60;
+    } else {
+      // "Last" is always a 60-minute window anchored at last timestamp
+      newMinutes = 60;
+    }
 
     // No-op if unchanged
     if (selectedRangeMode === newMode && selectedRangeMinutes === newMinutes) {
