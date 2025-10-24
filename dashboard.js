@@ -285,13 +285,27 @@ async function ensureVarCache(deviceID){
   }
 }
 
+// Case-insensitive per-device variable ID resolver for hex labels
+function getVarIdCI(deviceID, label){
+  const map = variableCache[deviceID] || {};
+  if (map[label]) return map[label]; // exact hit
 
-
+  const want = String(label).toLowerCase();
+  for (const [k,v] of Object.entries(map)){
+    if (String(k).toLowerCase() === want){
+      // Cache under the requested label spelling for faster future hits
+      variableCache[deviceID][label] = v;
+      return v;
+    }
+  }
+  return null;
+}
 async function fetchUbidotsVar(deviceID, varLabel, limit=1){
   try{
-    // Fast path: use current mapping
     await ensureVarCache(deviceID);
-    let varId = variableCache[deviceID][varLabel];
+
+    // 1) Try case-insensitive mapping first
+    let varId = getVarIdCI(deviceID, varLabel);
     if (varId) {
       const fast = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
       if (fast.ok) {
@@ -300,6 +314,37 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
         if (rows.length) return rows;
       }
     }
+
+    // 2) Fallback: scan THIS device’s variables for label match (case-insensitive)
+    const list = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+    if (!list.ok) return [];
+    const jl = await list.json();
+    const want = String(varLabel).toLowerCase();
+
+    const ids = (jl.results || [])
+      .filter(v => String(v.label || '').toLowerCase() === want)
+      .map(v => v.id);
+
+    for (const id of ids) {
+      if (id === varId) continue; // already tried
+      const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const rows = j.results || [];
+      if (rows.length) {
+        // Update mapping for future calls under the requested label spelling
+        variableCache[deviceID][varLabel] = id;
+        return rows;
+      }
+    }
+
+    return [];
+  }catch(e){
+    console.error("fetchUbidotsVar", e);
+    return [];
+  }
+}
+
 
     // Lazy duplicate resolution: scan ids for this label only if needed
     const list = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
@@ -764,10 +809,13 @@ async function updateCharts(deviceID, SENSORS){
       wndStart = tLast - (60 * 60 * 1000); // fixed 60 min for 'last'
     }
 
-    async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap=5000){
+    // --- 2) Time-window fetch per variable (not by point count) ---
+// STRICT per-device lookup with case-insensitive label resolution
+async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000){
   await ensureVarCache(deviceID);
-  const id = variableCache[deviceID]?.[varLabel];
-  // Strict: if this device has no variable id for this address, do NOT try to fetch anything.
+
+  // Case-insensitive map hit for THIS device
+  const id = getVarIdCI(deviceID, varLabel);
   if (!id || typeof id !== 'string') return [];
 
   let url = `${UBIDOTS_V1}/variables/${id}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
@@ -783,6 +831,7 @@ async function updateCharts(deviceID, SENSORS){
   }
   return out;
 }
+
 
 
     // Fetch time-windowed series for each sensor in parallel
