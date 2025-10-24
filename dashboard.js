@@ -28,7 +28,7 @@ const SEGMENT_COLORS = [
 
 // Selected time window in minutes for breadcrumbs and chart history.
 let selectedRangeMinutes = 60;
-let selectedRangeMode = "range";
+let selectedRangeMode = "now";
 
 // Arrays for Leaflet polylines and markers
 let segmentPolylines = [];
@@ -1920,11 +1920,12 @@ function wireRangeButtons(){
 
     console.log('[range select]', { mode: selectedRangeMode, hours, minutes: selectedRangeMinutes });
 
-    if (deviceID) {
-      await updateCharts(deviceID, SENSORS); // will be range-aware after step 2
-      const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
-      idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
-    }
+   if (deviceID) {
+  await poll(deviceID, SENSORS);        // refresh KPI box immediately (window-aware)
+  await updateCharts(deviceID, SENSORS); // refresh charts (already window-aware)
+  const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+  idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
+}
   };
 });
 
