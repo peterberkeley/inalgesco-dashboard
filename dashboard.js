@@ -640,54 +640,53 @@ function initCharts(SENSORS){
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
-function ensureCharts(SENSORS, deviceID){
-  const chartsEl = document.getElementById('charts');
+if (chartsEl && window.__chartsKey === key && chartsEl.children && chartsEl.children.length){
+  // Reuse existing canvases, but REFRESH labels/colors and DOM order to match SENSORS NOW
+  const boxes = Array.from(chartsEl.querySelectorAll('.chart-box'));
+  const boxByAddr  = new Map();
+  const instByAddr = new Map();
 
-  // Unique key per device + set of addresses (ignores the avg slot)
-  const addrsSorted = SENSORS
-    .filter(s => s && s.address)
-    .map(s => String(s.address))
-    .sort()
-    .join(',');
-  const key = `${String(deviceID)}|${addrsSorted}`;
+  boxes.forEach(box => {
+    const addr   = box.getAttribute('data-addr') || '';
+    const canvas = box.querySelector('canvas');
+    const inst   = canvas && (canvas.__chart || (typeof Chart !== 'undefined' ? Chart.getChart?.(canvas) : null));
+    boxByAddr.set(addr, box);
+    if (inst) instByAddr.set(addr, inst);
+  });
 
-  // Reuse existing canvases only if device+layout is identical
-  if (chartsEl && window.__chartsKey === key && chartsEl.children && chartsEl.children.length){
-    const boxes = chartsEl.querySelectorAll('.chart-box');
-    const instByAddr = new Map();
-    boxes.forEach(box => {
-      const addr   = box.getAttribute('data-addr') || '';
-      const canvas = box.querySelector('canvas');
-      if (!canvas) return;
-      const inst = canvas.__chart || (typeof Chart !== 'undefined' ? Chart.getChart?.(canvas) : null);
-      if (inst) instByAddr.set(addr, inst);
-    });
-    SENSORS.forEach(s => {
-      const addr = s.address || s.id || '';
-      s.chart = instByAddr.get(addr) || null;
-    });
-    console.log('[charts] reuse existing canvas (rebound)', { key, count: chartsEl.children.length });
-    return;
-  }
+  // Rebind chart handles AND refresh visible titles and colors
+  SENSORS.forEach(s => {
+    const addr = s.address || s.id || '';
+    const box  = boxByAddr.get(addr);
+    const inst = instByAddr.get(addr) || null;
 
-  // Full rebuild
-  if (Array.isArray(window.__currentCharts)) {
-    window.__currentCharts.forEach(c => { try { c.destroy(); } catch(_){} });
-  }
-  window.__currentCharts = [];
+    s.chart = inst;
 
-  if (chartsEl) chartsEl.innerHTML = '';
-  initCharts(SENSORS);
+    if (box) {
+      const h3 = box.querySelector('h3');
+      if (h3 && h3.textContent !== (s.label || '')) h3.textContent = s.label || ''; // ← alias over hex
+      box.setAttribute('data-addr', addr);
+    }
 
-  const canvases = chartsEl ? chartsEl.getElementsByTagName('canvas') : [];
-  for (const cv of canvases) {
-    if (cv && cv.__chart) window.__currentCharts.push(cv.__chart);
-  }
+    if (inst && inst.data && inst.data.datasets && inst.data.datasets[0]) {
+      const ds = inst.data.datasets[0];
+      if (ds.borderColor !== s.col) ds.borderColor = s.col; // keep color in sync with slot
+      inst.update('none');
+    }
+  });
 
-  window.__chartsKey = key;
-  console.log('[charts] rebuild canvas (new device/layout)', { key, count: canvases.length });
+  // Reorder boxes to EXACTLY match SENSORS order (admin order; avg first)
+  const frag = document.createDocumentFragment();
+  SENSORS.forEach(s => {
+    const addr = s.address || s.id || '';
+    const box  = boxByAddr.get(addr);
+    if (box) frag.appendChild(box);
+  });
+  chartsEl.appendChild(frag);
+
+  console.log('[charts] reuse canvas + refreshed labels/order', { key, count: chartsEl.children.length });
+  return;
 }
-
 
 async function updateCharts(deviceID, SENSORS){
   if (__chartsInFlight) { __chartsQueued = true; return; }
