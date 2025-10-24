@@ -425,14 +425,12 @@ async function fetchDallasAddresses(deviceID){
 
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
-      .map(v => ({ id: v.id, label: v.label }));
+      .map(v => String(v.label));
+
     if (!hexVars.length) return [];
 
-    const lowerToOriginal = new Map(hexVars.map(v => [v.label.toLowerCase(), v.label]));
-    const onDeviceSet     = new Set(hexVars.map(v => v.label.toLowerCase()));
-
-    // ---- B) Resolve admin map for THIS device label, case-insensitive ----
-    let adminOrderLower = [];
+    // ---- B) If an admin map exists for THIS device label, use that order exactly ----
+    let adminOrder = [];
     try{
       const entry = Object.entries(window.__deviceMap || {})
         .find(([,info]) => info && info.id === deviceID);
@@ -442,47 +440,36 @@ async function fetchDallasAddresses(deviceID){
         const keyCI  = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === wantCI);
         if (keyCI){
           const devMap = sensorMapConfig[keyCI] || {};
-          adminOrderLower = Object.keys(devMap)
-            .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
-            .map(k => k.toLowerCase());
+          adminOrder = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
         }
       }
-    }catch{ /* best effort */ }
+    }catch{ /* ignore */ }
 
-    // ---- C) If an admin map exists for this truck, use it as the source of truth. ----
-    // Do NOT intersect with on-device variables (stable panel count per truck).
-    if (adminOrderLower.length) {
-      return adminOrderLower.map(k => lowerToOriginal.get(k) || k);
+    if (adminOrder.length) {
+      // Return admin order but only for addresses that actually exist as variables
+      const have = new Set(hexVars.map(s => s.toLowerCase()));
+      return adminOrder.filter(a => have.has(String(a).toLowerCase()));
     }
 
-    // ---- D) Fallback: use on-device probes that have posted recently (48h) ----
-    const lastTsByLower = new Map();
-    await Promise.all(hexVars.map(async hv => {
-      try{
-        const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-        if (!r.ok) { lastTsByLower.set(hv.label.toLowerCase(), 0); return; }
-        const j = await r.json();
-        const ts = j?.results?.[0]?.timestamp || 0;
-        lastTsByLower.set(hv.label.toLowerCase(), ts);
-      }catch{
-        lastTsByLower.set(hv.label.toLowerCase(), 0);
-      }
-    }));
-
-    const now = Date.now();
-    const LIVE_MS = 48 * 60 * 60 * 1000;
-
-    const recentLower = Array.from(onDeviceSet)
-      .filter(k => (now - (lastTsByLower.get(k) || 0)) <= LIVE_MS)
-      .sort((a,b) => (lastTsByLower.get(b)||0) - (lastTsByLower.get(a)||0));
-
-    return recentLower.map(k => lowerToOriginal.get(k)).filter(Boolean);
+    // ---- C) NO ADMIN MAP → return ALL on-device DS18B20 labels (NO 48h filter) ----
+    // This guarantees a *stable chart count* even if the device is offline.
+    // Keep original discovery order; dedupe case-insensitively.
+    const seen = new Set();
+    const out  = [];
+    for (const lab of hexVars){
+      const key = lab.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(lab);
+    }
+    return out;
   }catch(e){
-    console.error("fetchDallasAddresses (admin-first)", e);
+    console.error("fetchDallasAddresses (admin-first, no-staleness)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 
 /* =================== Heartbeat labels resolver =================== */
