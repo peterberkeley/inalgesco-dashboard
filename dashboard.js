@@ -391,100 +391,89 @@ async function fetchDeviceLastValuesV2(deviceID){
 
 /* =================== Dallas addresses (v1.6) =================== */
 /**
- * Return the FULL set of DS18B20 hex addresses present on this device,
- * ordered as:
- *   1) Admin-mapped addresses (in admin order), limited to IDs that actually exist on this device
- *   2) Any remaining on-device addresses, sorted by last timestamp (newest → oldest)
- *
- * Notes:
- * - No "live" recency clamp here. We want the chart count to reflect the
- *   actual number of probes fitted for this truck (3, 5, ...), regardless
- *   of whether a given probe has reported recently.
- * - Time-window filtering happens later in updateCharts(); the "now" stale
- *   guard will blank series if there’s no data in-window.
+ * Return only active DS18B20 addresses for this device:
+ *   - Must have reported within the last 14 days.
+ *   - Admin-mapped addresses are kept even if stale (to preserve alias layout).
+ *   - Ordered: admin-mapped first, then others by recency.
  */
 async function fetchDallasAddresses(deviceID){
   try{
-    // 1) Enumerate all variables for this device (v1.6)
+    // ---- 1) List all DS18B20 variables for this device ----
     const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
     const listJs  = await listRes.json();
 
-    // Keep every DS18B20-style variable (16-hex label)
     const hexVars = (listJs.results || [])
       .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
       .map(v => ({ id: v.id, label: v.label }));
-
     if (!hexVars.length) return [];
 
-    // Build lower-case lookup for original casing restoration
-    const lowerToOriginal = new Map(hexVars.map(v => [String(v.label).toLowerCase(), v.label]));
+    // Lowercase map for quick lookup
+    const lowerToOriginal = new Map(hexVars.map(v => [v.label.toLowerCase(), v.label]));
+    const onDeviceSet = new Set(hexVars.map(v => v.label.toLowerCase()));
 
-    // 2) Compute last timestamp per DS18B20 (for ordering of non-admin extras)
+    // ---- 2) Get last timestamp per address ----
     const lastTsByLower = new Map();
     await Promise.all(hexVars.map(async hv => {
-      try{
+      try {
         const r = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-        if (!r.ok) { lastTsByLower.set(String(hv.label).toLowerCase(), 0); return; }
+        if (!r.ok) { lastTsByLower.set(hv.label.toLowerCase(), 0); return; }
         const j = await r.json();
-        const ts = j?.results?.[0]?.timestamp || 0; // ms
-        lastTsByLower.set(String(hv.label).toLowerCase(), ts);
-      }catch{
-        lastTsByLower.set(String(hv.label).toLowerCase(), 0);
-      }
+        const ts = j?.results?.[0]?.timestamp || 0;
+        lastTsByLower.set(hv.label.toLowerCase(), ts);
+      } catch { lastTsByLower.set(hv.label.toLowerCase(), 0); }
     }));
 
-    // 3) Resolve admin map for this device label (case-insensitive key match)
+    const now = Date.now();
+    const ACTIVE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
+    // ---- 3) Admin map for this device ----
     let adminOrder = [];
     try{
-      // deviceLabel from window.__deviceMap by matching id
       const entries = Object.entries(window.__deviceMap || {});
       const match   = entries.find(([,info]) => info && info.id === deviceID);
       const deviceLabel = match ? match[0] : null;
 
       if (deviceLabel && sensorMapConfig){
-        const wantCI = String(deviceLabel).toLowerCase();
+        const wantCI = deviceLabel.toLowerCase();
         const key = Object.keys(sensorMapConfig)
-          .find(k => String(k).toLowerCase() === wantCI);
-
+          .find(k => k.toLowerCase() === wantCI);
         if (key){
           const devMap = sensorMapConfig[key] || {};
-          // Preserve admin declaration order for hex keys
           adminOrder = Object.keys(devMap)
             .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
-            .map(k => String(k).toLowerCase());
+            .map(k => k.toLowerCase());
         }
       }
-    }catch(_){ /* best-effort only */ }
+    }catch{ /* ignore */ }
 
-    const onDeviceSet = new Set(hexVars.map(v => String(v.label).toLowerCase()));
-
-    // Keep only admin entries that actually exist on this device
     const adminExisting = adminOrder.filter(k => onDeviceSet.has(k));
-
-    // 4) Build final ordered list:
-    //    a) adminExisting in given order (original casing restored)
-    //    b) all remaining device hexes not in adminExisting, sorted by recency desc
     const used = new Set(adminExisting);
-    const extras = Array.from(onDeviceSet)
+
+    // ---- 4) Active (non-admin) probes within window ----
+    const activeExtras = Array.from(onDeviceSet)
       .filter(k => !used.has(k))
-      .sort((a,b) => (lastTsByLower.get(b) || 0) - (lastTsByLower.get(a) || 0));
+      .filter(k => {
+        const ts = lastTsByLower.get(k) || 0;
+        return (now - ts) <= ACTIVE_MS;
+      })
+      .sort((a,b) => (lastTsByLower.get(b)||0) - (lastTsByLower.get(a)||0));
 
-    const orderedLower = adminExisting.concat(extras);
-
-    // Restore original label case for downstream use
+    // ---- 5) Build final ordered list ----
+    const orderedLower = adminExisting.concat(activeExtras);
     const ordered = orderedLower
       .map(k => lowerToOriginal.get(k))
       .filter(Boolean);
 
     return ordered;
   }catch(e){
-    console.error("fetchDallasAddresses (full-set)", e);
+    console.error("fetchDallasAddresses (active only)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 
 /* =================== Heartbeat labels resolver =================== */
