@@ -417,50 +417,29 @@ async function fetchDeviceLastValuesV2(deviceID){
 
 async function fetchDallasAddresses(deviceID){
   try{
-    // ---- A) ADMIN MAP: authoritative count/order ----
-    let adminOrder = [];
+    // ---- A) ADMIN MAP (authoritative) ----
+    // If an admin map exists for this device label, return it as-is (stable count & aliases).
     try{
       const entry = Object.entries(window.__deviceMap || {}).find(([,info]) => info && info.id === deviceID);
       const deviceLabel = entry ? entry[0] : null;
       if (deviceLabel && sensorMapConfig){
-        const keyCI = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === String(deviceLabel).toLowerCase());
+        const keyCI  = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === String(deviceLabel).toLowerCase());
         if (keyCI){
           const devMap = sensorMapConfig[keyCI] || {};
-          adminOrder = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
+          const adminAddrs = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
+          if (adminAddrs.length) return adminAddrs;   // keep admin order/size exactly
         }
       }
-    }catch{ /* ignore */ }
+    }catch{ /* ignore and fall through */ }
 
-    if (adminOrder.length) {
-      // If admin map exists, prefer it — but optionally drop addresses that never had data
-      // by verifying last value once (cheap) to avoid blank panels for pure ghosts.
-      // Build label->id map once.
-      const vlist = await fetch(`${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
-      const idByLabel = new Map((vlist.results||[])
-        .filter(v => v && typeof v.label === 'string' && v.id)
-        .map(v => [String(v.label), String(v.id)]));
-
-      const out = [];
-      for (const lab of adminOrder){
-        const id = idByLabel.get(lab) || idByLabel.get(lab.toLowerCase()) || null;
-        if (!id) { out.push(lab); continue; } // keep admin slot (may be offline)
-        try{
-          const j = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
-          const row = j && (j.results||[])[0];
-          if (row && Number.isFinite(row.timestamp)) out.push(lab);
-        }catch{ out.push(lab); } // if check fails, keep the slot per admin map
-      }
-      return out;
-    }
-
-    // ---- B) NO ADMIN MAP → return ONLY hex labels that have at least one value ----
-    // 1) List all hex-labeled variables for this device (v1.6)
+    // ---- B) NO ADMIN MAP → keep ONLY this device's hex variables that have ≥1 value ----
+    // 1) List variables for THIS device (v1.6). This guarantees per-device scoping.
     const listUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
     const listJs  = await listRes.json();
 
-    // De-dupe case-insensitively; keep first occurrence for each label
+    // De-dupe labels case-insensitively; keep (label,id) pairs
     const hexVars = [];
     const seen = new Set();
     for (const v of (listJs.results || [])){
@@ -473,39 +452,30 @@ async function fetchDallasAddresses(deviceID){
     }
     if (!hexVars.length) return [];
 
-    // 2) Keep only those with at least one value ever (filters ghost/template variables)
+    // 2) Filter to variables that have at least one value ever for THIS device
     const keep = [];
-    // Modest concurrency to avoid hammering: 6 in flight
-    const CHUNK = 6;
+    const CHUNK = 6; // modest concurrency
     for (let i=0; i<hexVars.length; i+=CHUNK){
       const batch = hexVars.slice(i, i+CHUNK);
       const results = await Promise.all(batch.map(async hv => {
         try{
           const j = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
           const row = j && (j.results||[])[0];
-          // Require a real timestamp and a numeric value (or a finite number after parse)
-          const hasTs = row && Number.isFinite(row.timestamp);
-          const val = row && row.value;
-          const hasVal = (typeof val === 'number' && Number.isFinite(val)) ||
-                         (typeof val === 'string' && Number.isFinite(parseFloat(val)));
-          return (hasTs && hasVal) ? hv.label : null;
+          // accept if a timestamp exists (value can be string/number; we only need “has posted”)
+          return (row && Number.isFinite(row.timestamp)) ? hv.label : null;
         }catch{ return null; }
       }));
       results.forEach(lab => { if (lab) keep.push(lab); });
     }
 
-    // If nothing had data, fall back to showing all hex labels (charts will be blank)
-    return keep.length ? keep : hexVars.map(h => h.label);
+    // IMPORTANT: Do NOT fall back to “all hex labels” — that reintroduces ghost/template probes.
+    return keep; // may be []
   }catch(e){
-    console.error("fetchDallasAddresses (admin-first + has-data filter)", e);
+    console.error("fetchDallasAddresses (device-strict, data-strict)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
-
-
-
-
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
