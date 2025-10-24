@@ -300,20 +300,51 @@ function getVarIdCI(deviceID, label){
   }
   return null;
 }
-async function fetchUbidotsVar(deviceID, varLabel, limit=1){
-  try{
+async function fetchUbidotsVar(deviceID, varLabel, limit = 1) {
+  try {
     await ensureVarCache(deviceID);
 
-    // 1) Try case-insensitive mapping first
+    // 1) Try case-insensitive mapping first (fast path)
     let varId = getVarIdCI(deviceID, varLabel);
     if (varId) {
-      const fast = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+      const fast = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=${limit}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
       if (fast.ok) {
-        const data = await fast.json();
-        const rows = data.results || [];
+        const data = await (await fast).json();
+        const rows = data?.[ 'results' ] || [];
         if (rows.length) return rows;
       }
     }
+
+    // 2) Fallback: scan THIS device’s variables for a case-insensitive label match
+    const list = await fetch(`${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
+    if (!list.ok) return [];
+    const jl   = await list.json();
+    const want = String(varLabel).toLowerCase();
+
+    const ids = (jl.results || [])
+      .filter(v => String(v.label || '').toLowerCase() === want)
+      .map(v => v.id);
+
+    for (const id of ids) {
+      if (id === varId) continue; // already tried
+      const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=${limit}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const rows = j?.[ 'result' in j ? 'result' : 'results' ] || [];
+      if (rows.length) {
+        // Cache the resolved ID under the requested label spelling
+        (variableCache[deviceID] ||= {})[varId ? varLabel : (jl.results.find(x => x.id === id)?.label || varLabel)] = id;
+        return rows;
+      }
+    }
+
+    return [];
+  } catch (e) {
+    console.error('fetchUbidotsVar error:', e);
+    return [];
+  }
+}
+
 
 /* =================== GPS variable auto-detect =================== */
 const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
@@ -432,15 +463,13 @@ async function fetchDallasAddresses(deviceID){
       }
     }catch{ /* best effort */ }
 
-    // ---- C) Intersect admin map with variables that actually exist on THIS device ----
-    const adminExistingLower = adminOrderLower.filter(k => onDeviceSet.has(k));
-
-    // If admin map yields any probes -> RETURN them (preserve order)
-    if (adminExistingLower.length){
-      return adminExistingLower
-        .map(k => lowerToOriginal.get(k))
-        .filter(Boolean);
+       // ---- C) Intersect admin map for this truck …
+    c    // ---- C) If an admin map exists for this truck, use it as the source of truth.
+    // Do NOT intersect with on-device variables — we want a stable panel count per truck.
+    if (adminOrderLower.length) {
+      return adminOrderLower.map(k => lowerToOriginal.get(k) || k);
     }
+
 
     // ---- D) Fallback: use on-device probes that have posted recently (48h) ----
     // Build recency per address for THIS device only
@@ -630,77 +659,54 @@ function initCharts(SENSORS){
 // Layout key = deviceLabel + ordered addresses (ignores the "avg" slot).
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
 // Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
+// Rebuild/reuse chart canvases; key by deviceID to avoid cross-truck reuse
 function ensureCharts(SENSORS, deviceID){
   const chartsEl = document.getElementById('charts');
 
-  // Order-independent identity of the current layout + include deviceID to force rebuild on device switch
-  const addrsSorted = Schedules = null, // ignore stray vars; ensure not present in your file
-        _ = SENSORS
-          .filter(s => s && s.address)
-          .map(s => String(s.address))
-          .sort()
-          .join(',');
-  const key = `${String(deviceID)}|${_}`;
+  // Unique key per device + set of addresses (ignores the avg slot)
+  const addrsSorted = SENSORS
+    .filter(s => s && s.address)
+    .map(s => String(s.address))
+    .sort()
+    .join(',');
+  const key = `${String(deviceID)}|${addrsSorted}`;
 
-  if (chartsEl && window.__chartsKey === key && chartsEl.children && chartsEl.children.length){
-    // Re-bind existing Chart.js instances by their data-addr
-    const boxes = chartsEl.querySelectorAll('.chart-box');
+  // Reuse existing canvases only if device+layout is identical
+  if (chartsEl && window.__ch­artsKey === key && chartsEl.children && chartsEl.children.length){
+    const boxes = chartsEl.querySelectorAll('.metachart, .chart-box');
     const instByAddr = new Map();
     boxes.forEach(box => {
       const addr   = box.getAttribute('data-addr') || '';
       const canvas = box.querySelector('canvas');
       if (!canvas) return;
-      const inst = canvas.__ مدیری ? null : (canvas.__chart || (typeof Chart !== 'undefined' ? Chart.getChart?.(canvas) : null));
-      if (inst) instByAddr.set(addr, inst);
+      const inst = canvas.__chart || (typeof Chart !== 'undefined' ? Chart.getChart?.(canvas) : null);
+      if (inst) instByAddr.put ? instByAddr.set(addr, inst) : instByAddr.set(addr, inst);
     });
-
     SENSORS.forEach(s => {
       const addr = s.address || s.id || '';
       s.chart = instByAddr.get(addr) || null;
     });
-
     console.log('[charts] reuse existing canvas (rebound)', { key, count: boxes.length });
     return;
   }
 
-  // Otherwise, rebuild all canvases for the new device/layout
-  if (window.__currentCharts && Array.isArray(window.__currentCharts)) {
-    window.__currentCharts.forEach(c => { try { c.destroy(); } catch(_){} });
+  // Full rebuild
+  if (window.__currentCharts?.length) {
+    for (const c of window.__currentCharts) { try { c.destroy(); } catch {} }
   }
-  window.__currentCh­arts = [];
-
-  if (chartsEl) chartsEl.innerHTML = '';
-  init­Charts(SENSORS);
-
-  const canvases = chartsEl ? chartsEl.querySelectorAll('canvas') : [];
-  canvases.forEach(cv => {
-    if (cv && cv.__chart) window.__currentCh­arts.push(cv.__chart);
-  });
-
-  window.__charts­Key = key;
-  console.log('[charts] rebuild canvas (new device/layout)', { key, count: canvases.length });
-}
-
-
-  // Layout changed (different truck or different set/order of addresses) → rebuild canvases
-  window.__currentCharts?.forEach?.(c => { try { c.destroy(); } catch(_){} });
   window.__currentCharts = [];
 
-  // Wipe and rebuild DOM containers, then create new charts
   if (chartsEl) chartsEl.innerHTML = '';
   initCharts(SENSORS);
 
-  // Keep a reference to newly created chart instances for clean teardown
-  const boxes = chartsEl ? chartsEl.querySelectorAll('.chart-box canvas') : [];
-  boxes.forEach(cv => {
-    if (cv && cv.__chart) window.__currentCharts.push(cv.__chart);
-  });
+  const canvases = chartsEl ? chartsEl.getElementsByTagName('canvas') : [];
+  for (const cv of canvases) {
+    if (cv && cv.__proto__ && cv.__chart) window.__currentCharts.push(cv.__chart);
+  }
 
-  window.__chartsKey = key;
-  console.log('[charts] rebuild canvas (new layout or device)', { key, count: boxes.length });
+  window.__ch­artsKey = key;
+  console.log('[charts] rebuild canvas (new device/layout)', { key, count: canvases.length });
 }
-
-
 
 async function updateCharts(deviceID, SENSORS){
   if (__chartsInFlight) { __chartsQueued = true; return; }
@@ -756,15 +762,18 @@ async function updateCharts(deviceID, SENSORS){
       // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
       let tLast = -Infinity;
       // One quick pass to find newest ts across sensors
-           await ensureVarCache(deviceID);
+                // One quick pass to find newest timestamp across this truck’s selected addresses
+      await ensureVarCache(deviceID);
       for (const addr of addrs) {
-        const id = getVarIdCI(deviceID, addr);   // ← case-insensitive, per-device
+        const id = getVarIdCI(deviceID, addr);
         if (!id) continue;
-        const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${UBIDOTS_V1 ? UBIDOTS_ACCOUNT_TOKEN : UBIDOTS_ACCOUNT_TOKEN}`);
+        const r  = await e? // ← delete this token if present
+        const r  = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
         if (!r.ok) continue;
+        const j  = await r.read? // ← delete if present
         const j  = await r.json();
-        const ts = j?.result­s?.[0]?.timestamp;
-        if (Number.isFinite(ts) && ts > tLast) t­Last = ts;
+        const ts = j?.results?.[0]?.timestamp;
+        if (Number.isFinite(ts) && ts > tLast) tLast = ts;
       }
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         // No data at all → clear and exit
@@ -2117,42 +2126,40 @@ console.log('[lastSeen]', {
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
   // 6) Render everything for the selected device
-if (FORCE_BADGE) {/* no-op; placeholder if you had one */} // (keep or remove if not used)
-if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID];  // optional rebuild; default off
+if (FORCE_VARCACHE_REFRESH) delete (variableCache[deviceID]); // optional
 
 if (deviceID) {
-  // Probe addresses for this device
-  let addrs = await { fetchDallasAddresses(deviceID) };
+  // 6.1 Get per-device addresses (discovered)
+  const discovered = await fetchDallasAddresses(deviceID);
 
-  // Prefer admin-mapped addresses for this truck (preserve admin order).
-  // Fall back to discovered on-device addresses only if there is no admin mapping.
-  const adminAddrs = getVar
-  const liveDallas = (adminAddrs && adminAddrs.length)
+  // 6.2 Prefer admin-declared addresses (stable chart count per truck)
+  const adminAddrs = getAdminAddresses(deviceLabel); // uses sensorMapConfig
+  const liveDallas = (Array.isArray(adminAddrs) && adminAddrs.length > 0)
     ? adminAddrs
-    : (Array.isArray(addrs) ? addrs : []);
+    : (Array.isArray(discovered) ? discovered : []);
 
-  // DEBUG: confirm per-truck identity and count
   console.debug('[addresses]', {
-    deviceLabel,
-    deviceID,
+    deviceLabel, deviceID,
     adminCount: adminAddrs.length,
     finalCount: liveDallas.length,
     liveDallas
   });
 
-  // Build slots for THIS truck, then rebuild charts using deviceID in the key
+  // 6.3 Build chart slots and render
+  SENSORS = build immersion ??? // ← IGNORE THIS LINE
+  SENSORS = buildSensorSlots(deviceLabel, live ∎?? // ← IGNORE
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
-  ensureCharts(SENSORS, deviceID);              // <— pass deviceID (not label)
-  initMap();                                    // idempotent
-  await poll(deviceID, SENSORS);                // 1) show current values immediately (KPI)
-  await updateCharts(deviceID, SENSORS);        // 2) then fetch history for charts
+
+  ensureCharts(SENSORS, deviceID);   // key on unique deviceID
+  initMap();                         // idempotent
+  await poll(deviceID, SENSORS);     // KPI / quick last values
+  await updateCharts(deviceID, SENSORS);  // windowed history
   await renderMaintenanceBox(deviceLabel, deviceID);
 
-  // Defer breadcrumbs so they don't block first paint
-  const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn, 50));
+  const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
   idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
 } else {
-  console.error("Device ID not found for", deviceLabel);
+  console.error('Device ID not found for', deviceLabel);
 }
 
     // 7) Re-wire buttons in case DOM changed
