@@ -784,9 +784,15 @@ async function updateCharts(deviceID, SENSORS){
     await Promise.all(SENSORS.map(async s => {
       if (!s.address || !s.chart) return;
       const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000);
-      // Ensure chronological order oldest..newest
-      const ordered = rows.slice().sort((a,b)=>a.timestamp - b.timestamp);
-      seriesByAddr.set(s.address, ordered);
+
+// Strict in-window filter (defensive in case API returns out-of-range points),
+// then ensure chronological order oldest..newest
+const ordered = rows
+  .filter(r => Number.isFinite(r?.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
+  .sort((a,b) => a.timestamp - b.timestamp);
+
+seriesByAddr.set(s.address, ordered);
+
     }));
 
     // --- 3) Render each sensor in-window (explicit window already enforced) ---
@@ -1002,8 +1008,17 @@ async function poll(deviceID, SENSORS){
     const deviceLabel = document.getElementById("deviceSelect")?.value || null;
     const tz = await resolveDeviceTz(deviceLabel, latInWnd, lonInWnd);
 
-    // Use panel timestamp = end of the window for display coherence
-    const tsPanel = endTimeMs;
+      // Decide whether there is any in-window data at all
+    const hasAny =
+      Object.keys(readingsInWindow).length > 0 ||
+      signalInWnd != null || voltInWnd != null ||
+      (latInWnd != null && lonInWnd != null);
+
+    // Panel timestamp:
+    // - 'last' mode: always anchor to the found last-timestamp window (endTimeMs)
+    // - 'now' mode: only show a timestamp if we actually have in-window data; else null
+    const tsPanel = (selectedRangeMode === 'last') ? endTimeMs : (hasAny ? endTimeMs : null);
+
 
     drawLive({
       ts: tsPanel,
@@ -1126,8 +1141,16 @@ async function poll(deviceID, SENSORS){
   const deviceLabel = document.getElementById("deviceSelect")?.value || null;
   const tz = await resolveDeviceTz(deviceLabel, latInWnd, lonInWnd);
 
-  // Use panel timestamp = end of the window for display coherence
-  const tsPanel = endTimeMs;
+    // Decide whether there is any in-window data at all
+  const hasAny =
+    Object.keys(readingsInWindow).length > 0 ||
+    signalVal != null || voltVal != null ||
+    (latInWnd != null && lonInWnd != null);
+
+  // Panel timestamp:
+  // - 'last' mode: anchor to the last data window
+  // - 'now' mode: only if there is in-window data; else null (prevents “today” on offline)
+  const tsPanel = (selectedRangeMode === 'last') ? endTimeMs : (hasAny ? endTimeMs : null);
 
   drawLive({
     ts: tsPanel,
@@ -1221,14 +1244,16 @@ function drawLive(data, SENSORS){
     locationHtml = `<a href="${href}" target="_blank" rel="noopener">${label}</a>${staleNote}`;
   }
 
-  // Build 2-line Local Time: line 1 = date, line 2 = time
-  const t = (window.__lastSeenMs != null && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : ts;
+    // Build 2-line Local Time derived **only** from the data window.
+  // If no in-window data, show "—" (prevents showing today's date for offline devices).
   const tz = data.tz || 'Europe/London';
-  const localDate = new Date(t).toLocaleDateString('en-GB', { timeZone: tz });
-  const localTime = new Date(t).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: tz });
-
-  const rows = [];
-  rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
+  if (ts && isFinite(ts)) {
+    const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: tz });
+    const localTime = new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: tz });
+    rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
+  } else {
+    rows.push(["Local Time", "—"]);
+  }
 
   if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
     const mins = (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)) ? lastGpsAgeMin : null;
