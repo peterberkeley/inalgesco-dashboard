@@ -101,6 +101,14 @@ function getDisplayName(deviceLabel){
   return deviceLabel;
 }
 
+// Return admin-mapped DS18B20 addresses for a truck, preserving admin order
+function getAdminAddresses(deviceLabel){
+  const cfg = sensorMapConfig || {};
+  const key = Object.keys(cfg).find(k => String(k).toLowerCase() === String(deviceLabel).toLowerCase());
+  if (!key) return [];
+  const devMap = cfg[key] || {};
+  return Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
+}
 
 /* =================== Timezone helpers =================== */
 /* Rule:
@@ -2085,10 +2093,14 @@ if (deviceID){
   // LIVE-ONLY clamp (device-anchored to __lastSeenMs, window = selectedRangeMinutes)
 let addrs = await fetchDallasAddresses(deviceID);
 
-// Do NOT re-clamp: fetchDallasAddresses() already selected per-device live/valid addresses.
-try {
-  // leave addrs as-is to preserve per-device identity
-} catch(_) { /* no-op */ }
+// Prefer admin-mapped addresses for this truck (preserve admin order).
+// Fall back to auto-detected list only if there is no admin mapping.
+const adminAddrs = getAdminAddresses(deviceLabel);
+const liveDallas = (adminAddrs && adminAddrs.length) ? adminAddrs : (Array.isArray(addrs) ? addrs : []);
+
+// DEBUG: confirm per-truck identity and count
+console.debug('[addresses]', { deviceLabel, adminCount: adminAddrs.length, finalCount: liveDallas.length, liveDallas });
+
 
 
 // use clamped addresses
