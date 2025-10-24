@@ -670,7 +670,7 @@ function ensureCharts(SENSORS, deviceID){
     .sort()
     .join(',');
   const key = `${String(deviceID)}|${addrsSorted}`;
-
+ }
   // Reuse existing canvases only if device+layout is identical
   if (chartsEl && window.__ch­artsKey === key && chartsEl.children && chartsEl.children.length){
     const boxes = chartsEl.querySelectorAll('.metachart, .chart-box');
