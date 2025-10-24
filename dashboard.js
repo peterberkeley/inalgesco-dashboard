@@ -1228,27 +1228,36 @@ function drawLive(data, SENSORS){
         : ""
     ]);
 
-    // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
+     // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
   const hasFresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
   const useLat = hasFresh ? lat : ((lastLat != null && isFinite(lastLat)) ? lastLat : null);
   const useLon = hasFresh ? lon : ((lastLon != null && isFinite(lastLon)) ? lastLon : null);
 
   let locationHtml = "—";
-  if (useLat != null && useLon != null) { /* ... */ }
+  if (useLat != null && useLon != null) {
+    const href = `https://maps.google.com/?q=${useLat},${useLon}`;
+    const label = `${Number(useLat).toFixed(6)}, ${Number(useLon).toFixed(6)}`;
+    const staleNote = hasFresh ? "" :
+      (lastGpsAgeMin != null && isFinite(lastGpsAgeMin)
+        ? ` <span class="text-gray-500">(stale ${lastGpsAgeMin} min)</span>`
+        : ` <span class="text-gray-500">(stale)</span>`);
+    locationHtml = `<a href="${href}" target="_blank" rel="noopener">${label}</a>${staleNote}`;
+  }
 
-  const rows = [];  // ← ADD THIS LINE
+  const rows = [];
 
   // Build 2-line Local Time derived **only** from the data window.
   // If no in-window data, show "—" (prevents showing today's date for offline devices).
   const tz = data.tz || 'Europe/London';
-  if (ts && isFinite(ts)) { /* ... */ } else { /* ... */ }
-
-    // Build 2-line Local Time derived **only** from the data window.
-  // If no in-window data, show "—" (prevents showing today's date for offline devices).
-  const tz = data.tz || 'Europe/London';
   if (ts && isFinite(ts)) {
     const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: tz });
-    const localTime = new Date(ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: tz });
+    const localTime = new Date(ts).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: tz
+    });
     rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
   } else {
     rows.push(["Local Time", "—"]);
@@ -1259,6 +1268,7 @@ function drawLive(data, SENSORS){
     const staleNote = mins != null ? `Last GPS (${mins} min ago)` : 'Last GPS (stale)';
     rows.push(["Last GPS", `<span class="text-gray-500">${staleNote}</span>`]);
   }
+
 
   rows.push(["ICCID", iccid || "—"]);
 
