@@ -700,6 +700,29 @@ function ensureCharts(SENSORS, deviceLabel){
 
 async function updateCharts(deviceID, SENSORS){
   if (__chartsInFlight) { __chartsQueued = true; return; }
+      // ---- STALE DEVICE GUARD for "now" ranges ----
+  // If the device's last activity is older than the selected window,
+  // force-empty all series so offline trucks don't show spurious charts.
+  if (selectedRangeMode === 'now') {
+    const lastSeenMs = (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : null;
+    const windowMs   = selectedRangeMinutes * 60 * 1000;
+    const isStale    = (lastSeenMs == null) || ((Date.now() - lastSeenMs) > windowMs);
+
+    if (isStale) {
+      const rng0 = document.getElementById('chartRange');
+      if (rng0) rng0.textContent = '';
+      SENSORS.forEach(s => {
+        if (!s.chart) return;
+        s.chart.data.labels = [];
+        s.chart.data.datasets[0].data = [];
+        delete s.chart.options.scales.y.min;
+        delete s.chart.options.scales.y.max;
+        s.chart.update('none');
+      });
+      return; // ← Nothing to render in this "now" window for a stale device
+    }
+  }
+  
   __chartsInFlight = true;
   const __chartsT0 = performance.now();
 
