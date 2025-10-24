@@ -2109,28 +2109,36 @@ console.log('[lastSeen]', {
     }
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
-    // 6) Render everything for the selected device
-    if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID];  // optional rebuild; default off
+   // 6) Render everything for the selected device
+if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID];  // optional rebuild; default off
 if (deviceID){
-  // LIVE-ONLY clamp (device-anchored to __lastSeenMs, window = selectedRangeMinutes)
-let addrs = await fetchDallasAddresses(deviceID);
+  // Probe addresses for this device
+  let addrs = await fetchDallasAddresses(deviceID);
 
-// Prefer admin-mapped addresses for this truck (preserve admin order).
-// Fall back to auto-detected list only if there is no admin mapping.
-const adminAddrs = getAdminAddresses(deviceLabel);
-const liveDallas = (adminAddrs && adminAddrs.length) ? adminAddrs : (Array.isArray(addrs) ? addrs : []);
+  // Prefer admin-mapped addresses for this truck (preserve admin order).
+  // Fall back to auto-detected list only if there is no admin mapping.
+  const adminAddrs = getAdminAddresses(deviceLabel);
+  const liveDallas = (adminAddrs && adminAddrs.length)
+    ? adminAddrs
+    : (Array.isArray(addrs) ? addrs : []);
 
-// DEBUG: confirm per-truck identity and count
-console.debug('[addresses]', { deviceLabel, adminCount: adminAddrs.length, finalCount: liveDallas.length, liveDallas });
-  
+  // DEBUG: confirm per-truck identity and count
+  console.debug('[addresses]', {
+    deviceLabel,
+    adminCount: adminAddrs.length,
+    finalCount: liveDallas.length,
+    liveDallas
+  });
+
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
-ensureCharts(SENSORS, deviceLabel);
-initMap();                           // idempotent: also recreates marker if missing
-await poll(deviceID, SENSORS);       // 1) show current values immediately
-await updateCharts(deviceID, SENSORS); // 2) then fetch history for charts
-await renderMaintenanceBox(deviceLabel, deviceID);
- // Defer breadcrumbs so they don't block first paint
-   const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+  ensureCharts(SENSORS, deviceLabel);
+  initMap();                           // idempotent
+  await poll(deviceID, SENSORS);       // show current values immediately
+  await updateCharts(deviceID, SENSORS); // then fetch history for charts
+  await renderMaintenanceBox(deviceLabel, deviceID);
+
+  // Defer breadcrumbs so they don't block first paint
+  const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
   idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
 } else {
   console.error("Device ID not found for", deviceLabel);
