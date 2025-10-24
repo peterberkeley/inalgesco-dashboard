@@ -1919,7 +1919,7 @@ function wireRangeButtons(){
   };
 });
 
-
+}
 
 
 /* =================== Date inputs: instant commit =================== */
