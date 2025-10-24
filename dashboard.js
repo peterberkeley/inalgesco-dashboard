@@ -417,27 +417,13 @@ async function fetchDeviceLastValuesV2(deviceID){
 
 async function fetchDallasAddresses(deviceID){
   try{
-    // ---- A) List all variables for this device (v1.6) ----
-    const listUrl = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
-    const listRes = await fetch(listUrl);
-    if (!listRes.ok) return [];
-    const listJs  = await listRes.json();
-
-    const hexVars = (listJs.results || [])
-      .filter(v => /^[0-9a-fA-F]{16}$/.test(v?.label))
-      .map(v => String(v.label));
-
-    if (!hexVars.length) return [];
-
-    // ---- B) If an admin map exists for THIS device label, use that order exactly ----
+    // ---- A) Try ADMIN MAP first (authoritative order/count) ----
     let adminOrder = [];
     try{
-      const entry = Object.entries(window.__deviceMap || {})
-        .find(([,info]) => info && info.id === deviceID);
+      const entry = Object.entries(window.__deviceMap || {}).find(([,info]) => info && info.id === deviceID);
       const deviceLabel = entry ? entry[0] : null;
       if (deviceLabel && sensorMapConfig){
-        const wantCI = deviceLabel.toLowerCase();
-        const keyCI  = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === wantCI);
+        const keyCI = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === String(deviceLabel).toLowerCase());
         if (keyCI){
           const devMap = sensorMapConfig[keyCI] || {};
           adminOrder = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
@@ -445,30 +431,49 @@ async function fetchDallasAddresses(deviceID){
       }
     }catch{ /* ignore */ }
 
-    if (adminOrder.length) {
-      // Return admin order but only for addresses that actually exist as variables
-      const have = new Set(hexVars.map(s => s.toLowerCase()));
-      return adminOrder.filter(a => have.has(String(a).toLowerCase()));
+    // If we have an admin map, return it as-is (panel count fixed, aliases work)
+    if (adminOrder.length) return adminOrder;
+
+    // ---- B) No admin map → use v2 bulk last values to keep ONLY variables with data ----
+    // This avoids ghost/template variables (e.g., always-48) when trucks are offline or templated.
+    let bulk = null;
+    try{
+      const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`, {
+        headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+      });
+      if (r.ok) bulk = await r.json();
+    }catch{ /* ignore */ }
+
+    if (bulk && typeof bulk === 'object') {
+      const hexWithData = Object.keys(bulk)
+        .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
+        .filter(k => bulk[k] && typeof bulk[k].timestamp === 'number');  // has at least one value
+      if (hexWithData.length) return hexWithData;
     }
 
-    // ---- C) NO ADMIN MAP → return ALL on-device DS18B20 labels (NO 48h filter) ----
-    // This guarantees a *stable chart count* even if the device is offline.
-    // Keep original discovery order; dedupe case-insensitively.
+    // ---- C) Fallback: list ALL variables (v1.6), de-dup case-insensitively ----
+    // Used only if bulk returns nothing (rare). Charts may be blank if no data ever.
+    const listUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+    const listRes = await fetch(listUrl);
+    if (!listRes.ok) return [];
+    const listJs  = await listRes.json();
+
     const seen = new Set();
     const out  = [];
-    for (const lab of hexVars){
+    (listJs.results || []).forEach(v => {
+      const lab = String(v.label || '');
+      if (!/^[0-9a-fA-F]{16}$/.test(lab)) return;
       const key = lab.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(lab);
-    }
+      if (!seen.has(key)) { seen.add(key); out.push(lab); }
+    });
     return out;
   }catch(e){
-    console.error("fetchDallasAddresses (admin-first, no-staleness)", e);
+    console.error("fetchDallasAddresses (admin-first + v2-bulk)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 
 
