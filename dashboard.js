@@ -756,16 +756,91 @@ async function updateCharts(deviceID, SENSORS){
 
       s.chart.update('none');
     }));
+    // --- Window computation + filtered render (NOW vs LAST modes) ---
+    // Compute selected time window:
+    // - NOW: [now - selectedRangeMinutes, now]
+    // - LAST: [t_last - 60min, t_last], where t_last = max newest ts across series
+    let wndStart = null, wndEnd = null;
 
-    // Build & render "Chillrail Avg" using cached series; no extra fetch
+    if (selectedRangeMode === 'now') {
+      wndEnd = Date.now();
+      wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
+    } else {
+      // 'last' mode — anchor to the most recent timestamp we actually have
+      let tLast = -Infinity;
+      for (const arr of seriesByAddr.values()) {
+        if (arr && arr.length) {
+          const newest = arr[arr.length - 1].timestamp;
+          if (isFinite(newest)) tLast = Math.max(tLast, newest);
+        }
+      }
+      if (!isFinite(tLast) || tLast === -Infinity) {
+        // No data at all → clear charts and range label, then exit early
+        const rng0 = document.getElementById('chartRange');
+        if (rng0) rng0.textContent = '';
+        SENSORS.forEach(s => {
+          if (!s.chart) return;
+          s.chart.data.labels = [];
+          s.chart.data.datasets[0].data = [];
+          delete s.chart.options.scales.y.min;
+          delete s.chart.options.scales.y.max;
+          s.chart.update('none');
+        });
+        return;
+      }
+      wndEnd = tLast;
+      wndStart = tLast - (60 * 60 * 1000);
+    }
+
+    // Filter and render each sensor using the computed window
+    SENSORS.forEach(s => {
+      if (!s.address || !s.chart) return;
+      const ordered = seriesByAddr.get(s.address) || [];
+      const inWindow = ordered.filter(r => {
+        const ts = r.timestamp;
+        return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
+      });
+
+      // Labels: minute-bucketed local time (London; charts remain London by design)
+      const labels = inWindow.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+      const data = inWindow.map(r => {
+        let v = parseFloat(r.value);
+        if (typeof s.calibration === 'number') v += s.calibration;
+        return isNaN(v) ? null : v;
+      });
+
+      s.chart.data.labels = labels;
+      s.chart.data.datasets[0].data = data;
+
+      // Dynamic y-scale (no clipping)
+      const vals = data.filter(v => v != null && isFinite(v));
+      if (vals.length) {
+        const vmin = Math.min(...vals);
+        const vmax = Math.max(...vals);
+        const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
+        s.chart.options.scales.y.min = vmin - pad;
+        s.chart.options.scales.y.max = vmax + pad;
+      } else {
+        delete s.chart.options.scales.y.min;
+        delete s.chart.options.scales.y.max;
+      }
+
+      s.chart.update('none');
+    });
+
+       // Build & render "Chillrail Avg" using the same window-filtered series
     try{
       const series = [];
       for (const s of SENSORS){
         if (!s.address) continue;
-        const ordered = seriesByAddr.get(s.address);
-        if (!ordered || !ordered.length) continue;
+        const ordered = seriesByAddr.get(s.address) || [];
+        const inWindow = ordered.filter(r => {
+          const ts = r.timestamp;
+          return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
+        });
+        if (!inWindow.length) continue;
 
-        const items = ordered.map(r=>{
+        const items = inWindow.map(r=>{
           let v = parseFloat(r.value);
           if (typeof s.calibration === 'number') v += s.calibration;
           return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
@@ -810,27 +885,30 @@ async function updateCharts(deviceID, SENSORS){
       }
     } catch(e){ console.error('avg-build failed:', e); }
 
-    // Range banner from cached series
+
+       // Range banner from the in-window series
     let minTs = Infinity, maxTs = -Infinity;
     for (const s of SENSORS){
       if (!s.address) continue;
-      const ord = seriesByAddr.get(s.address);
-      if (!ord || !ord.length) continue;
-      const oldest = ord[0].timestamp;
-      const newest = ord[ord.length - 1].timestamp;
-      if (isFinite(oldest) && isFinite(newest)) {
-        minTs = Math.min(minTs, oldest, newest);
-        maxTs = Math.max(maxTs, oldest, newest);
+      const ord = seriesByAddr.get(s.address) || [];
+      for (const r of ord){
+        const ts = r.timestamp;
+        if (!isFinite(ts) || ts < wndStart || ts > wndEnd) continue;
+        if (ts < minTs) minTs = ts;
+        if (ts > maxTs) maxTs = ts;
       }
     }
     const rng = document.getElementById("chartRange");
-    if (rng && isFinite(minTs) && isFinite(maxTs)) {
+    if (rng && isFinite(minTs) && isFinite(maxTs) && minTs <= maxTs) {
       const a=new Date(minTs), b=new Date(maxTs);
       const same = a.toDateString()===b.toDateString();
       const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
       const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
       rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+    } else if (rng) {
+      rng.textContent = '';
     }
+
 
     // Background backfill to FULL_POINTS
     if (NEEDS_BACKFILL) {
@@ -844,10 +922,16 @@ async function updateCharts(deviceID, SENSORS){
             const rowsFull = await fetchUbidotsVar(deviceID, s.address, FULL_POINTS);
             if (!rowsFull || !rowsFull.length) return;
             const orderedFull = rowsFull.slice().reverse();
-            seriesByAddr.set(s.address, orderedFull);
+                        seriesByAddr.set(s.address, orderedFull);
 
-            s.chart.data.labels = orderedFull.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
-            s.chart.data.datasets[0].data = orderedFull.map(r => {
+            // Apply the SAME window as earlier (wndStart/wndEnd are in scope via closure)
+            const inWindow = orderedFull.filter(r => {
+              const ts = r.timestamp;
+              return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
+            });
+
+            s.chart.data.labels = inWindow.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+            s.chart.data.datasets[0].data = inWindow.map(r => {
               let v = parseFloat(r.value);
               if (typeof s.calibration === 'number') v += s.calibration;
               return isNaN(v) ? null : v;
@@ -866,16 +950,22 @@ async function updateCharts(deviceID, SENSORS){
             }
 
             s.chart.update('none');
+
           }));
 
-          // Rebuild Avg on full data
+                   // Rebuild Avg on full data (still window-filtered)
           try {
             const series = [];
             for (const s of SENSORS){
               if (!s.address) continue;
-              const ordered = seriesByAddr.get(s.address);
-              if (!ordered || !ordered.length) continue;
-              const items = ordered.map(r=>{
+              const ordered = seriesByAddr.get(s.address) || [];
+              const inWindow = ordered.filter(r => {
+                const ts = r.timestamp;
+                return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
+              });
+              if (!inWindow.length) continue;
+
+              const items = inWindow.map(r=>{
                 let v = parseFloat(r.value);
                 if (typeof s.calibration === 'number') v += s.calibration;
                 return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
@@ -903,6 +993,7 @@ async function updateCharts(deviceID, SENSORS){
             if (avgSlot && avgSlot.chart){
               avgSlot.chart.data.labels = avgLabels;
               avgSlot.chart.data.datasets[0].data = avgData;
+
               const good = avgData.filter(v=>v!=null && isFinite(v));
               if (good.length){
                 const vmin = Math.min(...good), vmax = Math.max(...good);
@@ -919,27 +1010,30 @@ async function updateCharts(deviceID, SENSORS){
             console.error('avg backfill failed:', e);
           }
 
-          // Update range banner on full data
+
+                 // Update range banner on full data but still window-filtered
           let minTs2 = Infinity, maxTs2 = -Infinity;
           for (const s of SENSORS){
             if (!s.address) continue;
-            const ord = seriesByAddr.get(s.address);
-            if (!ord || !ord.length) continue;
-            const oldest = ord[0].timestamp;
-            const newest = ord[ord.length-1].timestamp;
-            if (isFinite(oldest) && isFinite(newest)) {
-              minTs2 = Math.min(minTs2, oldest, newest);
-              maxTs2 = Math.max(maxTs2, oldest, newest);
+            const ord = seriesByAddr.get(s.address) || [];
+            for (const r of ord){
+              const ts = r.timestamp;
+              if (!isFinite(ts) || ts < wndStart || ts > wndEnd) continue;
+              if (ts < minTs2) minTs2 = ts;
+              if (ts > maxTs2) maxTs2 = ts;
             }
           }
           const rng2 = document.getElementById("chartRange");
-          if (rng2 && isFinite(minTs2) && isFinite(maxTs2)) {
-            const a=new Date(minTs2), b=new Date(maxTs2);
-            const same = a.toDateString()===b.toDateString();
-            const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
-            const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+          if (rng2 && isFinite(minTs2) && isFinite(maxTs2) && minTs2 <= maxTs2) {
+            const a = new Date(minTs2), b = new Date(maxTs2);
+            const same = a.toDateString() === b.toDateString();
+            const fmtD = d => d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
+            const fmtT = d => d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
             rng2.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+          } else if (rng2) {
+            rng2.textContent = '';
           }
+
 
           // free memory after successful backfill
           seriesByAddr.clear();
@@ -1000,7 +1094,7 @@ async function poll(deviceID, SENSORS){
       if (gpsObj.timestamp) tsGps = gpsObj.timestamp;
     }
 
-    // Compose a "best" timestamp from available points
+        // Compose timestamps list across all items we fetched
     const tsList = [];
     const pushTs = o => { if (o && o.timestamp && isFinite(o.timestamp)) tsList.push(o.timestamp); };
     ['signal','rssi','csq','volt','vbatt','battery','batt','iccid'].forEach(k => pushTs(bulk[k]));
@@ -1009,26 +1103,82 @@ async function poll(deviceID, SENSORS){
       if (!s.address) continue;
       pushTs(bulk[s.address]);
     }
-    const nowMs = Date.now();
-    const ts = tsList.length ? Math.max(...tsList) : nowMs;
-    if (tsGps) lastGpsAgeMin = Math.round((nowMs - tsGps)/60000);
 
-    // Resolve timezone and paint
+    // Compute the required time window
+    let endTimeMs, startTimeMs;
+    if (selectedRangeMode === 'now') {
+      endTimeMs   = Date.now();
+      startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
+    } else {
+      // 'last' mode: anchor to latest available timestamp across fetched items
+      const tLast = tsList.length ? Math.max(...tsList) : Date.now();
+      endTimeMs   = tLast;
+      startTimeMs = tLast - (60 * 60 * 1000);
+    }
+
+    // Filter each value into the window; out-of-window → blank (null/undefined)
+    const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
+
+    // Temps by address (keep only values whose timestamp is in window)
+    const readingsInWindow = {};
+    for (const s of SENSORS) {
+      if (!s.address) continue;
+      const obj = bulk[s.address];
+      if (obj && inWnd(obj.timestamp)) {
+        const v = parseFloat(obj.value);
+        if (!Number.isNaN(v)) readingsInWindow[s.address] = v;
+      }
+    }
+
+    // Radio/Power with window filter
+    const valInWnd = k => {
+      const o = bulk[k];
+      return (o && inWnd(o.timestamp) && o.value != null && isFinite(o.value)) ? Number(o.value) : null;
+    };
+    const signalInWnd = valInWnd('signal') ?? valInWnd('rssi') ?? valInWnd('csq');
+    const voltInWnd   = valInWnd('volt')   ?? valInWnd('vbatt') ?? valInWnd('battery') ?? valInWnd('batt');
+
+    // ICCID only if in window
+    const iccidInWnd = (bulk.iccid && inWnd(bulk.iccid.timestamp) && bulk.iccid.value != null)
+      ? String(bulk.iccid.value) : null;
+
+    // GPS only if its timestamp is in window
+    let latInWnd = null, lonInWnd = null, speedInWnd = null;
+    if (gpsObj && inWnd(gpsObj.timestamp)) {
+      const c = gpsObj.context || {};
+      const candLat = c.lat;
+      const candLon = (c.lng!=null ? c.lng : c.lon);
+      if (typeof candLat === 'number' && typeof candLon === 'number') {
+        latInWnd = candLat;
+        lonInWnd = candLon;
+      }
+      if (typeof c.speed === 'number') speedInWnd = c.speed;
+    }
+    // No stale carry-forward in KPI box:
+    lastLat = null; lastLon = null; lastGpsAgeMin = null;
+
+    // Resolve timezone using the (possibly in-window) GPS point
     const deviceLabel = document.getElementById("deviceSelect")?.value || null;
-    const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
+    const tz = await resolveDeviceTz(deviceLabel, latInWnd, lonInWnd);
+
+    // Use panel timestamp = end of the window for display coherence
+    const tsPanel = endTimeMs;
+
     drawLive({
-      ts,
-      iccid,
-      lat, lon,
-      lastLat, lastLon, lastGpsAgeMin,
-      speed:  speedVal,
-      signal, volt,
+      ts: tsPanel,
+      iccid: iccidInWnd,
+      lat: latInWnd, lon: lonInWnd,
+      lastLat: null, lastLon: null, lastGpsAgeMin: null,
+      speed:  speedInWnd,
+      signal: signalInWnd,
+      volt:   voltInWnd,
       tz,
-      readings
+      readings: readingsInWindow
     }, SENSORS);
 
     // Done via fast path
     return;
+
   }
   // ---- END FAST PATH ----
 
@@ -1084,26 +1234,75 @@ async function poll(deviceID, SENSORS){
   let tsSignal = signalArr[0]?.timestamp || null;
   let tsVolt   = voltArr[0]?.timestamp || null;
 
-  // Compose "best" ts for the live panel
-  let ts = Date.now();
-  const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => x != null);
-  if (candidates.length > 0) ts = Math.max(...candidates);
+   // Compute the required time window
+  let endTimeMs, startTimeMs;
+  if (selectedRangeMode === 'now') {
+    endTimeMs   = Date.now();
+    startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
+  } else {
+    // 'last' mode: anchor to latest timestamp among fetched items
+    const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => isFinite(x));
+    const tLast = candidates.length ? Math.max(...candidates) : Date.now();
+    endTimeMs   = tLast;
+    startTimeMs = tLast - (60 * 60 * 1000);
+  }
+  const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
 
-  // Resolve timezone and paint
+  // Filter each value into the window; out-of-window → blank
+  // Temps:
+  const readingsInWindow = {};
+  await Promise.all(SENSORS.filter(s => s.address).map(async s => {
+    const v = await fetchUbidotsVar(deviceID, s.address, 1);
+    if (v.length && v[0].value != null && inWnd(v[0].timestamp)) {
+      const num = parseFloat(v[0].value);
+      if (!Number.isNaN(num)) readingsInWindow[s.address] = num;
+    }
+  }));
+
+  // Signal/Volt:
+  const signalVal = (signalArr[0] && inWnd(signalArr[0].timestamp) && signalArr[0].value != null && isFinite(signalArr[0].value))
+    ? Number(signalArr[0].value) : null;
+  const voltVal   = (voltArr[0]   && inWnd(voltArr[0].timestamp)   && voltArr[0].value != null   && isFinite(voltArr[0].value))
+    ? Number(voltArr[0].value) : null;
+
+  // ICCID:
+  const iccidVal = (iccArr[0] && inWnd(iccArr[0].timestamp) && iccArr[0].value != null)
+    ? String(iccArr[0].value) : null;
+
+  // GPS only if its timestamp is in window (no stale carry-forward)
+  let latInWnd = null, lonInWnd = null, speedInWnd = null;
+  if (gpsArr[0] && inWnd(gpsArr[0].timestamp)) {
+    const c = gpsArr[0].context || {};
+    if (typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')) {
+      latInWnd = c.lat;
+      lonInWnd = (c.lng != null ? c.lng : c.lon);
+    }
+    if (typeof c.speed === 'number') speedInWnd = c.speed;
+  }
+  lastLat = null; lastLon = null; lastGpsAgeMin = null;
+
+  // Resolve timezone using in-window GPS point (may be null)
   const deviceLabel = document.getElementById("deviceSelect")?.value || null;
-  const tz = await resolveDeviceTz(deviceLabel, (lat ?? lastLat), (lon ?? lastLon));
+  const tz = await resolveDeviceTz(deviceLabel, latInWnd, lonInWnd);
+
+  // Use panel timestamp = end of the window for display coherence
+  const tsPanel = endTimeMs;
+
   drawLive({
-    ts,
-    iccid: iccArr[0]?.value ?? null,
-    lat,
-    lon,
-    lastLat, lastLon, lastGpsAgeMin,
-    speed: speedVal,
-    signal: signalArr[0]?.value ?? null,
-    volt:  voltArr[0]?.value ?? null,
+    ts: tsPanel,
+    iccid: iccidVal,
+    lat: latInWnd,
+    lon: lonInWnd,
+    lastLat: null,
+    lastLon: null,
+    lastGpsAgeMin: null,
+    speed: speedInWnd,
+    signal: signalVal,
+    volt:  voltVal,
     tz,
-    readings
+    readings: readingsInWindow
   }, SENSORS);
+
 }
 
 /* =================== Live panel + map =================== */
@@ -1523,12 +1722,35 @@ const __crumbSignal = __crumbAbort.signal;
       map.removeControl(legendControl);
       legendControl = null;
     }
-              const nowMs = Date.now();
-    const startTime = nowMs - (rangeMinutes * 60 * 1000);
-
+                 // Compute time window for breadcrumbs:
+    // - NOW: [now - selectedRangeMinutes, now]
+    // - LAST: [t_last - 60min, t_last], where t_last is the most recent GPS timestamp
     const gpsLabel = await resolveGpsLabel(deviceID);
     let gpsRows = [];
-  if (gpsLabel) gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTime, nowMs, __crumbSignal);
+    let startTimeMs = null, endTimeMs = null;
+
+    if (!gpsLabel) {
+      // No GPS variable → nothing to draw
+      return;
+    }
+
+    if (selectedRangeMode === 'now') {
+      endTimeMs   = Date.now();
+      startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
+      gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTimeMs, endTimeMs, __crumbSignal);
+    } else {
+      // 'last' mode: anchor to latest GPS value
+      const lastGpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
+      const tLast = lastGpsArr?.[0]?.timestamp || null;
+      if (!tLast || !isFinite(tLast)) {
+        // No GPS data at all → nothing to draw
+        return;
+      }
+      endTimeMs   = tLast;
+      startTimeMs = tLast - (60 * 60 * 1000);
+      gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTimeMs, endTimeMs, __crumbSignal);
+    }
+
 
 
 
@@ -1545,9 +1767,10 @@ const __crumbSignal = __crumbAbort.signal;
 
     const tempData = {};
     const tempAvg  = {};
-    for(const s of SENSORS){
+        for(const s of SENSORS){
       if(!s.address) continue;
-      const rows = await fetchCsvRows(deviceID, s.address, startTime, nowMs, __crumbSignal);
+      const rows = await fetchCsvRows(deviceID, s.address, startTimeMs, endTimeMs, __crumbSignal);
+
       for(const r of rows){
         const ts = r.timestamp;
         let v = parseFloat(r.value);
@@ -1660,41 +1883,51 @@ const __crumbSignal = __crumbAbort.signal;
 function wireRangeButtons(){
   const buttons = document.querySelectorAll(".rangeBtn");
   buttons.forEach(btn=>{
-    btn.onclick = async function(){
-      // Visual selection
-      buttons.forEach(b=>{
-        b.style.backgroundColor = '';
-        b.style.color = '';
-      });
-      this.style.backgroundColor = '#10b981';
-      this.style.color = '#ffffff';
+  btn.onclick = async function(){
+    // Visual selection (unchanged)
+    buttons.forEach(b=>{
+      b.style.backgroundColor = '';
+      b.style.color = '';
+    });
+    this.style.backgroundColor = '#10b981';
+    this.style.color = '#ffffff';
 
-      // Update selection model
-      const modeAttr = this.getAttribute('data-mode') || 'range';
-      const valAttr  = parseInt(this.getAttribute('data-range'), 10);
+    // Selection model:
+    // - data-range is HOURS (1,3,12,24,1 for "Last")
+    // - data-mode is "now" for 1/3/12/24 and "last" for Last
+    const modeAttr = (this.getAttribute('data-mode') || 'now').toLowerCase();
+    const hoursVal = Number(this.getAttribute('data-range'));
+    const hours    = (Number.isFinite(hoursVal) && hoursVal > 0) ? hoursVal : 1;
 
-      // No-op if the selection didn't actually change
-      const newMinutes = Number.isFinite(valAttr) ? valAttr : 60;
-      if (selectedRangeMode === modeAttr && selectedRangeMinutes === newMinutes) {
-        return; // nothing to do
-      }
-      selectedRangeMinutes = newMinutes;
-      selectedRangeMode    = modeAttr;
-      HIST_POINTS          = selectedRangeMinutes;
+    // Persist as minutes for backward compatibility elsewhere
+    const newMinutes = hours * 60;
+    const newMode    = (modeAttr === 'last') ? 'last' : 'now';
 
-      // Fast path: only refresh charts + defer breadcrumbs (no full updateAll)
-      const devSel      = document.getElementById('deviceSelect');
-      const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
-      const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
+    // No-op if unchanged
+    if (selectedRangeMode === newMode && selectedRangeMinutes === newMinutes) {
+      return;
+    }
+    selectedRangeMinutes = newMinutes;  // minutes, derived from HOURS
+    selectedRangeMode    = newMode;
 
-      if (deviceID) {
-        await updateCharts(deviceID, SENSORS); // redraw charts quickly
-        const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
-        idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
-      }
-    };
-  });
-}
+    // HIST_POINTS will be removed from charts logic in a later step; keep harmless for now
+    HIST_POINTS = selectedRangeMinutes;
+
+    // Fast path: refresh charts + defer breadcrumbs (full filtering added in next steps)
+    const devSel      = document.getElementById('deviceSelect');
+    const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
+    const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
+
+    console.log('[range select]', { mode: selectedRangeMode, hours, minutes: selectedRangeMinutes });
+
+    if (deviceID) {
+      await updateCharts(deviceID, SENSORS); // will be range-aware after step 2
+      const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn,50));
+      idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
+    }
+  };
+});
+
 
 
 
