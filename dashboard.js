@@ -1972,9 +1972,34 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
       return;
     }
 
-    // 4) Resolve current device
-    const deviceLabel = document.getElementById("deviceSelect")?.value || Object.keys(sensorMap)[0];
-    const deviceID    = sensorMap[deviceLabel]?.id;
+   // 4) Resolve current device (robust against case/alias mismatches)
+function __resolveSelectedDevice(sensorMap){
+  const sel = document.getElementById('deviceSelect');
+  let key = (sel && typeof sel.value === 'string') ? sel.value : null;
+
+  // 4a) Direct hit
+  if (key && sensorMap[key]?.id) {
+    return { deviceLabel: key, deviceID: sensorMap[key].id };
+  }
+
+  // 4b) Case-insensitive match
+  if (key) {
+    const k2 = Object.keys(sensorMap).find(k => String(k).toLowerCase() === String(key).toLowerCase());
+    if (k2 && sensorMap[k2]?.id) {
+      return { deviceLabel: k2, deviceID: sensorMap[k2].id };
+    }
+  }
+
+  // 4c) Fallback: first available
+  const first = Object.keys(sensorMap)[0] || null;
+  return { deviceLabel: first, deviceID: first ? sensorMap[first]?.id : null };
+}
+
+const { deviceLabel, deviceID } = __resolveSelectedDevice(sensorMap);
+
+// DEBUG: show binding to ensure we’re fetching from the selected device
+console.debug('[device binding]', { selected: document.getElementById('deviceSelect')?.value, deviceLabel, deviceID });
+
 
     // 5) Pill Online logic:
     //    Use Devices v2 last_seen; if stale/missing, FALLBACK to gps/signal/volt (v1.6 values) within the same 5-min window.
