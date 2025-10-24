@@ -746,6 +746,13 @@ await Promise.all(SENSORS.map(async s=>{
       wndEnd = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
     } else {
+      console.log('[charts window]', {
+  mode: window.selectedRangeMode,
+  minutes: window.selectedRangeMinutes,
+  start: new Date(wndStart).toISOString(),
+  end:   new Date(wndEnd).toISOString()
+});
+
       // 'last' mode — anchor to the most recent timestamp we actually have
       let tLast = -Infinity;
       for (const arr of seriesByAddr.values()) {
