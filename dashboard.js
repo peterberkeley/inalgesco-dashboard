@@ -346,33 +346,6 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
 }
 
 
-    // Lazy duplicate resolution: scan ids for this label only if needed
-    const list = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-    if (!list.ok) return [];
-    const jl = await list.json();
-    const ids = (jl.results || []).filter(v => v.label === varLabel).map(v => v.id);
-
-    for (const id of ids) {
-      if (id === varId) continue; // already tried
-      const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-      if (!r.ok) continue;
-      const j = await r.json();
-      const rows = j.results || [];
-      if (rows.length) {
-        // Update mapping to the working id for future calls
-        variableCache[deviceID][varLabel] = id;
-        return rows;
-      }
-    }
-
-    // Nothing found
-    return [];
-  }catch(e){
-    console.error("fetchUbidotsVar", e);
-    return [];
-  }
-}
-
 /* =================== GPS variable auto-detect =================== */
 const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
 
@@ -1494,7 +1467,7 @@ async function fetchCsvRows(deviceID, varLabel, start, end, signal){
 
   try{
     await ensureVarCache(deviceID);
-    const id = variableCache[deviceID][varLabel];
+    const id = getVarIdCI(deviceID, varLabel);   // ← case-insensitive per-device mapping
     if(!id) return [];
     let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${id}/values/?page_size=1000`;
     if(start) url += `&start=${start}`;
@@ -2149,12 +2122,6 @@ const liveDallas = (adminAddrs && adminAddrs.length) ? adminAddrs : (Array.isArr
 
 // DEBUG: confirm per-truck identity and count
 console.debug('[addresses]', { deviceLabel, adminCount: adminAddrs.length, finalCount: liveDallas.length, liveDallas });
-
-
-
-// use clamped addresses
-const liveDallas = addrs;
-
   
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
 ensureCharts(SENSORS, deviceLabel);
