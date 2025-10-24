@@ -668,25 +668,25 @@ if (chartsEl && window.__chartsKey === key && chartsEl.children && chartsEl.chil
       box.setAttribute('data-addr', addr);
     }
 
-    if (inst && inst.data && inst.data.datasets && inst.data.datasets[0]) {
-      const ds = inst.data.datasets[0];
-      if (ds.borderColor !== s.col) ds.borderColor = s.col; // keep color in sync with slot
-      inst.update('none');
-    }
-  });
-
-  // Reorder boxes to EXACTLY match SENSORS order (admin order; avg first)
-  const frag = document.createDocumentFragment();
-  SENSORS.forEach(s => {
-    const addr = s.address || s.id || '';
-    const box  = boxByAddr.get(addr);
-    if (box) frag.appendChild(box);
-  });
-  chartsEl.appendChild(frag);
-
-  console.log('[charts] reuse canvas + refreshed labels/order', { key, count: chartsEl.children.length });
-  return;
+  if (inst && inst.data && inst.data.datasets && inst.data.datasets[0]) {
+  const ds = inst.data.datasets[0];
+  if (ds.borderColor !== s.col) ds.borderColor = s.col; // keep color in sync with slot
+  inst.update('none');
 }
+});
+
+// Reorder boxes to EXACTLY match SENSORS order (admin order; avg first)
+const frag = document.createDocumentFragment();
+SENSORS.forEach(s => {
+  const addr = s.address || s.id || '';
+  const box  = boxByAddr.get(addr);
+  if (box) frag.appendChild(box);
+});
+chartsEl.appendChild(frag);
+
+console.log('[charts] reuse canvas + refreshed labels/order', { key, count: chartsEl.children.length });
+return;     // ✅ closes the reuse branch
+}           // ✅ closes the ensureCharts function block properly
 
 async function updateCharts(deviceID, SENSORS){
   if (__chartsInFlight) { __chartsQueued = true; return; }
