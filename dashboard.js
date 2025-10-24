@@ -698,68 +698,49 @@ function ensureCharts(SENSORS, deviceLabel){
 
 
 async function updateCharts(deviceID, SENSORS){
-  if (__chartsInFlight) {
-    __chartsQueued = true;
-    console.log('[charts] skipped (already running)');
-    return;
-  }
+  if (__chartsInFlight) { __chartsQueued = true; return; }
   __chartsInFlight = true;
   const __chartsT0 = performance.now();
 
   try{
-    const seriesByAddr = new Map(); // address -> ordered history (oldest..newest)
-    const QUICK_POINTS = Math.min(HIST_POINTS, 20);   // fast-first paint
-    const FULL_POINTS  = HIST_POINTS;                 // target history length
-    const NEEDS_BACKFILL = FULL_POINTS > QUICK_POINTS;
-    const expectedKey = window.__chartsKey;           // guard against device/layout changes
-
-    // If there are no sensor addresses, skip chart work (fast no-op)
-    if (!SENSORS.some(s => s.address)) {
+    // --- 0) Guard: nothing to draw if no sensor addresses ---
+    const addrs = SENSORS.filter(s => s.address).map(s => s.address);
+    if (!addrs.length) {
       const rng0 = document.getElementById('chartRange');
       if (rng0) rng0.textContent = '';
       const avg0 = SENSORS.find(x => x.id === 'avg');
       if (avg0 && avg0.chart) {
         avg0.chart.data.labels = [];
         avg0.chart.data.datasets[0].data = [];
+        delete avg0.chart.options.scales.y.min;
+        delete avg0.chart.options.scales.y.max;
         avg0.chart.update('none');
       }
       return;
     }
 
-    // Per-sensor quick slice (cache only; no drawing here)
-await Promise.all(SENSORS.map(async s=>{
-  if(!s.address || !s.chart) return;
-  const rows = await fetchUbidotsVar(deviceID, s.address, QUICK_POINTS);
-  if(!rows.length) return;
-  const ordered = rows.slice().reverse();
-  seriesByAddr.set(s.address, ordered);
-  // Do not paint here. Drawing happens after we compute wndStart/wndEnd.
-}));
-
-    // --- Window computation + filtered render (NOW vs LAST modes) ---
-    // Compute selected time window:
-    // - NOW: [now - selectedRangeMinutes, now]
-    // - LAST: [t_last - 60min, t_last], where t_last = max newest ts across series
-    let wndStart = null, wndEnd = null;
-
+    // --- 1) Compute window (absolute ms) ---
+    let wndStart, wndEnd;
     if (selectedRangeMode === 'now') {
-      wndEnd = Date.now();
+      wndEnd   = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
     } else {
-    
-
-      // 'last' mode — anchor to the most recent timestamp we actually have
+      // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
       let tLast = -Infinity;
-      for (const arr of seriesByAddr.values()) {
-        if (arr && arr.length) {
-          const newest = arr[arr.length - 1].timestamp;
-          if (isFinite(newest)) tLast = Math.max(tLast, newest);
-        }
+      // One quick pass to find newest ts across sensors
+      await ensureVarCache(deviceID);
+      const vc = variableCache[deviceID] || {};
+      for (const addr of addrs) {
+        const id = vc[addr];
+        if (!id) continue;
+        const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+        if (!r.ok) continue;
+        const j = await r.json();
+        const ts = j?.results?.[0]?.timestamp;
+        if (Number.isFinite(ts) && ts > tLast) tLast = ts;
       }
-      if (!isFinite(tLast) || tLast === -Infinity) {
-        // No data at all → clear charts and range label, then exit early
-        const rng0 = document.getElementById('chartRange');
-        if (rng0) rng0.textContent = '';
+      if (!Number.isFinite(tLast) || tLast === -Infinity) {
+        // No data at all → clear and exit
         SENSORS.forEach(s => {
           if (!s.chart) return;
           s.chart.data.labels = [];
@@ -768,37 +749,63 @@ await Promise.all(SENSORS.map(async s=>{
           delete s.chart.options.scales.y.max;
           s.chart.update('none');
         });
+        const rng0 = document.getElementById('chartRange');
+        if (rng0) rng0.textContent = '';
         return;
       }
-      wndEnd = tLast;
-      wndStart = tLast - (60 * 60 * 1000);
+      wndEnd   = tLast;
+      wndStart = tLast - (60 * 60 * 1000); // fixed 60 min for 'last'
     }
 
-    // Filter and render each sensor using the computed window
+    // --- 2) Time-window fetch per variable (not by point count) ---
+    // Helper: fetch all values within [start,end], paginating up to a cap.
+    async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap=5000){
+      await ensureVarCache(deviceID);
+      const id = variableCache[deviceID]?.[varLabel];
+      if (!id) return [];
+      let url = `${UBIDOTS_V1}/variables/${id}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+      const out = [];
+      // Ubidots v1.6 uses standard pagination via 'next' in the payload
+      while (url) {
+        const r = await fetch(url);
+        if (!r.ok) break;
+        const j = await r.json();
+        const rows = j?.results || [];
+        out.push(...rows);
+        if (out.length >= hardCap) break;
+        // Find "next" link if present (j.next) else stop
+        url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${UBIDOTS_ACCOUNT_TOKEN}` : null;
+      }
+      return out;
+    }
+
+    // Fetch time-windowed series for each sensor in parallel
+    const seriesByAddr = new Map();
+    await Promise.all(SENSORS.map(async s => {
+      if (!s.address || !s.chart) return;
+      const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000);
+      // Ensure chronological order oldest..newest
+      const ordered = rows.slice().sort((a,b)=>a.timestamp - b.timestamp);
+      seriesByAddr.set(s.address, ordered);
+    }));
+
+    // --- 3) Render each sensor in-window (explicit window already enforced) ---
     SENSORS.forEach(s => {
       if (!s.address || !s.chart) return;
       const ordered = seriesByAddr.get(s.address) || [];
-      const inWindow = ordered.filter(r => {
-        const ts = r.timestamp;
-        return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
-      });
-
-      // Labels: minute-bucketed local time (London; charts remain London by design)
-      const labels = inWindow.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
-      const data = inWindow.map(r => {
+      const labels = ordered.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+      const data   = ordered.map(r => {
         let v = parseFloat(r.value);
         if (typeof s.calibration === 'number') v += s.calibration;
-        return isNaN(v) ? null : v;
+        return Number.isFinite(v) ? v : null;
       });
 
       s.chart.data.labels = labels;
       s.chart.data.datasets[0].data = data;
 
-      // Dynamic y-scale (no clipping)
       const vals = data.filter(v => v != null && isFinite(v));
       if (vals.length) {
-        const vmin = Math.min(...vals);
-        const vmax = Math.max(...vals);
+        const vmin = Math.min(...vals), vmax = Math.max(...vals);
         const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
         s.chart.options.scales.y.min = vmin - pad;
         s.chart.options.scales.y.max = vmax + pad;
@@ -806,50 +813,31 @@ await Promise.all(SENSORS.map(async s=>{
         delete s.chart.options.scales.y.min;
         delete s.chart.options.scales.y.max;
       }
-      // DEBUG: show the computed window once per updateCharts() pass
-console.log('[charts window]', {
-  mode: selectedRangeMode,
-  minutes: selectedRangeMinutes,
-  start: new Date(wndStart).toISOString(),
-  end:   new Date(wndEnd).toISOString()
-});
-
-
       s.chart.update('none');
     });
 
-       // Build & render "Chillrail Avg" using the same window-filtered series
-    try{
+    // --- 4) Build & render "Chillrail Avg" over the exact same window ---
+    (function(){
       const series = [];
       for (const s of SENSORS){
         if (!s.address) continue;
-        const ordered = seriesByAddr.get(s.address) || [];
-        const inWindow = ordered.filter(r => {
-          const ts = r.timestamp;
-          return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
-        });
-        if (!inWindow.length) continue;
-
-        const items = inWindow.map(r=>{
+        const arr = seriesByAddr.get(s.address) || [];
+        if (!arr.length) continue;
+        const items = arr.map(r=>{
           let v = parseFloat(r.value);
           if (typeof s.calibration === 'number') v += s.calibration;
-          return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
+          return { ts: Math.floor(r.timestamp/60000)*60000, v: Number.isFinite(v) ? v : null };
         }).filter(o => o.v != null);
         if (items.length) series.push(items);
       }
-
       const bucketSet = new Set();
       series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
       const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
-
-      const maps = series.map(arr=>{
-        const m = new Map();
-        arr.forEach(o => m.set(o.ts, o.v));
-        return m;
+      const maps = series.map(arr => {
+        const m = new Map(); arr.forEach(o => m.set(o.ts, o.v)); return m;
       });
-
       const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
-      const avgData = buckets.map(ts=>{
+      const avgData = buckets.map(ts => {
         const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
         return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
       });
@@ -858,8 +846,6 @@ console.log('[charts window]', {
       if (avgSlot && avgSlot.chart){
         avgSlot.chart.data.labels = avgLabels;
         avgSlot.chart.data.datasets[0].data = avgData;
-        avgSlot.chart.data.datasets[0].fill = false;
-        avgSlot.chart.data.datasets[0].backgroundColor = 'transparent';
 
         const good = avgData.filter(v=>v!=null && isFinite(v));
         if (good.length){
@@ -873,17 +859,16 @@ console.log('[charts window]', {
         }
         avgSlot.chart.update('none');
       }
-    } catch(e){ console.error('avg-build failed:', e); }
+    })();
 
-
-       // Range banner from the in-window series
+    // --- 5) Range banner: reflect actual min/max drawn in window ---
     let minTs = Infinity, maxTs = -Infinity;
     for (const s of SENSORS){
       if (!s.address) continue;
       const ord = seriesByAddr.get(s.address) || [];
       for (const r of ord){
         const ts = r.timestamp;
-        if (!isFinite(ts) || ts < wndStart || ts > wndEnd) continue;
+        if (!Number.isFinite(ts)) continue;
         if (ts < minTs) minTs = ts;
         if (ts > maxTs) maxTs = ts;
       }
@@ -898,149 +883,15 @@ console.log('[charts window]', {
     } else if (rng) {
       rng.textContent = '';
     }
-
-
-    // Background backfill to FULL_POINTS
-    if (NEEDS_BACKFILL) {
-      setTimeout(async () => {
-        if (window.__chartsKey !== expectedKey) return;
-
-        try {
-          // Full series per sensor
-          await Promise.all(SENSORS.map(async s => {
-            if (!s.address || !s.chart) return;
-            const rowsFull = await fetchUbidotsVar(deviceID, s.address, FULL_POINTS);
-            if (!rowsFull || !rowsFull.length) return;
-            const orderedFull = rowsFull.slice().reverse();
-                        seriesByAddr.set(s.address, orderedFull);
-
-            // Apply the SAME window as earlier (wndStart/wndEnd are in scope via closure)
-            const inWindow = orderedFull.filter(r => {
-              const ts = r.timestamp;
-              return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
-            });
-
-            s.chart.data.labels = inWindow.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
-            s.chart.data.datasets[0].data = inWindow.map(r => {
-              let v = parseFloat(r.value);
-              if (typeof s.calibration === 'number') v += s.calibration;
-              return isNaN(v) ? null : v;
-            });
-
-            const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
-            if (vals.length) {
-              const vmin = Math.min(...vals);
-              const vmax = Math.max(...vals);
-              const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
-              s.chart.options.scales.y.min = vmin - pad;
-              s.chart.options.scales.y.max = vmax + pad;
-            } else {
-              delete s.chart.options.scales.y.min;
-              delete s.chart.options.scales.y.max;
-            }
-
-            s.chart.update('none');
-
-          }));
-
-                   // Rebuild Avg on full data (still window-filtered)
-          try {
-            const series = [];
-            for (const s of SENSORS){
-              if (!s.address) continue;
-              const ordered = seriesByAddr.get(s.address) || [];
-              const inWindow = ordered.filter(r => {
-                const ts = r.timestamp;
-                return isFinite(ts) && ts >= wndStart && ts <= wndEnd;
-              });
-              if (!inWindow.length) continue;
-
-              const items = inWindow.map(r=>{
-                let v = parseFloat(r.value);
-                if (typeof s.calibration === 'number') v += s.calibration;
-                return { ts: Math.floor(r.timestamp/60000)*60000, v: isNaN(v) ? null : v };
-              }).filter(o => o.v != null);
-              if (items.length) series.push(items);
-            }
-
-            const bucketSet = new Set();
-            series.forEach(arr => arr.forEach(o => bucketSet.add(o.ts)));
-            const buckets = Array.from(bucketSet).sort((a,b)=>a-b);
-
-            const maps = series.map(arr=>{
-              const m = new Map();
-              arr.forEach(o => m.set(o.ts, o.v));
-              return m;
-            });
-
-            const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
-            const avgData = buckets.map(ts=>{
-              const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
-              return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
-            });
-
-            const avgSlot = SENSORS.find(x=>x.id==="avg");
-            if (avgSlot && avgSlot.chart){
-              avgSlot.chart.data.labels = avgLabels;
-              avgSlot.chart.data.datasets[0].data = avgData;
-
-              const good = avgData.filter(v=>v!=null && isFinite(v));
-              if (good.length){
-                const vmin = Math.min(...good), vmax = Math.max(...good);
-                const pad  = Math.max(0.5,(vmax - vmin) * 0.10);
-                avgSlot.chart.options.scales.y.min = vmin - pad;
-                avgSlot.chart.options.scales.y.max = vmax + pad;
-              } else {
-                delete avgSlot.chart.options.scales.y.min;
-                delete avgSlot.chart.options.scales.y.max;
-              }
-              avgSlot.chart.update('none');
-            }
-          } catch(e) {
-            console.error('avg backfill failed:', e);
-          }
-
-
-                 // Update range banner on full data but still window-filtered
-          let minTs2 = Infinity, maxTs2 = -Infinity;
-          for (const s of SENSORS){
-            if (!s.address) continue;
-            const ord = seriesByAddr.get(s.address) || [];
-            for (const r of ord){
-              const ts = r.timestamp;
-              if (!isFinite(ts) || ts < wndStart || ts > wndEnd) continue;
-              if (ts < minTs2) minTs2 = ts;
-              if (ts > maxTs2) maxTs2 = ts;
-            }
-          }
-          const rng2 = document.getElementById("chartRange");
-          if (rng2 && isFinite(minTs2) && isFinite(maxTs2) && minTs2 <= maxTs2) {
-            const a = new Date(minTs2), b = new Date(maxTs2);
-            const same = a.toDateString() === b.toDateString();
-            const fmtD = d => d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
-            const fmtT = d => d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-            rng2.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
-          } else if (rng2) {
-            rng2.textContent = '';
-          }
-
-
-          // free memory after successful backfill
-          seriesByAddr.clear();
-        } catch(e) {
-          console.error('backfill error:', e);
-        }
-      }, 0);
-    }
+  } catch(e){
+    console.error('updateCharts(windowed) error:', e);
   } finally {
     __chartsInFlight = false;
-    console.log('[charts] done in', Math.round(performance.now()-__chartsT0), 'ms');
-    if (__chartsQueued) {
-      __chartsQueued = false;
-      setTimeout(() => updateCharts(deviceID, SENSORS), 0);
-    }
+    // console.log('[updateCharts] done in', Math.round(performance.now()-__chartsT0), 'ms');
+    if (__chartsQueued) { __chartsQueued = false; setTimeout(() => updateCharts(deviceID, SENSORS), 0); }
   }
 }
+
 // Part 3 — FAST live paint: bulk last values, then fallback
 async function poll(deviceID, SENSORS){
   // ---- FAST PATH: one call gets all last values; draw immediately if available ----
