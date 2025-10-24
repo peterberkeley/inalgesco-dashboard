@@ -315,37 +315,6 @@ async function fetchUbidotsVar(deviceID, varLabel, limit=1){
       }
     }
 
-    // 2) Fallback: scan THIS device’s variables for label match (case-insensitive)
-    const list = await fetch(`${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-    if (!list.ok) return [];
-    const jl = await list.json();
-    const want = String(varLabel).toLowerCase();
-
-    const ids = (jl.results || [])
-      .filter(v => String(v.label || '').toLowerCase() === want)
-      .map(v => v.id);
-
-    for (const id of ids) {
-      if (id === varId) continue; // already tried
-      const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=${limit}&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-      if (!r.ok) continue;
-      const j = await r.json();
-      const rows = j.results || [];
-      if (rows.length) {
-        // Update mapping for future calls under the requested label spelling
-        variableCache[deviceID][varLabel] = id;
-        return rows;
-      }
-    }
-
-    return [];
-  }catch(e){
-    console.error("fetchUbidotsVar", e);
-    return [];
-  }
-}
-
-
 /* =================== GPS variable auto-detect =================== */
 const gpsLabelCache = (window.gpsLabelCache = window.gpsLabelCache || {});
 
@@ -787,16 +756,15 @@ async function updateCharts(deviceID, SENSORS){
       // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
       let tLast = -Infinity;
       // One quick pass to find newest ts across sensors
-      await ensureVarCache(deviceID);
-      const vc = variableCache[deviceID] || {};
+           await ensureVarCache(deviceID);
       for (const addr of addrs) {
-        const id = vc[addr];
+        const id = getVarIdCI(deviceID, addr);   // ← case-insensitive, per-device
         if (!id) continue;
-        const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+        const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${UBIDOTS_V1 ? UBIDOTS_ACCOUNT_TOKEN : UBIDOTS_ACCOUNT_TOKEN}`);
         if (!r.ok) continue;
-        const j = await r.json();
-        const ts = j?.results?.[0]?.timestamp;
-        if (Number.isFinite(ts) && ts > tLast) tLast = ts;
+        const j  = await r.json();
+        const ts = j?.result­s?.[0]?.timestamp;
+        if (Number.isFinite(ts) && ts > tLast) t­Last = ts;
       }
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         // No data at all → clear and exit
@@ -1497,24 +1465,29 @@ async function renderMaintenanceBox(truckLabel, deviceID){
 }
 
 /* =================== CSV download =================== */
+// Case-insensitive per-device CSV/crumbs fetch by var label (hex)
 async function fetchCsvRows(deviceID, varLabel, start, end, signal){
-
-  try{
+  try {
     await ensureVarCache(deviceID);
-    const id = getVarIdCI(deviceID, varLabel);   // ← case-insensitive per-device mapping
-    if(!id) return [];
-    let url = `https://industrial.api.ubidots.com/api/v1.6/variables/${id}/values/?page_size=1000`;
-    if(start) url += `&start=${start}`;
-    if(end)   url += `&end=${end}`;
-   const init = {};
-if (signal) init.signal = signal;
-const res = await fetch(url + `&token=${UBIDOTS_ACCOUNT_TOKEN}`, init);
+    const id = getVarIdCI(deviceID, varLabel);   // ← IMPORTANT: CI lookup
+    if (!id) return [];
 
+    let url  = `https://industrial.api.ubidots.com/api/v1.6/variables/${id}/values/?page_size=1000`;
+    if (start) url += `&start=${encodeURIComponent(start)}`;
+    if (end)   url += `&end=${encodeURIComponent(end)}`;
 
-    if(!res.ok) return [];
-    return (await res.json()).results||[];
-  }catch{ return []; }
+    const init = {};
+    if (signal) init.signal = signal;
+
+    const res = await fetch(`${url}&${'token'}=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`, init);
+    if (!res.ok) return [];
+    const j = await res.json();
+    return j?.results || [];
+  } catch {
+    return [];
+  }
 }
+
 
 // Build and download CSV for the selected device/date range
 async function downloadCsvForCurrentSelection(){
