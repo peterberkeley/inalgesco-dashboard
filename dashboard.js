@@ -417,7 +417,7 @@ async function fetchDeviceLastValuesV2(deviceID){
 
 async function fetchDallasAddresses(deviceID){
   try{
-    // ---- A) Try ADMIN MAP first (authoritative order/count) ----
+    // ---- A) ADMIN MAP: authoritative count/order ----
     let adminOrder = [];
     try{
       const entry = Object.entries(window.__deviceMap || {}).find(([,info]) => info && info.id === deviceID);
@@ -431,48 +431,78 @@ async function fetchDallasAddresses(deviceID){
       }
     }catch{ /* ignore */ }
 
-    // If we have an admin map, return it as-is (panel count fixed, aliases work)
-    if (adminOrder.length) return adminOrder;
+    if (adminOrder.length) {
+      // If admin map exists, prefer it — but optionally drop addresses that never had data
+      // by verifying last value once (cheap) to avoid blank panels for pure ghosts.
+      // Build label->id map once.
+      const vlist = await fetch(`${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
+      const idByLabel = new Map((vlist.results||[])
+        .filter(v => v && typeof v.label === 'string' && v.id)
+        .map(v => [String(v.label), String(v.id)]));
 
-    // ---- B) No admin map → use v2 bulk last values to keep ONLY variables with data ----
-    // This avoids ghost/template variables (e.g., always-48) when trucks are offline or templated.
-    let bulk = null;
-    try{
-      const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`, {
-        headers:{ "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-      });
-      if (r.ok) bulk = await r.json();
-    }catch{ /* ignore */ }
-
-    if (bulk && typeof bulk === 'object') {
-      const hexWithData = Object.keys(bulk)
-        .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
-        .filter(k => bulk[k] && typeof bulk[k].timestamp === 'number');  // has at least one value
-      if (hexWithData.length) return hexWithData;
+      const out = [];
+      for (const lab of adminOrder){
+        const id = idByLabel.get(lab) || idByLabel.get(lab.toLowerCase()) || null;
+        if (!id) { out.push(lab); continue; } // keep admin slot (may be offline)
+        try{
+          const j = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
+          const row = j && (j.results||[])[0];
+          if (row && Number.isFinite(row.timestamp)) out.push(lab);
+        }catch{ out.push(lab); } // if check fails, keep the slot per admin map
+      }
+      return out;
     }
 
-    // ---- C) Fallback: list ALL variables (v1.6), de-dup case-insensitively ----
-    // Used only if bulk returns nothing (rare). Charts may be blank if no data ever.
+    // ---- B) NO ADMIN MAP → return ONLY hex labels that have at least one value ----
+    // 1) List all hex-labeled variables for this device (v1.6)
     const listUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
     const listJs  = await listRes.json();
 
+    // De-dupe case-insensitively; keep first occurrence for each label
+    const hexVars = [];
     const seen = new Set();
-    const out  = [];
-    (listJs.results || []).forEach(v => {
+    for (const v of (listJs.results || [])){
       const lab = String(v.label || '');
-      if (!/^[0-9a-fA-F]{16}$/.test(lab)) return;
+      if (!/^[0-9a-fA-F]{16}$/.test(lab)) continue;
       const key = lab.toLowerCase();
-      if (!seen.has(key)) { seen.add(key); out.push(lab); }
-    });
-    return out;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hexVars.push({ label: lab, id: String(v.id) });
+    }
+    if (!hexVars.length) return [];
+
+    // 2) Keep only those with at least one value ever (filters ghost/template variables)
+    const keep = [];
+    // Modest concurrency to avoid hammering: 6 in flight
+    const CHUNK = 6;
+    for (let i=0; i<hexVars.length; i+=CHUNK){
+      const batch = hexVars.slice(i, i+CHUNK);
+      const results = await Promise.all(batch.map(async hv => {
+        try{
+          const j = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
+          const row = j && (j.results||[])[0];
+          // Require a real timestamp and a numeric value (or a finite number after parse)
+          const hasTs = row && Number.isFinite(row.timestamp);
+          const val = row && row.value;
+          const hasVal = (typeof val === 'number' && Number.isFinite(val)) ||
+                         (typeof val === 'string' && Number.isFinite(parseFloat(val)));
+          return (hasTs && hasVal) ? hv.label : null;
+        }catch{ return null; }
+      }));
+      results.forEach(lab => { if (lab) keep.push(lab); });
+    }
+
+    // If nothing had data, fall back to showing all hex labels (charts will be blank)
+    return keep.length ? keep : hexVars.map(h => h.label);
   }catch(e){
-    console.error("fetchDallasAddresses (admin-first + v2-bulk)", e);
+    console.error("fetchDallasAddresses (admin-first + has-data filter)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 
 
