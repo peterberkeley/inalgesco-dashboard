@@ -726,36 +726,16 @@ async function updateCharts(deviceID, SENSORS){
       return;
     }
 
-    // Per-sensor quick slice
-    await Promise.all(SENSORS.map(async s=>{
-      if(!s.address || !s.chart) return;
-      const rows = await fetchUbidotsVar(deviceID, s.address, QUICK_POINTS);
-      if(!rows.length) return;
-      const ordered = rows.slice().reverse();
-      seriesByAddr.set(s.address, ordered);
+    // Per-sensor quick slice (cache only; no drawing here)
+await Promise.all(SENSORS.map(async s=>{
+  if(!s.address || !s.chart) return;
+  const rows = await fetchUbidotsVar(deviceID, s.address, QUICK_POINTS);
+  if(!rows.length) return;
+  const ordered = rows.slice().reverse();
+  seriesByAddr.set(s.address, ordered);
+  // Do not paint here. Drawing happens after we compute wndStart/wndEnd.
+}));
 
-      s.chart.data.labels = ordered.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
-      s.chart.data.datasets[0].data = ordered.map(r=>{
-        let v = parseFloat(r.value);
-        if(typeof s.calibration==="number") v += s.calibration;
-        return isNaN(v)?null:v;
-      });
-
-      // Dynamic y-scale (never clip top/bottom)
-      const vals = s.chart.data.datasets[0].data.filter(v => v != null && isFinite(v));
-      if (vals.length) {
-        const vmin = Math.min(...vals);
-        const vmax = Math.max(...vals);
-        const pad  = Math.max(0.5, (vmax - vmin) * 0.10);
-        s.chart.options.scales.y.min = vmin - pad;
-        s.chart.options.scales.y.max = vmax + pad;
-      } else {
-        delete s.chart.options.scales.y.min;
-        delete s.chart.options.scales.y.max;
-      }
-
-      s.chart.update('none');
-    }));
     // --- Window computation + filtered render (NOW vs LAST modes) ---
     // Compute selected time window:
     // - NOW: [now - selectedRangeMinutes, now]
