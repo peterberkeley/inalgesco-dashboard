@@ -10,7 +10,7 @@ let REFRESH_INTERVAL = 15_000;      // poll live every 15s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 const ONLINE_WINDOW_SEC = 300;      // online if seen within last 5 minutes
 const USE_V16_HEARTBEAT_FALLBACK = false;  // TEMP: dropdown uses devices v2 only
-const USE_V2_BULK = false;                 // browser CORS: disable v2 fetches
+const USE_V2_BULK = true;                  // enable fast per-device v2 bulk fetch
 
 const FORCE_VARCACHE_REFRESH = false;      // set true only if debugging var-id mismatches
 const SENSOR_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#8b5cf6", "#10b981", "#f97316"];
@@ -407,7 +407,8 @@ async function fetchDallasAddresses(deviceID){
 
     // Live window = selectedRange (min 15 min, live band capped at 2 h)
     const rangeMs   = Math.max(15 * 60 * 1000, rangeMin * 60 * 1000);
-    const FRESH_MS  = Math.min(rangeMs, 2 * 60 * 60 * 1000); // what we call "live" probes
+ // Allow probes seen within the last 14 days (not just 2h)
+const FRESH_MS  = Math.min(rangeMs, 14 * 24 * 60 * 60 * 1000);
     const FALL_MS   = rangeMs;                               // we DO NOT exceed liveCount with older probes
 
     // ---- 1) List all variables for this device (v1.6) ----
