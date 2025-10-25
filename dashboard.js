@@ -750,16 +750,31 @@ function ensureCharts(SENSORS, deviceID){
 
 
 async function updateCharts(deviceID, SENSORS){
-    { // stale-call guard: if user changed dropdown mid-fetch, abort this run
+  { // stale-call guard: if user changed dropdown mid-fetch, abort this run
     const selNow = document.getElementById('deviceSelect')?.value || null;
     const idNow  = window.__deviceMap?.[selNow]?.id || null;
     if (idNow && deviceID && idNow !== deviceID) return;
   }
+
+  // ── HARD RESET: wipe chart datasets up-front to prevent any visual carry-over ──
+  try {
+    SENSORS.forEach(s => {
+      if (!s?.chart) return;
+      s.chart.data.labels = [];
+      s.chart.data.datasets[0].data = [];
+      delete s.chart.options.scales.y.min;
+      delete s.chart.options.scales.y.max;
+      s.chart.update('none');
+    });
+  } catch (_) {}
+
   if (__chartsInFlight) { __chartsQueued = true; return; }
-      // ---- STALE DEVICE GUARD for "now" ranges ----
+
+  // ---- STALE DEVICE GUARD for "now" ranges ----
   // If the device's last activity is older than the selected window,
   // force-empty all series so offline trucks don't show spurious charts.
   if (selectedRangeMode === 'now') {
+
     const lastSeenMs = (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : null;
     const windowMs   = selectedRangeMinutes * 60 * 1000;
     const isStale    = (lastSeenMs == null) || ((Date.now() - lastSeenMs) > windowMs);
@@ -2199,9 +2214,7 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
-  // Discovered addresses for this device
-    // 6) Discovered addresses for this device
-  // Always recompute per device; never reuse a global from another truck.
+  // 6) Discovered addresses for this device — recompute per device
   let discovered = [];
   try {
     discovered = await fetchDallasAddresses(deviceID);
@@ -2209,9 +2222,7 @@ if (deviceID) {
     console.warn('Dallas discovery failed for', deviceLabel, e);
   }
 
-  // Prefer admin-declared addresses (stable chart count per truck),
-  // but if none are defined and discovery returned none,
-  // then do NOT reuse old data — show empty graphs instead.
+  // Prefer admin-declared; else discovered; else show empty (no reuse from other truck)
   const adminAddrs = getAdminAddresses(deviceLabel) || [];
   const liveDallas = (Array.isArray(adminAddrs) && adminAddrs.length > 0)
     ? adminAddrs
@@ -2226,23 +2237,13 @@ if (deviceID) {
   });
 
   // Build chart slots and render
-  SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
-if (!liveDallas.length) {
-  console.warn('No Dallas addresses for', deviceLabel, '→ clearing charts');
-  SENSORS = [{ id: 'avg', label: 'Chillrail Avg', chart: null, address: null, calibration: 0 }];
-  ensureCharts(SENSORS, deviceID);
-  return; // skip poll/updateCharts; prevents wrong data reuse
-}
+  if (!liveDallas.length) {
+    console.warn('No Dallas addresses for', deviceLabel, '→ clearing charts');
+    SENSORS = [{ id: 'avg', label: 'Chillrail Avg', chart: null, address: null, calibration: 0 }];
+    ensureCharts(SENSORS, deviceID);
+    return; // skip poll/updateCharts; prevents wrong data reuse
+  }
 
-
-  console.debug('[addresses]', {
-    deviceLabel, deviceID,
-    adminCount: adminAddrs.length,
-    finalCount: liveDallas.length,
-    liveDallas
-  });
-
-  // Build chart slots and render
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
   ensureCharts(SENSORS, deviceID);   // key on unique deviceID
   initMap();                         // idempotent
@@ -2255,6 +2256,7 @@ if (!liveDallas.length) {
 } else {
   console.error('Device ID not found for', deviceLabel);
 }
+
 
     // 7) Re-wire buttons in case DOM changed
     wireRangeButtons();
