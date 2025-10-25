@@ -913,15 +913,15 @@ async function updateCharts(deviceID, SENSORS){
 
       // 4) Fixed 60-min window ending at tLast
       wndEnd   = tLast;
+           // 4) Fixed 60-min window ending at tLast
+      wndEnd   = tLast;
       wndStart = tLast - (60 * 60 * 1000);
-
-
-
-
+    } // ← CLOSE the `else { ... }` block for selectedRangeMode !== 'now'
 
     // --- 2) Time-window fetch per variable (not by point count) ---
 // STRICT per-device lookup with case-insensitive label resolution
 async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000){
+
   await ensureVarCache(deviceID);
 
   // Try cache first (fast)
