@@ -782,25 +782,28 @@ async function updateCharts(deviceID, SENSORS){
       // One quick pass to find newest timestamp across this truck’s selected addresses
       await ensureVarCache(deviceID);
       for (const addr of addrs) {
-        const id = getVarIdCI(deviceID, addr);
+            const id = getVarIdCI(deviceID, addr);
         if (!id) continue;
         const r  = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
         if (!r.ok) continue;
         const j  = await r.json();
         const ts = j?.results?.[0]?.timestamp;
         if (Number.isFinite(ts) && ts > tLast) tLast = ts;
-      }
+      } // ← closes the for-loop over addrs
+
+      // ───────────────────────────────────────────────────────────────
+      // v2 Fallback: ensure we have an anchor timestamp (tLast)
+      // ───────────────────────────────────────────────────────────────
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
-        // Fallback once: try v2 bulk last-values to get an anchor timestamp
         try {
           const bulk = await fetchDeviceLastValuesV2(deviceID); // /v2.0/devices/{id}/_/values/last
           if (bulk && typeof bulk === "object") {
             for (const s of SENSORS) {
               if (!s.address) continue;
-              const o = bulk[s.address];
-              const ts = o && o.timestamp;
-              if (Number.isFinite(ts) && ts > tLast) {
-                tLast = ts;
+              const o   = bulk[s.address];
+              const ts2 = o && o.timestamp;
+              if (Number.isFinite(ts2) && ts2 > tLast) {
+                tLast = ts2;
               }
             }
           }
@@ -808,13 +811,26 @@ async function updateCharts(deviceID, SENSORS){
           console.warn("v2 bulk fallback failed", err);
         }
 
-        // After fallback, still nothing? Clear and exit.
+        // After fallback, still nothing → clear and exit
         if (!Number.isFinite(tLast) || tLast === -Infinity) {
           SENSORS.forEach(s => {
             if (!s.chart) return;
             s.chart.data.labels = [];
             s.chart.data.datasets[0].data = [];
             delete s.chart.options.scales.y.min;
+            delete s.chart.options.scales.y.max;
+            s.chart.update("none");
+          });
+          const rng0 = document.getElementById("chartRange");
+          if (rng0) rng0.textContent = "";
+          return;
+        }
+
+        // We have an anchor from v2 — use a strict 60-minute window ending at tLast
+        wndEnd   = tLast;
+        wndStart = tLast - (60 * 60 * 1000);
+      }
+
             delete s.chart.options.scales.y.max;
             s.chart.update("none");
           });
