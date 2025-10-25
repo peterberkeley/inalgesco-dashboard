@@ -111,6 +111,33 @@ function getAdminAddresses(deviceLabel){
 }
 
 /* =================== Timezone helpers =================== */
+// --- Admin helpers: ICCID and identity-fencing ---
+function getAdminIccid(deviceLabel){
+  // Pull an ICCID string from the Admin map if present (used to fence wrong publishers)
+  const m = getAdminMapFor(deviceLabel);
+  const v = m && typeof m.iccid === 'string' ? m.iccid.trim() : null;
+  return v && v.length ? v : null;
+}
+
+/** Decide whether to suppress auto-discovered Dallas addresses to avoid
+ *  showing another truck's live data.
+ *  Rule:
+ *   - If the device has NO admin-mapped sensors AND appears Offline (v2 Devices)
+ *     AND we have no heartbeat variables (signal/volt/gps) to corroborate activity,
+ *     and the current view is 'now' → suppress discovery (show nothing).
+ */
+async function shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline){
+  if (getAdminAddresses(deviceLabel).length > 0) return false;              // admin mapping exists
+  if (selectedRangeMode !== 'now') return false;                            // only gate NOW view
+  if (isOnline) return false;                                              // v2 says it's online
+
+  // No admin map + Offline -> check if the device even exposes heartbeat vars on this label
+  await ensureVarCache(deviceID);
+  const caps = variableCache[deviceID] || {};
+  const hasHB = !!(caps.signal || caps.rssi || caps.csq || caps.volt || caps.vbatt || caps.battery || caps.batt || caps.gps || caps.position);
+  return !hasHB; // if no heartbeat variables, suppress auto-discovery
+}
+
 /* Rule:
  * 1) If admin set sensorMapConfig[deviceLabel].tz (IANA), use it.
  * 2) Else auto-lookup with tz-lookup (loaded once from unpkg).
@@ -1158,6 +1185,25 @@ async function poll(deviceID, SENSORS){
     // ICCID only if in window
     const iccidInWnd = (bulk.iccid && inWnd(bulk.iccid.timestamp) && bulk.iccid.value != null)
       ? String(bulk.iccid.value) : null;
+    // --- Identity fence: if Admin ICCID is set and does not match, suppress drawing in NOW view
+    try {
+      const selectedLabel = document.getElementById("deviceSelect")?.value || null;
+      const adminIcc = getAdminIccid(selectedLabel);
+      if (adminIcc && iccidInWnd && String(adminIcc).trim() !== String(iccidInWnd).trim() && selectedRangeMode === 'now') {
+        console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', adminIcc, 'now=', iccidInWnd, '— suppressing draw.');
+        const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
+        // Clear charts immediately
+        SENSORS.forEach(s => {
+          if (!s.chart) return;
+          s.chart.data.labels = [];
+          s.chart.data.datasets[0].data = [];
+          delete s.chart.options.scales.y.min;
+          delete s.chart.options.scales.y.max;
+          s.chart.update('none');
+        });
+        return; // stop the fast path
+      }
+    } catch(_) {}
 
     // GPS only if its timestamp is in window
     let latInWnd = null, lonInWnd = null, speedInWnd = null;
@@ -1294,6 +1340,24 @@ async function poll(deviceID, SENSORS){
   // ICCID:
   const iccidVal = (iccArr[0] && inWnd(iccArr[0].timestamp) && iccArr[0].value != null)
     ? String(iccArr[0].value) : null;
+  // Identity fence (fallback path)
+  try {
+    const selectedLabel = document.getElementById("deviceSelect")?.value || null;
+    const adminIcc = getAdminIccid(selectedLabel);
+    if (adminIcc && iccidVal && String(adminIcc).trim() !== String(iccidVal).trim() && selectedRangeMode === 'now') {
+      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', adminIcc, 'now=', iccidVal, '— suppressing draw.');
+      const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
+      SENSORS.forEach(s => {
+        if (!s.chart) return;
+        s.chart.data.labels = [];
+        s.chart.data.datasets[0].data = [];
+        delete s.chart.options.scales.y.min;
+        delete s.chart.options.scales.y.max;
+        s.chart.update('none');
+      });
+      return;
+    }
+  } catch(_) {}
 
   // GPS only if its timestamp is in window (no stale carry-forward)
   let latInWnd = null, lonInWnd = null, speedInWnd = null;
@@ -2260,10 +2324,17 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
+  if (deviceID) {
   // 6) Discovered addresses for this device — recompute per device
+  // NEW: suppress auto-discovered Dallas when device has no admin mapping AND appears Offline in "NOW" mode
   let discovered = [];
   try {
-    discovered = await fetchDallasAddresses(deviceID);
+    const suppress = await shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline);
+    if (!suppress) {
+      discovered = await fetchDallasAddresses(deviceID);
+    } else {
+      console.warn('[gating] Suppressing auto-discovered Dallas for', deviceLabel, '(Offline + no admin mapping, NOW view)');
+    }
   } catch (e) {
     console.warn('Dallas discovery failed for', deviceLabel, e);
   }
@@ -2302,6 +2373,7 @@ if (deviceID) {
 } else {
   console.error('Device ID not found for', deviceLabel);
 }
+
 
 
     // 7) Re-wire buttons in case DOM changed
