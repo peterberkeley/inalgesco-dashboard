@@ -2379,11 +2379,19 @@ if (deviceID) {
     console.warn('Dallas discovery failed for', deviceLabel, e);
   }
 
-  // Prefer admin-declared; else discovered; else show empty (no reuse from other truck)
-  const adminAddrs = getAdminAddresses(deviceLabel) || [];
-  const liveDallas = (Array.isArray(adminAddrs) && adminAddrs.length > 0)
-    ? adminAddrs
-    : (Array.isArray(discovered) && discovered.length > 0 ? discovered : []);
+  // Prefer admin-declared; else discovered *only if online*; else none
+const adminAddrs = getAdminAddresses(deviceLabel) || [];
+let liveDallas = [];
+
+if (Array.isArray(adminAddrs) && adminAddrs.length > 0) {
+  liveDallas = adminAddrs;
+} else if (isOnline && Array.isArray(discovered) && discovered.length > 0) {
+  liveDallas = discovered;
+} else {
+  console.warn('[Dallas gating] No admin sensors and device offline → skip charts');
+  liveDallas = [];  // show nothing, prevents cross-truck leak
+}
+
 
   console.debug('[addresses]', {
     deviceLabel, deviceID,
