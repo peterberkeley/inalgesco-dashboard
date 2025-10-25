@@ -2171,13 +2171,34 @@ if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
   // Discovered addresses for this device
-  const discovered = await fetchDallasAddresses(deviceID);
+    // 6) Discovered addresses for this device
+  // Always recompute per device; never reuse a global from another truck.
+  let discovered = [];
+  try {
+    discovered = await fetchDallasAddresses(deviceID);
+  } catch (e) {
+    console.warn('Dallas discovery failed for', deviceLabel, e);
+  }
 
-  // Prefer admin-declared addresses (stable chart count per truck)
-  const adminAddrs = getAdminAddresses(deviceLabel);
+  // Prefer admin-declared addresses (stable chart count per truck),
+  // but if none are defined and discovery returned none,
+  // then do NOT reuse old data — show empty graphs instead.
+  const adminAddrs = getAdminAddresses(deviceLabel) || [];
   const liveDallas = (Array.isArray(adminAddrs) && adminAddrs.length > 0)
     ? adminAddrs
-    : (Array.isArray(discovered) ? discovered : []);
+    : (Array.isArray(discovered) && discovered.length > 0 ? discovered : []);
+
+  console.debug('[addresses]', {
+    deviceLabel, deviceID,
+    adminCount: adminAddrs.length,
+    discoveredCount: discovered.length,
+    finalCount: liveDallas.length,
+    liveDallas
+  });
+
+  // Build chart slots and render
+  SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+
 
   console.debug('[addresses]', {
     deviceLabel, deviceID,
