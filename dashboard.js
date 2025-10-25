@@ -911,8 +911,6 @@ async function updateCharts(deviceID, SENSORS){
         }
       } catch (_) {}
 
-      // 4) Fixed 60-min window ending at tLast
-      wndEnd   = tLast;
            // 4) Fixed 60-min window ending at tLast
       wndEnd   = tLast;
       wndStart = tLast - (60 * 60 * 1000);
