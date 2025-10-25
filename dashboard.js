@@ -776,12 +776,9 @@ async function updateCharts(deviceID, SENSORS){
       wndEnd   = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
     } else {
-      // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
-            let tLast = -Infinity;
-
       // One quick pass to find newest timestamp across this truck’s selected addresses
-      await ensureVarCache(deviceID);
-      for (const addr of addrs) {
+await ensureVarCache(deviceID);
+for (const addr of addrs) {
   const id = getVarIdCI(deviceID, addr);
   if (!id) continue;
   const r = await fetch(
@@ -839,20 +836,6 @@ if (!Number.isFinite(tLast) || tLast === -Infinity) {
   wndStart = tLast - 60 * 60 * 1000; // 1 hour
 }
 
-            delete s.chart.options.scales.y.max;
-            s.chart.update("none");
-          });
-          const rng0 = document.getElementById("chartRange");
-          if (rng0) rng0.textContent = "";
-          return;
-        }
-
-        // We have an anchor from v2 — use a strict 60-minute window ending at tLast
-        wndEnd = tLast;
-        wndStart = tLast - (60 * 60 * 1000);
-      }
-
-
 
     // --- 2) Time-window fetch per variable (not by point count) ---
 // STRICT per-device lookup with case-insensitive label resolution
@@ -876,8 +859,6 @@ async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000
   }
   return out;
 }
-
-
 
     // Fetch time-windowed series for each sensor in parallel
     const seriesByAddr = new Map();
