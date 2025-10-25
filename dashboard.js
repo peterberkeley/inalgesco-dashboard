@@ -770,72 +770,69 @@ async function updateCharts(deviceID, SENSORS){
       return;
     }
 
-    // --- 1) Compute window (absolute ms) ---
+      // --- 1) Compute window (absolute ms) ---
     let wndStart, wndEnd;
     if (selectedRangeMode === 'now') {
       wndEnd   = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
     } else {
-      // One quick pass to find newest timestamp across this truck’s selected addresses
-await ensureVarCache(deviceID);
-for (const addr of addrs) {
-  const id = getVarIdCI(deviceID, addr);
-  if (!id) continue;
-  const r = await fetch(
-    `${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(
-      UBIDOTS_ACCOUNT_TOKEN
-    )}`
-  );
-  if (!r.ok) continue;
-  const j = await r.json();
-  const ts = j?.results?.[0]?.timestamp;
-  if (Number.isFinite(ts) && ts > tLast) tLast = ts;
-} // ← closes the for-loop
+      // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
+      let tLast = -Infinity;
 
-// ==========================================================
-// v2 fallback — ensures tLast anchor even for offline trucks
-// ==========================================================
-if (!Number.isFinite(tLast) || tLast === -Infinity) {
-  try {
-    const bulk = await fetchDeviceLastValuesV2(deviceID); // /v2.0/devices/{id}/_/values/last
-    if (bulk && typeof bulk === "object") {
-      for (const s of SENSORS) {
-        if (!s.address) continue;
-        const o = bulk[s.address];
-        const ts2 = o && o.timestamp;
-        if (Number.isFinite(ts2) && ts2 > tLast) {
-          tLast = ts2;
+      // One quick pass to find newest timestamp across this truck’s selected addresses
+      await ensureVarCache(deviceID);
+      for (const addr of addrs) {
+        const id = getVarIdCI(deviceID, addr);
+        if (!id) continue;
+        const r = await fetch(
+          `${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(
+            UBIDOTS_ACCOUNT_TOKEN
+          )}`
+        );
+        if (!r.ok) continue;
+        const j  = await r.json();
+        const ts = j?.results?.[0]?.timestamp;
+        if (Number.isFinite(ts) && ts > tLast) tLast = ts;
+      } // ← closes the for-loop
+
+      // ==========================================================
+      // v2 fallback — ensures tLast anchor even for offline trucks
+      // ==========================================================
+      if (!Number.isFinite(tLast) || tLast === -Infinity) {
+        try {
+          const bulk = await fetchDeviceLastValuesV2(deviceID); // /v2.0/devices/{id}/_/values/last
+          if (bulk && typeof bulk === 'object') {
+            for (const s of SENSORS) {
+              if (!s.address) continue;
+              const o   = bulk[s.address];
+              const ts2 = o && o.timestamp;
+              if (Number.isFinite(ts2) && ts2 > tLast) tLast = ts2;
+            }
+          }
+        } catch (err) {
+          console.warn('v2 bulk fallback failed', err);
+        }
+
+        // After fallback, still nothing → clear and exit
+        if (!Number.isFinite(tLast) || tLast === -Infinity) {
+          SENSORS.forEach(s => {
+            if (!s.chart) return;
+            s.chart.data.labels = [];
+            s.chart.data.datasets[0].data = [];
+            delete s.chart.options.scales.y.min;
+            delete s.chart.options.scales.y.max;
+            s.chart.update('none');
+          });
+          const rng0 = document.getElementById('chartRange');
+          if (rng0) rng0.textContent = '';
+          return;
         }
       }
+
+      // We have an anchor → use a strict 60-minute window ending at tLast
+      wndEnd   = tLast;
+      wndStart = tLast - (60 * 60 * 1000);
     }
-  } catch (err) {
-    console.warn("v2 bulk fallback failed", err);
-  }
-
-  // After fallback, still nothing → clear and exit
-  if (!Number.isFinite(tLast) || tLast === -Infinity) {
-    SENSORS.forEach(s => {
-      if (!s.chart) return;
-      s.chart.data.labels = [];
-      s.chart.data.datasets[0].data = [];
-      delete s.chart.options.scales.y.min;
-      delete s.chart.options.scales.y.max;
-      s.chart.update("none");
-    });
-    const rng0 = document.getElementById("chartRange");
-    if (rng0) rng0.textContent = "";
-    return;
-  }
-
-  // We have an anchor from v2 — use a strict 60-minute window ending at tLast
-  wndEnd = tLast;
-  wndStart = tLast - 60 * 60 * 1000;
-} else {
-  // Normal case: v1.6 gave us an anchor → set window normally
-  wndEnd = tLast;
-  wndStart = tLast - 60 * 60 * 1000; // 1 hour
-}
-
 
     // --- 2) Time-window fetch per variable (not by point count) ---
 // STRICT per-device lookup with case-insensitive label resolution
