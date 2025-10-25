@@ -183,18 +183,6 @@ async function shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline){
 
   return false;
 }
-deviceLabel, deviceID, isOnline){
-  if (getAdminAddresses(deviceLabel).length > 0) return false;              // admin mapping exists
-  if (selectedRangeMode !== 'now') return false;                            // only gate NOW view
-  if (isOnline) return false;                                              // v2 says it's online
-
-  // No admin map + Offline -> check if the device even exposes heartbeat vars on this label
-  await ensureVarCache(deviceID);
-  const caps = variableCache[deviceID] || {};
-  const hasHB = !!(caps.signal || caps.rssi || caps.csq || caps.volt || caps.vbatt || caps.battery || caps.batt || caps.gps || caps.position);
-  return !hasHB; // if no heartbeat variables, suppress auto-discovery
-}
-
 /* Rule:
  * 1) If admin set sensorMapConfig[deviceLabel].tz (IANA), use it.
  * 2) Else auto-lookup with tz-lookup (loaded once from unpkg).
@@ -637,15 +625,6 @@ function pickHeartbeatLabels(deviceId, deviceLabel){
     );
   }
   return hb;
-}
-// --- Helper: resolve correct admin mapping even if device label case differs ---
-function getAdminMapFor(deviceLabel){
-  const cfg = sensorMapConfig || {};
-  if (cfg[deviceLabel]) return cfg[deviceLabel];
-  const keyMatch = Object.keys(cfg).find(
-    x => String(x).toLowerCase() === String(deviceLabel).toLowerCase()
-  );
-  return keyMatch ? cfg[keyMatch] : {};
 }
 // --- Helper: resolve correct admin mapping even if device label case differs ---
 function getAdminMapFor(deviceLabel){
@@ -1403,7 +1382,7 @@ try {
     ? Number(voltArr[0].value) : null;
 
   // ICCID:
-  c// Latest ICCID value (ignore timestamp for identity check)
+  // Latest ICCID value (ignore timestamp for identity check)
 const iccidVal = (iccArr[0] && iccArr[0].value != null) ? String(iccArr[0].value).trim() : null;
 
 // Identity fence (fallback path, NOW view)
