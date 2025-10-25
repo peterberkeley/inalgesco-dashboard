@@ -440,7 +440,7 @@ async function fetchDallasAddresses(deviceID){
     if (window.USE_V2_BULK) {
       try{
         const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`,
-                              {headers:{'X-Auth-Token':UBIDOTS_ACCOUNT_TOKEN}});
+                              { headers:{ 'X-Auth-Token': UBIDOTS_ACCOUNT_TOKEN } });
         if (r.ok){
           const bulk = await r.json();
           const fresh = Object.entries(bulk)
@@ -488,6 +488,7 @@ async function fetchDallasAddresses(deviceID){
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 
 /* =================== Heartbeat labels resolver =================== */
