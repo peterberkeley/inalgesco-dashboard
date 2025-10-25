@@ -775,11 +775,11 @@ async function updateCharts(deviceID, SENSORS){
     if (selectedRangeMode === 'now') {
       wndEnd   = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
-    } else {
+       } else {
       // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
       let tLast = -Infinity;
 
-      // One quick pass to find newest timestamp across this truck’s selected addresses
+      // One quick pass to find newest timestamp across this truck’s selected addresses (v1.6 latest point)
       await ensureVarCache(deviceID);
       for (const addr of addrs) {
         const id = getVarIdCI(deviceID, addr);
@@ -797,6 +797,7 @@ async function updateCharts(deviceID, SENSORS){
 
       // ==========================================================
       // v2 fallback — ensures tLast anchor even for offline trucks
+      // (only used to obtain the anchor time; series still fetched via v1.6 window)
       // ==========================================================
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         try {
