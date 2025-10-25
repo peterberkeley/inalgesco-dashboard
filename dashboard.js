@@ -791,43 +791,44 @@ async function updateCharts(deviceID, SENSORS){
         if (Number.isFinite(ts) && ts > tLast) tLast = ts;
       }
 
-                    if (!Number.isFinite(tLast) || tLast === -Infinity) {
+                  if (!Number.isFinite(tLast) || tLast === -Infinity) {
         // Fallback once: try v2 bulk last-values to get an anchor timestamp
         try {
           const bulk = await fetchDeviceLastValuesV2(deviceID); // /v2.0/devices/{id}/_/values/last
-          if (bulk && typeof bulk === 'object') {
+          if (bulk && typeof bulk === "object") {
             for (const s of SENSORS) {
               if (!s.address) continue;
               const o = bulk[s.address];
-              const ts = o?.timestamp;
+              const ts = o && o.timestamp;
               if (Number.isFinite(ts) && ts > tLast) {
                 tLast = ts;
               }
             }
           }
         } catch (err) {
-          console.warn('v2 bulk fallback failed', err);
+          console.warn("v2 bulk fallback failed", err);
         }
 
+        // After fallback, still nothing? Clear and exit.
         if (!Number.isFinite(tLast) || tLast === -Infinity) {
-          // No anchor at all → clear and exit
           SENSORS.forEach(s => {
             if (!s.chart) return;
             s.chart.data.labels = [];
             s.chart.data.datasets[0].data = [];
             delete s.chart.options.scales.y.min;
             delete s.chart.options.scales.y.max;
-            s.chart.update('none');
+            s.chart.update("none");
           });
-          const rng0 = document.getElementById('chartRange');
-          if (rng0) rng0.textContent = '';
+          const rng0 = document.getElementById("chartRange");
+          if (rng0) rng0.textContent = "";
           return;
         }
 
         // We have an anchor from v2 — use a strict 60-minute window ending at tLast
-        wndEnd   = tLast;
+        wndEnd = tLast;
         wndStart = tLast - (60 * 60 * 1000);
       }
+
 
 
     // --- 2) Time-window fetch per variable (not by point count) ---
