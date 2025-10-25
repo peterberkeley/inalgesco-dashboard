@@ -415,10 +415,12 @@ async function fetchDeviceLastValuesV2(deviceID){
   }
 }
 
+// REPLACE lines from:  async function fetchDallasAddresses(deviceID){  …  }
+// THROUGH the line:    window.fetchDallasAddresses = fetchDallasAddresses;
+
 async function fetchDallasAddresses(deviceID){
   try{
     // ---- A) ADMIN MAP (authoritative) ----
-    // If an admin map exists for this device label, return it as-is (stable count & aliases).
     try{
       const entry = Object.entries(window.__deviceMap || {}).find(([,info]) => info && info.id === deviceID);
       const deviceLabel = entry ? entry[0] : null;
@@ -432,14 +434,36 @@ async function fetchDallasAddresses(deviceID){
       }
     }catch{ /* ignore and fall through */ }
 
-    // ---- B) NO ADMIN MAP → keep ONLY this device's hex variables that have ≥1 value ----
-    // 1) List variables for THIS device (v1.6). This guarantees per-device scoping.
+    // ---- B) NO ADMIN MAP → return ONLY "fresh" addresses for THIS device ----
+    // Freshness: consider addresses whose latest timestamp is within the last 48 hours.
+    // (Adjust FRESH_HOURS if needed.)
+    const FRESH_HOURS = 48;
+    const FRESH_MS    = FRESH_HOURS * 60 * 60 * 1000;
+    const nowMs       = Date.now();
+
+    // B1) Fast path: Ubidots v2 bulk last values (single call)
+    if (USE_V2_BULK) {
+      try{
+        const bulk = await fetchDeviceLastValuesV2(deviceID); // object: label -> {value, timestamp, ...}
+        if (bulk && typeof bulk === 'object'){
+          const fresh = Object.entries(bulk)
+            .filter(([lab,obj]) => /^[0-9a-fA-F]{16}$/.test(lab) &&
+                                   Number.isFinite(obj?.timestamp) &&
+                                   (nowMs - obj.timestamp) <= FRESH_MS)
+            .map(([lab]) => lab);
+          if (fresh.length) return fresh;
+        }
+      }catch(e){ console.warn('v2 bulk last filter failed', e); }
+    }
+
+    // B2) Fallback: v1.6 per-variable probe, but require freshness
+    //  - List THIS device’s variables
     const listUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) return [];
     const listJs  = await listRes.json();
 
-    // De-dupe labels case-insensitively; keep (label,id) pairs
+    // De-dupe labels case-insensitively; keep (label,id) pairs for 16-hex labels
     const hexVars = [];
     const seen = new Set();
     for (const v of (listJs.results || [])){
@@ -452,8 +476,7 @@ async function fetchDallasAddresses(deviceID){
     }
     if (!hexVars.length) return [];
 
-    // 2) Filter to variables that have at least one value ever for THIS device
-    const keep = [];
+    const keepFresh = [];
     const CHUNK = 6; // modest concurrency
     for (let i=0; i<hexVars.length; i+=CHUNK){
       const batch = hexVars.slice(i, i+CHUNK);
@@ -461,21 +484,23 @@ async function fetchDallasAddresses(deviceID){
         try{
           const j = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
           const row = j && (j.results||[])[0];
-          // accept if a timestamp exists (value can be string/number; we only need “has posted”)
-          return (row && Number.isFinite(row.timestamp)) ? hv.label : null;
+          const ts  = row && Number.isFinite(row.timestamp) ? row.timestamp : null;
+          // accept ONLY if a recent value exists
+          return (ts != null && (nowMs - ts) <= FRESH_MS) ? hv.label : null;
         }catch{ return null; }
       }));
-      results.forEach(lab => { if (lab) keep.push(lab); });
+      results.forEach(lab => { if (lab) keepFresh.push(lab); });
     }
 
-    // IMPORTANT: Do NOT fall back to “all hex labels” — that reintroduces ghost/template probes.
-    return keep; // may be []
+    // IMPORTANT: Do NOT fall back to "ever posted"; stale ghosts would reappear.
+    return keepFresh;  // may be []
   }catch(e){
-    console.error("fetchDallasAddresses (device-strict, data-strict)", e);
+    console.error("fetchDallasAddresses (fresh-only)", e);
     return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
