@@ -775,7 +775,7 @@ async function updateCharts(deviceID, SENSORS){
     if (selectedRangeMode === 'now') {
       wndEnd   = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
-       } else {
+          } else {
       // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
       let tLast = -Infinity;
 
@@ -834,6 +834,7 @@ async function updateCharts(deviceID, SENSORS){
       wndEnd   = tLast;
       wndStart = tLast - (60 * 60 * 1000);
     }
+
 
     // --- 2) Time-window fetch per variable (not by point count) ---
 // STRICT per-device lookup with case-insensitive label resolution
