@@ -790,8 +790,7 @@ async function updateCharts(deviceID, SENSORS){
         const ts = j?.results?.[0]?.timestamp;
         if (Number.isFinite(ts) && ts > tLast) tLast = ts;
       }
-
-                  if (!Number.isFinite(tLast) || tLast === -Infinity) {
+      if (!Number.isFinite(tLast) || tLast === -Infinity) {
         // Fallback once: try v2 bulk last-values to get an anchor timestamp
         try {
           const bulk = await fetchDeviceLastValuesV2(deviceID); // /v2.0/devices/{id}/_/values/last
