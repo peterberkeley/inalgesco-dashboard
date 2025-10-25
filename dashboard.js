@@ -263,27 +263,29 @@ window.buildDeviceDropdownFromConfig = buildDeviceDropdownFromConfig;
 const __varCachePromises = (window.__varCachePromises = window.__varCachePromises || {});
 
 async function ensureVarCache(deviceID){
-  if (variableCache[deviceID]) return;
+  // Only early-return if we actually have entries for this device
+  if (variableCache[deviceID] && Object.keys(variableCache[deviceID]).length > 0) return;
 
-  const url = `${UBIDOTS_V1}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+  const url = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
   try{
     const rs = await fetch(url);
-    if(!rs.ok){ variableCache[deviceID]={}; return; }
+    if(!rs.ok){ variableCache[deviceID] = {}; return; }
     const jl = await rs.json();
 
-    // Fast map: keep the first id we see per label (no /values probing)
     const map = {};
     (jl.results || []).forEach(v => {
-      const lab = v.label;
-      if (!map[lab]) map[lab] = v.id; // first-seen id
+      const lab = String(v.label || "");
+      if (!map[lab]) map[lab] = String(v.id); // first-seen id per label
     });
 
     variableCache[deviceID] = map;
   }catch(e){
     console.error("ensureVarCache", e);
-    variableCache[deviceID] = {};
+    // allow a retry next time instead of “empty forever”
+    delete variableCache[deviceID];
   }
 }
+
 
 // Case-insensitive per-device variable ID resolver for hex labels
 function getVarIdCI(deviceID, label){
@@ -300,6 +302,28 @@ function getVarIdCI(deviceID, label){
   }
   return null;
 }
+// ---------------------------------------------------------------------
+// Strict per-device resolver (does NOT rely on the global cache)
+// ---------------------------------------------------------------------
+async function resolveVarIdStrict(deviceID, varLabel){
+  const want = String(varLabel).toLowerCase();
+  const url  = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  const j = await r.json();
+  const hit = (j.results || []).find(v => String(v.label||'').toLowerCase() === want);
+  return hit ? String(hit.id) : null;
+}
+// ---------------------------------------------------------------------
+// Fetch the newest timestamp (ms) for a variable ID (v1.6 endpoint)
+// ---------------------------------------------------------------------
+async function fetchLastTsV1(varId){
+  const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(varId)}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return (j?.results && j.results[0]?.timestamp) || null;
+}
+
 async function fetchUbidotsVar(deviceID, varLabel, limit = 1) {
   try {
     await ensureVarCache(deviceID);
@@ -726,6 +750,11 @@ function ensureCharts(SENSORS, deviceID){
 
 
 async function updateCharts(deviceID, SENSORS){
+    { // stale-call guard: if user changed dropdown mid-fetch, abort this run
+    const selNow = document.getElementById('deviceSelect')?.value || null;
+    const idNow  = window.__deviceMap?.[selNow]?.id || null;
+    if (idNow && deviceID && idNow !== deviceID) return;
+  }
   if (__chartsInFlight) { __chartsQueued = true; return; }
       // ---- STALE DEVICE GUARD for "now" ranges ----
   // If the device's last activity is older than the selected window,
@@ -775,33 +804,23 @@ async function updateCharts(deviceID, SENSORS){
     if (selectedRangeMode === 'now') {
       wndEnd   = Date.now();
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
-          } else {
-      // 'last' mode → anchor to freshest timestamp we actually have (across sensors)
+              } else {
+      // --- 'last' mode: anchor strictly to the selected device's freshest timestamp ---
       let tLast = -Infinity;
 
-      // One quick pass to find newest timestamp across this truck’s selected addresses (v1.6 latest point)
+      // 1) v1.6 per-address timestamps with strict per-device resolution
       await ensureVarCache(deviceID);
       for (const addr of addrs) {
-        const id = getVarIdCI(deviceID, addr);
+        const id = await resolveVarIdStrict(deviceID, addr); // strict per-device, not cache-only
         if (!id) continue;
-        const r = await fetch(
-          `${UBIDOTS_V1}/variables/${id}/values/?page_size=1&token=${encodeURIComponent(
-            UBIDOTS_ACCOUNT_TOKEN
-          )}`
-        );
-        if (!r.ok) continue;
-        const j  = await r.json();
-        const ts = j?.results?.[0]?.timestamp;
+        const ts = await fetchLastTsV1(id);
         if (Number.isFinite(ts) && ts > tLast) tLast = ts;
-      } // ← closes the for-loop
+      }
 
-      // ==========================================================
-      // v2 fallback — ensures tLast anchor even for offline trucks
-      // (only used to obtain the anchor time; series still fetched via v1.6 window)
-      // ==========================================================
+      // 2) Try v2 bulk once if still nothing (header auth only)
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         try {
-          const bulk = await fetchDeviceLastValuesV2(deviceID); // /v2.0/devices/{id}/_/values/last
+          const bulk = await fetchDeviceLastValuesV2(deviceID); // uses X-Auth-Token header
           if (bulk && typeof bulk === 'object') {
             for (const s of SENSORS) {
               if (!s.address) continue;
@@ -810,30 +829,31 @@ async function updateCharts(deviceID, SENSORS){
               if (Number.isFinite(ts2) && ts2 > tLast) tLast = ts2;
             }
           }
-        } catch (err) {
-          console.warn('v2 bulk fallback failed', err);
-        }
-
-        // After fallback, still nothing → clear and exit
-        if (!Number.isFinite(tLast) || tLast === -Infinity) {
-          SENSORS.forEach(s => {
-            if (!s.chart) return;
-            s.chart.data.labels = [];
-            s.chart.data.datasets[0].data = [];
-            delete s.chart.options.scales.y.min;
-            delete s.chart.options.scales.y.max;
-            s.chart.update('none');
-          });
-          const rng0 = document.getElementById('chartRange');
-          if (rng0) rng0.textContent = '';
-          return;
+        } catch (e) {
+          console.warn('v2 bulk fallback failed', e);
         }
       }
 
-      // We have an anchor → use a strict 60-minute window ending at tLast
+      // 3) No anchor → clear charts and exit (prevents painting another device's data)
+      if (!Number.isFinite(tLast) || tLast === -Infinity) {
+        const rng0 = document.getElementById('chartRange');
+        if (rng0) rng0.textContent = '';
+        SENSORS.forEach(s => {
+          if (!s.chart) return;
+          s.chart.data.labels = [];
+          s.chart.data.datasets[0].data = [];
+          delete s.chart.options.scales.y.min;
+          delete s.chart.options.scales.y.max;
+          s.chart.update('none');
+        });
+        return;
+      }
+
+      // 4) Fixed 60-min window ending at tLast
       wndEnd   = tLast;
       wndStart = tLast - (60 * 60 * 1000);
     }
+
 
 
     // --- 2) Time-window fetch per variable (not by point count) ---
@@ -841,11 +861,14 @@ async function updateCharts(deviceID, SENSORS){
 async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000){
   await ensureVarCache(deviceID);
 
-  // Case-insensitive map hit for THIS device
-  const id = getVarIdCI(deviceID, varLabel);
-  if (!id || typeof id !== 'string') return [];
+  // Try cache first (fast)
+  let id = getVarIdCI(deviceID, varLabel);
 
-  let url = `${UBIDOTS_V1}/variables/${id}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+  // Strict per-device fallback if cache miss
+  if (!id) id = await resolveVarIdStrict(deviceID, varLabel);
+  if (!id) return [];
+
+  let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
   const out = [];
   while (url) {
     const r = await fetch(url);
@@ -854,10 +877,11 @@ async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000
     const rows = j?.results || [];
     out.push(...rows);
     if (out.length >= hardCap) break;
-    url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${UBIDOTS_ACCOUNT_TOKEN}` : null;
+    url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}` : null;
   }
   return out;
 }
+
 
     // Fetch time-windowed series for each sensor in parallel
     const seriesByAddr = new Map();
@@ -980,6 +1004,11 @@ seriesByAddr.set(s.address, ordered);
 
 // Part 3 — FAST live paint: bulk last values, then fallback
 async function poll(deviceID, SENSORS){
+    { // stale-call guard: if user changed dropdown mid-fetch, abort this run
+    const selNow = document.getElementById('deviceSelect')?.value || null;
+    const idNow  = window.__deviceMap?.[selNow]?.id || null;
+    if (idNow && deviceID && idNow !== deviceID) return;
+  }
   // ---- FAST PATH: one call gets all last values; draw immediately if available ----
   const bulk = await fetchDeviceLastValuesV2(deviceID);
   if (bulk) {
@@ -1056,7 +1085,7 @@ async function poll(deviceID, SENSORS){
         if (!Number.isNaN(v)) readingsInWindow[s.address] = v;
       }
     }
-
+    
     // Radio/Power with window filter
     const valInWnd = k => {
       const o = bulk[k];
