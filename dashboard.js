@@ -2198,6 +2198,12 @@ if (deviceID) {
 
   // Build chart slots and render
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+if (!liveDallas.length) {
+  console.warn('No Dallas addresses for', deviceLabel, '→ clearing charts');
+  SENSORS = [{ id: 'avg', label: 'Chillrail Avg', chart: null, address: null, calibration: 0 }];
+  ensureCharts(SENSORS, deviceID);
+  return; // skip poll/updateCharts; prevents wrong data reuse
+}
 
 
   console.debug('[addresses]', {
