@@ -2324,7 +2324,6 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
-  if (deviceID) {
   // 6) Discovered addresses for this device — recompute per device
   // NEW: suppress auto-discovered Dallas when device has no admin mapping AND appears Offline in "NOW" mode
   let discovered = [];
@@ -2373,8 +2372,6 @@ if (deviceID) {
 } else {
   console.error('Device ID not found for', deviceLabel);
 }
-
-
 
     // 7) Re-wire buttons in case DOM changed
     wireRangeButtons();
