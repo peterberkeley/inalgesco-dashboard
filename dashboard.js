@@ -304,16 +304,35 @@ function getVarIdCI(deviceID, label){
 }
 // ---------------------------------------------------------------------
 // Strict per-device resolver (does NOT rely on the global cache)
+// Confirms the variable's owning device matches `deviceID`.
 // ---------------------------------------------------------------------
 async function resolveVarIdStrict(deviceID, varLabel){
   const want = String(varLabel).toLowerCase();
   const url  = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-  const r = await fetch(url);
-  if (!r.ok) return null;
-  const j = await r.json();
-  const hit = (j.results || []).find(v => String(v.label||'').toLowerCase() === want);
-  return hit ? String(hit.id) : null;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const j = await r.json();
+
+    const match = (j.results || []).find(v => {
+      const lbl = String(v.label || '').toLowerCase();
+      if (lbl !== want) return false;
+
+      // v.device is typically like "/api/v1.6/devices/<id>/" – prefer to double-check
+      const devUrl = v && typeof v.device === 'string' ? v.device : null;
+      if (!devUrl) return true; // accept if API didn’t include device link (already filtered by ?device=)
+      const m = devUrl.match(/\/devices\/([^/]+)\//);
+      const ownerId = m ? m[1] : null;
+      return ownerId === String(deviceID);
+    });
+
+    return match ? String(match.id) : null;
+  } catch (e) {
+    console.warn('resolveVarIdStrict: device-filtered lookup failed', e);
+    return null;
+  }
 }
+
 // ---------------------------------------------------------------------
 // Fetch the newest timestamp (ms) for a variable ID (v1.6 endpoint)
 // ---------------------------------------------------------------------
@@ -849,7 +868,7 @@ async function updateCharts(deviceID, SENSORS){
         }
       }
 
-                  // 3) No anchor → clear charts and exit (prevents painting another device's data)
+                   // 3) No anchor → clear charts and exit (prevents painting another device's data)
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         const rng0 = document.getElementById('chartRange');
         if (rng0) rng0.textContent = '';
@@ -895,6 +914,7 @@ async function updateCharts(deviceID, SENSORS){
       // 4) Fixed 60-min window ending at tLast
       wndEnd   = tLast;
       wndStart = tLast - (60 * 60 * 1000);
+
 
 
 
