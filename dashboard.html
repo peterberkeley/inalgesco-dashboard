@@ -11,39 +11,28 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-<!-- Styles -->
-<style>
-  :root{
-    --color-bg:#f6f7fb;
-    --color-card:#ffffff;
-    --color-text:#0f172a;
-    --color-primary:#3b82f6;
-  }
+  <!-- Styles -->
+  <style>
+    :root{
+      --color-bg:#f6f7fb;
+      --color-card:#ffffff;
+      --color-text:#0f172a;
+      --color-primary:#3b82f6;
+    }
 
-  /* Allow full-page scrolling */
-  html, body {
-    height: auto !important;
-    min-height: 100%;
-    overflow-y: auto !important;
-    overflow-x: hidden;
-  }
+    /* Allow full-page scrolling */
+    html, body {
+      height: auto !important;
+      min-height: 100%;
+      overflow-y: auto !important;
+      overflow-x: hidden;
+    }
 
-  body {
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
-  }
-
-  /* Charts grid (does not trap scroll) */
-  #charts {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1rem;
-    overflow: visible !important;
-  }
-</style>
-
-
+    body{
+      background:var(--color-bg);
+      color:var(--color-text);
+      font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+    }
 
     /* Cards */
     .card{ background:var(--color-card); border-radius:1rem; box-shadow:0 6px 28px rgba(15,23,42,.06) }
@@ -54,16 +43,22 @@
     .kpi .lab{ font-size:.72rem; letter-spacing:.02em; text-transform:uppercase; color:#6b7280; }
     .kpi .val{ font-weight:700; font-size:1.35rem; line-height:1.2 }
     .kpi .sub{ font-size:.72rem; color:#6b7280 }
-/* KPI: force two lines (we write two <div>s from JS) */
-#kpiSeen{ white-space: normal; min-height: 2.6em; line-height: 1.2; }
-#kpiSeen > div{ display:block; }
 
-    /* Charts area grid */
-    #charts{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:1rem }
+    /* KPI: force two lines (we write two <div>s from JS) */
+    #kpiSeen{ white-space: normal; min-height: 2.6em; line-height: 1.2; }
+    #kpiSeen > div{ display:block; }
+
+    /* Charts grid (does not trap scroll) */
+    #charts{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+      gap:1rem;
+      overflow:visible !important;
+    }
     .chart-box{ background:var(--color-card); border-radius:1rem; box-shadow:0 4px 16px rgba(15,23,42,.06); padding:1rem 1rem 1.25rem; height:360px; overflow:hidden; }
     .chart-box h3{ font-weight:700; margin:0 0 .5rem 0; font-size:1rem }
 
-       /* Info table — compact, no wrap, tighter label/value gap */
+    /* Info table — compact, no wrap, tighter label/value gap */
     #latest{
       width:100%;
       border-radius:.75rem;
@@ -102,7 +97,6 @@
       line-height:1;
     }
 
-
     /* Phone-like signal bars */
     .sig{ display:inline-flex; gap:2px; vertical-align:middle }
     .sig i{ width:5px; background:#e5e7eb; border-radius:2px; display:inline-block }
@@ -140,59 +134,53 @@
       padding:2px 4px;
       box-shadow:0 2px 4px rgba(0,0,0,0.1);
     }
-      /* ——— Spacing tweaks (sensors card & column gap) ——— */
-  @media (min-width:1024px){
-    #dashMain { column-gap: 2rem !important; }
-  }
-  #sensorsCard { margin-bottom: 1.25rem; }
+
+    /* ——— Spacing tweaks (sensors card & column gap) ——— */
+    @media (min-width:1024px){
+      #dashMain { column-gap: 2rem !important; }
+    }
+    #sensorsCard { margin-bottom: 1.25rem; }
+
+    /* Auth overlay */
+    #auth-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); z-index: 9999; }
+    #auth-card { background: #111; color: #fff; padding: 24px; border-radius: 12px; width: min(92vw, 360px); box-shadow: 0 10px 30px rgba(0,0,0,0.4); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif; }
+    #auth-card h2 { margin: 0 0 12px 0; font-size: 18px; }
+    #auth-card p  { margin: 0 0 16px 0; font-size: 13px; opacity: .8; }
+    #auth-card input[type="password"] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; outline: none; }
+    #auth-card button { margin-top: 12px; width: 100%; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; }
+    #auth-error { color: #ff9b9b; font-size: 12px; min-height: 16px; margin-top: 8px; }
+
+    /* Force sensors area to expand; no inner scroll */
+    #latest, #latestWrap { max-height: none !important; overflow: visible !important; }
+
+    /* Make the CSV card taller */
+    #csvCard { min-height: 260px; }
   </style>
-  <style>
-  #auth-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); z-index: 9999; }
-  #auth-card { background: #111; color: #fff; padding: 24px; border-radius: 12px; width: min(92vw, 360px); box-shadow: 0 10px 30px rgba(0,0,0,0.4); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif; }
-  #auth-card h2 { margin: 0 0 12px 0; font-size: 18px; }
-  #auth-card p  { margin: 0 0 16px 0; font-size: 13px; opacity: .8; }
-  #auth-card input[type="password"] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; outline: none; }
-  #auth-card button { margin-top: 12px; width: 100%; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; }
-  #auth-error { color: #ff9b9b; font-size: 12px; min-height: 16px; margin-top: 8px; }
-</style>
-
-  <style>
-  /* Force sensors area to expand; no inner scroll */
-  #latest, #latestWrap { max-height: none !important; overflow: visible !important; }
-
-
-  /* Make the CSV card taller */
-  #csvCard { min-height: 260px; }
-</style>
-
-
-
-  
 </head>
+
 <body>
   <div id="auth-overlay" aria-modal="true" role="dialog">
-  <div id="auth-card">
-    <h2>Sky Café Dashboard</h2>
-    <p>Please enter the dashboard password to continue.</p>
-    <form id="auth-form">
-      <input id="auth-pass" type="password" inputmode="text" autocomplete="current-password" placeholder="Password" required />
-      <div id="auth-error"></div>
-      <button type="submit">Unlock</button>
-    </form>
+    <div id="auth-card">
+      <h2>Sky Café Dashboard</h2>
+      <p>Please enter the dashboard password to continue.</p>
+      <form id="auth-form">
+        <input id="auth-pass" type="password" inputmode="text" autocomplete="current-password" placeholder="Password" required />
+        <div id="auth-error"></div>
+        <button type="submit">Unlock</button>
+      </form>
+    </div>
   </div>
-</div>
-
 
   <!-- Header -->
   <header class="sticky top-0 z-40 backdrop-blur bg-gradient-to-r from-[#d9eaf8]/90 to-[#3b82f6]/90">
     <div class="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3">
       <!-- Full-color transparent PNG logo -->
-    <img
-  src="logo_high_resolution.png"
-  onerror="this.onerror=null; this.src='logo_high_resolution_white.png'"
-  alt="Inalgesco"
-  class="h-9 w-auto select-none pointer-events-none"
-/>
+      <img
+        src="logo_high_resolution.png"
+        onerror="this.onerror=null; this.src='logo_high_resolution_white.png'"
+        alt="Inalgesco"
+        class="h-9 w-auto select-none pointer-events-none"
+      />
 
       <div class="flex flex-col leading-tight">
         <span class="text-white font-semibold text-lg">Sky Café Trucks</span>
@@ -203,22 +191,22 @@
         <label class="text-white font-medium text-sm">Device:</label>
         <select id="deviceSelect" class="px-2 py-1 rounded border border-white/30 bg-white/90 text-slate-700"></select>
         <span id="deviceStatusPill" class="hidden px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Online</span>
-<button id="adminBtn"    class="px-3 py-1 rounded bg-white/20 text-white hover:bg-white/30 border border-white/30">Admin</button>
-
+        <button id="adminBtn" class="px-3 py-1 rounded bg-white/20 text-white hover:bg-white/30 border border-white/30">Admin</button>
       </div>
     </div>
   </header>
+
   <script>
     // Admin nav
-    document.getElementById('adminBtn').onclick=()=>{ window.location.href='admin.html' };
-const flightsBtn = document.getElementById('flightsBtn');
-if (flightsBtn) {
-  flightsBtn.onclick = () => { window.location.href = 'flights_aa_phx.html'; };
-}
+    document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html' };
+    const flightsBtn = document.getElementById('flightsBtn');
+    if (flightsBtn) {
+      flightsBtn.onclick = () => { window.location.href = 'flights_aa_phx.html'; };
+    }
 
     // Online/offline pill
     window.__setDeviceStatus = function(isOnline){
-      const p=document.getElementById('deviceStatusPill');
+      const p = document.getElementById('deviceStatusPill');
       if(!p) return;
       p.classList.remove("hidden");
       if(isOnline){
@@ -248,13 +236,14 @@ if (flightsBtn) {
         </div>
       </div>
 
-     <div class="card p-4" id="sensorsCard">
-  <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
-  <table id="latest" class="w-full text-sm"></table>
-</div>
-<div id="csvCard" class="card p-4">
-  <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
-  <div class="flex flex-wrap items-center gap-2 mb-3">
+      <div class="card p-4" id="sensorsCard">
+        <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
+        <table id="latest" class="w-full text-sm"></table>
+      </div>
+
+      <div id="csvCard" class="card p-4">
+        <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
+        <div class="flex flex-wrap items-center gap-2 mb-3">
           <label class="text-sm text-gray-600">Start</label>
           <input type="date" id="start" class="border p-1 rounded" />
           <label class="text-sm text-gray-600">End</label>
@@ -296,64 +285,57 @@ if (flightsBtn) {
     </section>
   </main>
 
-                    <div id="spinner"></div>
-<script src="dashboard.js?v=fix13_20251024c" defer></script>
-
-
-
-
+  <div id="spinner"></div>
+  <script src="dashboard.js?v=fix13_20251024c" defer></script>
 
   <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      // allow-list for dashboard (case-sensitive)
+      const ALLOWED_PASSWORDS = new Set(["Skycafe8971!", "Dispatch239!"]);
+      const overlay = document.getElementById("auth-overlay");
+      const form    = document.getElementById("auth-form");
+      const pass    = document.getElementById("auth-pass");
+      const err     = document.getElementById("auth-error");
 
-window.addEventListener('DOMContentLoaded', () => {
- // allow-list for dashboard (case-sensitive)
-const ALLOWED_PASSWORDS = new Set(["Skycafe8971!", "Dispatch239!"]);
-  const overlay = document.getElementById("auth-overlay");
-  const form    = document.getElementById("auth-form");
-  const pass    = document.getElementById("auth-pass");
-  const err     = document.getElementById("auth-error");
+      // If any element is missing, bail gracefully
+      if (!overlay || !form || !pass || !err) {
+        console.warn("[auth] Overlay elements not found — auth disabled.");
+        return;
+      }
 
-  // If any element is missing, bail gracefully
-  if (!overlay || !form || !pass || !err) {
-    console.warn("[auth] Overlay elements not found — auth disabled.");
-    return;
-  }
+      function showLock(msg) {
+        overlay.style.display = "flex";
+        err.textContent = msg ? msg : "";
+        pass.value = "";
+        pass.focus();
+      }
+      function hideLock() {
+        overlay.style.display = "none";
+        // seed activity so admin can see you were recently active
+        localStorage.setItem("sc_last_activity", Date.now().toString());
+      }
 
-  function showLock(msg) {
-    overlay.style.display = "flex";
-    err.textContent = msg ? msg : "";
-    pass.value = "";
-    pass.focus();
-  }
-  function hideLock() {
-    overlay.style.display = "none";
-    // seed activity so admin can see you were recently active
-    localStorage.setItem("sc_last_activity", Date.now().toString());
-  }
+      // Always gate on initial page load
+      showLock();
 
-  // Always gate on initial page load
-  showLock();
+      // Handle submit
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (ALLOWED_PASSWORDS.has(pass.value.trim())) {
+          hideLock();
+        } else {
+          err.textContent = "Incorrect password";
+          pass.select();
+        }
+      });
 
-  // Handle submit
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-   if (ALLOWED_PASSWORDS.has(pass.value.trim())) {
-      hideLock();
-    } else {
-      err.textContent = "Incorrect password";
-      pass.select();
-    }
-  });
-
-  // Track activity for admin idle timer
-  ["mousemove","keydown","touchstart","scroll","click"].forEach(evt =>
-    document.addEventListener(evt, () =>
-      localStorage.setItem("sc_last_activity", Date.now().toString())
-    , { passive:true })
-  );
-});
-</script>
+      // Track activity for admin idle timer
+      ["mousemove","keydown","touchstart","scroll","click"].forEach(evt =>
+        document.addEventListener(evt, () =>
+          localStorage.setItem("sc_last_activity", Date.now().toString())
+        , { passive:true })
+      );
+    });
+  </script>
 </body>
 </html>
-
-
