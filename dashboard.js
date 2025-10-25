@@ -415,37 +415,34 @@ async function fetchDeviceLastValuesV2(deviceID){
   }
 }
 
-// REPLACE lines from:  async function fetchDallasAddresses(deviceID){  …  }
-// THROUGH the line:    window.fetchDallasAddresses = fetchDallasAddresses;
-
+// ------------- FRESH-ONLY DALLAS RESOLVER (≤48 h) -------------
 async function fetchDallasAddresses(deviceID){
   try{
     // ---- A) ADMIN MAP (authoritative) ----
     try{
-      const entry = Object.entries(window.__deviceMap || {}).find(([,info]) => info && info.id === deviceID);
+      const entry = Object.entries(window.__deviceMap||{}).find(([,info]) => info && info.id === deviceID);
       const deviceLabel = entry ? entry[0] : null;
-      if (deviceLabel && sensorMapConfig){
-        const keyCI  = Object.keys(sensorMapConfig).find(k => k.toLowerCase() === String(deviceLabel).toLowerCase());
+      if (deviceLabel && window.sensorMapConfig){
+        const keyCI = Object.keys(window.sensorMapConfig).find(k => k.toLowerCase() === String(deviceLabel).toLowerCase());
         if (keyCI){
-          const devMap = sensorMapConfig[keyCI] || {};
+          const devMap = window.sensorMapConfig[keyCI] || {};
           const adminAddrs = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
-          if (adminAddrs.length) return adminAddrs;   // keep admin order/size exactly
+          if (adminAddrs.length) return adminAddrs; // keep admin order
         }
       }
-    }catch{ /* ignore and fall through */ }
+    }catch{}
 
-    // ---- B) NO ADMIN MAP → return ONLY "fresh" addresses for THIS device ----
-    // Freshness: consider addresses whose latest timestamp is within the last 48 hours.
-    // (Adjust FRESH_HOURS if needed.)
-    const FRESH_HOURS = 48;
-    const FRESH_MS    = FRESH_HOURS * 60 * 60 * 1000;
-    const nowMs       = Date.now();
+    // ---- B) NO ADMIN MAP → only fresh addresses ----
+    const FRESH_MS = 48 * 60 * 60 * 1000; // 48 h
+    const nowMs = Date.now();
 
-    // B1) Fast path: Ubidots v2 bulk last values (single call)
-    if (USE_V2_BULK) {
+    // B1) v2 bulk last-values (fast path)
+    if (window.USE_V2_BULK) {
       try{
-        const bulk = await fetchDeviceLastValuesV2(deviceID); // object: label -> {value, timestamp, ...}
-        if (bulk && typeof bulk === 'object'){
+        const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`,
+                              {headers:{'X-Auth-Token':UBIDOTS_ACCOUNT_TOKEN}});
+        if (r.ok){
+          const bulk = await r.json();
           const fresh = Object.entries(bulk)
             .filter(([lab,obj]) => /^[0-9a-fA-F]{16}$/.test(lab) &&
                                    Number.isFinite(obj?.timestamp) &&
@@ -456,46 +453,37 @@ async function fetchDallasAddresses(deviceID){
       }catch(e){ console.warn('v2 bulk last filter failed', e); }
     }
 
-    // B2) Fallback: v1.6 per-variable probe, but require freshness
-    //  - List THIS device’s variables
+    // B2) fallback: v1.6 variables list + 48 h freshness check
     const listUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-    const listRes = await fetch(listUrl);
-    if (!listRes.ok) return [];
-    const listJs  = await listRes.json();
-
-    // De-dupe labels case-insensitively; keep (label,id) pairs for 16-hex labels
-    const hexVars = [];
+    const listJs  = await fetch(listUrl).then(r=>r.json()).catch(()=>({results:[]}));
     const seen = new Set();
-    for (const v of (listJs.results || [])){
-      const lab = String(v.label || '');
+    const hexVars = [];
+    for (const v of (listJs.results||[])){
+      const lab = String(v.label||'');
       if (!/^[0-9a-fA-F]{16}$/.test(lab)) continue;
-      const key = lab.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      hexVars.push({ label: lab, id: String(v.id) });
+      const k = lab.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      hexVars.push({label:lab,id:String(v.id)});
     }
     if (!hexVars.length) return [];
 
     const keepFresh = [];
-    const CHUNK = 6; // modest concurrency
-    for (let i=0; i<hexVars.length; i+=CHUNK){
-      const batch = hexVars.slice(i, i+CHUNK);
-      const results = await Promise.all(batch.map(async hv => {
+    const CHUNK = 6;
+    for (let i=0;i<hexVars.length;i+=CHUNK){
+      const batch = hexVars.slice(i,i+CHUNK);
+      const rs = await Promise.all(batch.map(async hv=>{
         try{
           const j = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
-          const row = j && (j.results||[])[0];
-          const ts  = row && Number.isFinite(row.timestamp) ? row.timestamp : null;
-          // accept ONLY if a recent value exists
-          return (ts != null && (nowMs - ts) <= FRESH_MS) ? hv.label : null;
-        }catch{ return null; }
+          const ts = j?.results?.[0]?.timestamp;
+          return (Number.isFinite(ts) && (nowMs - ts) <= FRESH_MS) ? hv.label : null;
+        }catch{return null;}
       }));
-      results.forEach(lab => { if (lab) keepFresh.push(lab); });
+      rs.forEach(l=>{ if(l) keepFresh.push(l); });
     }
-
-    // IMPORTANT: Do NOT fall back to "ever posted"; stale ghosts would reappear.
-    return keepFresh;  // may be []
+    return keepFresh;
   }catch(e){
-    console.error("fetchDallasAddresses (fresh-only)", e);
+    console.error('fetchDallasAddresses (fresh-only)', e);
     return [];
   }
 }
