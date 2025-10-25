@@ -849,12 +849,12 @@ async function updateCharts(deviceID, SENSORS){
         }
       }
 
-      // 3) No anchor → clear charts and exit (prevents painting another device's data)
+                  // 3) No anchor → clear charts and exit (prevents painting another device's data)
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         const rng0 = document.getElementById('chartRange');
         if (rng0) rng0.textContent = '';
         SENSORS.forEach(s => {
-          if (!s.chart) return;
+          if (!s?.chart) return;
           s.chart.data.labels = [];
           s.chart.data.datasets[0].data = [];
           delete s.chart.options.scales.y.min;
@@ -863,14 +863,15 @@ async function updateCharts(deviceID, SENSORS){
         });
         return;
       }
-      // --- Sanity guard: if v2 last_seen is very stale but tLast is very fresh, blank the charts (likely cross-publish) ---
+
+      // 3b) Sanity guard: if v2 last_seen is stale but Dallas timestamps are fresh, blank charts (likely cross-publish)
       try {
         const nowSec        = Math.floor(Date.now() / 1000);
         const lastSeenSecV2 = (window.__deviceMap?.[deviceLabel]?.last_seen) || 0;
         const tLastAgeSec   = Math.floor((Date.now() - tLast) / 1000);
 
-        const STALE_V2_SEC  = 48 * 3600; // 48h stale device
-        const FRESH_ANCHOR  = 6  * 3600; // 6h fresh anchor
+        const STALE_V2_SEC  = 48 * 3600; // device stale if >48h
+        const FRESH_ANCHOR  = 6  * 3600; // anchor “fresh” if <6h
 
         const v2Stale   = lastSeenSecV2 && ((nowSec - lastSeenSecV2) > STALE_V2_SEC);
         const anchorNew = (tLastAgeSec >= 0) && (tLastAgeSec < FRESH_ANCHOR);
@@ -889,12 +890,12 @@ async function updateCharts(deviceID, SENSORS){
           });
           return;
         }
-      } catch(_) {}
+      } catch (_) {}
 
       // 4) Fixed 60-min window ending at tLast
       wndEnd   = tLast;
       wndStart = tLast - (60 * 60 * 1000);
-    }
+
 
 
 
