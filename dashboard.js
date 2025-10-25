@@ -118,6 +118,41 @@ function getAdminIccid(deviceLabel){
   const v = m && typeof m.iccid === 'string' ? m.iccid.trim() : null;
   return v && v.length ? v : null;
 }
+// Return latest ICCID for a device (prefer v2 bulk; fallback to v1.6)
+async function fetchDeviceIccid(deviceID){
+  // v2 bulk: fastest
+  try {
+    const bulk = await fetchDeviceLastValuesV2(deviceID);
+    if (bulk && bulk.iccid && bulk.iccid.value != null) {
+      return String(bulk.iccid.value).trim();
+    }
+  } catch (_) {}
+
+  // v1.6 fallback
+  try {
+    await ensureVarCache(deviceID);
+    const id = getVarIdCI(deviceID, 'iccid') || await resolveVarIdStrict(deviceID, 'iccid');
+    if (!id) return null;
+    const r = await fetch(
+      `${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    const v = j?.results?.[0]?.value;
+    return (v != null) ? String(v).trim() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Compare Admin ICCID (if present) vs latest ICCID; return true/false or null if unknown
+async function iccidMatchesAdmin(deviceLabel, deviceID){
+  const want = getAdminIccid(deviceLabel);
+  if (!want) return null; // no Admin ICCID configured
+  const got = await fetchDeviceIccid(deviceID);
+  if (!got)  return null; // device hasn't published ICCID (yet)
+  return String(want).trim() === String(got).trim();
+}
 
 /** Decide whether to suppress auto-discovered Dallas addresses to avoid
  *  showing another truck's live data.
@@ -127,6 +162,28 @@ function getAdminIccid(deviceLabel){
  *     and the current view is 'now' → suppress discovery (show nothing).
  */
 async function shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline){
+  // If Admin mapping exists, allow (we know which addresses belong to this truck)
+  if (getAdminAddresses(deviceLabel).length > 0) return false;
+
+  // Only gate the NOW view; for LAST we load strictly by device's own variables anyway
+  if (selectedRangeMode !== 'now') return false;
+
+  // If Admin ICCID is configured, require a match (regardless of Online)
+  const adminICC = getAdminIccid(deviceLabel);
+  if (adminICC) {
+    const match = await iccidMatchesAdmin(deviceLabel, deviceID);
+    // Unknown ICCID or mismatch? Be conservative: suppress to avoid cross-truck illusion
+    return (match !== true);
+  }
+
+  // No Admin ICCID configured:
+  // - Allow auto discovery only if the device is Online (recent activity).
+  // - If Offline, suppress discovery (we can't prove identity).
+  if (!isOnline) return true;
+
+  return false;
+}
+deviceLabel, deviceID, isOnline){
   if (getAdminAddresses(deviceLabel).length > 0) return false;              // admin mapping exists
   if (selectedRangeMode !== 'now') return false;                            // only gate NOW view
   if (isOnline) return false;                                              // v2 says it's online
@@ -1182,28 +1239,36 @@ async function poll(deviceID, SENSORS){
     const signalInWnd = valInWnd('signal') ?? valInWnd('rssi') ?? valInWnd('csq');
     const voltInWnd   = valInWnd('volt')   ?? valInWnd('vbatt') ?? valInWnd('battery') ?? valInWnd('batt');
 
-    // ICCID only if in window
-    const iccidInWnd = (bulk.iccid && inWnd(bulk.iccid.timestamp) && bulk.iccid.value != null)
-      ? String(bulk.iccid.value) : null;
-    // --- Identity fence: if Admin ICCID is set and does not match, suppress drawing in NOW view
-    try {
-      const selectedLabel = document.getElementById("deviceSelect")?.value || null;
-      const adminIcc = getAdminIccid(selectedLabel);
-      if (adminIcc && iccidInWnd && String(adminIcc).trim() !== String(iccidInWnd).trim() && selectedRangeMode === 'now') {
-        console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', adminIcc, 'now=', iccidInWnd, '— suppressing draw.');
-        const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
-        // Clear charts immediately
-        SENSORS.forEach(s => {
-          if (!s.chart) return;
-          s.chart.data.labels = [];
-          s.chart.data.datasets[0].data = [];
-          delete s.chart.options.scales.y.min;
-          delete s.chart.options.scales.y.max;
-          s.chart.update('none');
-        });
-        return; // stop the fast path
-      }
-    } catch(_) {}
+    // Read ICCID (ignore timestamp for identity check)
+const iccidNow = (bulk.iccid && bulk.iccid.value != null) ? String(bulk.iccid.value).trim() : null;
+
+// --- Identity fence for NOW view: use Admin ICCID if available
+try {
+  const selectedLabel = document.getElementById("deviceSelect")?.value || null;
+  const adminIcc = getAdminIccid(selectedLabel);
+  if (adminIcc && selectedRangeMode === 'now') {
+    const want = String(adminIcc).trim();
+    let got = iccidNow;
+    if (!got) got = await fetchDeviceIccid(deviceID); // fallback if bulk didn't carry it
+    if (got && want !== String(got).trim()) {
+      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', want, 'now=', got, '— suppressing draw.');
+      const rng0 = document.getElementById('chartRange'); 
+      if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
+
+      // Clear charts immediately
+      SENSORS.forEach(s => {
+        if (!s.chart) return;
+        s.chart.data.labels = [];
+        s.chart.data.datasets[0].data = [];
+        delete s.chart.options.scales.y.min;
+        delete s.chart.options.scales.y.max;
+        s.chart.update('none');
+      });
+      return; // stop fast path
+    }
+  }
+} catch (_) {}
+
 
     // GPS only if its timestamp is in window
     let latInWnd = null, lonInWnd = null, speedInWnd = null;
@@ -1338,15 +1403,20 @@ async function poll(deviceID, SENSORS){
     ? Number(voltArr[0].value) : null;
 
   // ICCID:
-  const iccidVal = (iccArr[0] && inWnd(iccArr[0].timestamp) && iccArr[0].value != null)
-    ? String(iccArr[0].value) : null;
-  // Identity fence (fallback path)
-  try {
-    const selectedLabel = document.getElementById("deviceSelect")?.value || null;
-    const adminIcc = getAdminIccid(selectedLabel);
-    if (adminIcc && iccidVal && String(adminIcc).trim() !== String(iccidVal).trim() && selectedRangeMode === 'now') {
-      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', adminIcc, 'now=', iccidVal, '— suppressing draw.');
-      const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
+  c// Latest ICCID value (ignore timestamp for identity check)
+const iccidVal = (iccArr[0] && iccArr[0].value != null) ? String(iccArr[0].value).trim() : null;
+
+// Identity fence (fallback path, NOW view)
+try {
+  const selectedLabel = document.getElementById("deviceSelect")?.value || null;
+  const adminIcc = getAdminIccid(selectedLabel);
+  if (adminIcc && selectedRangeMode === 'now') {
+    const want = String(adminIcc).trim();
+    const got  = iccidVal || (await fetchDeviceIccid(deviceID));
+    if (got && want !== String(got).trim()) {
+      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', want, 'now=', got, '— suppressing draw.');
+      const rng0 = document.getElementById('chartRange'); 
+      if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
       SENSORS.forEach(s => {
         if (!s.chart) return;
         s.chart.data.labels = [];
@@ -1357,7 +1427,9 @@ async function poll(deviceID, SENSORS){
       });
       return;
     }
-  } catch(_) {}
+  }
+} catch (_) {}
+
 
   // GPS only if its timestamp is in window (no stale carry-forward)
   let latInWnd = null, lonInWnd = null, speedInWnd = null;
@@ -2202,26 +2274,16 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
 
       await Promise.all(updates);
     }
-
-    // 3) If still no devices, stop gracefully
-    if (!sensorMap || !Object.keys(sensorMap).length) {
-      console.error("No devices available from Ubidots.");
-      const charts = document.getElementById("charts");
-      if (charts) charts.innerHTML = "<div class='text-sm text-gray-600'>No devices found. Check API token/network.</div>";
-      return;
-    }
-
-   // 4) Resolve current device (robust against case/alias mismatches)
 function __resolveSelectedDevice(sensorMap){
   const sel = document.getElementById('deviceSelect');
   let key = (sel && typeof sel.value === 'string') ? sel.value : null;
 
-  // 4a) Direct hit
+  // Direct hit by key
   if (key && sensorMap[key]?.id) {
     return { deviceLabel: key, deviceID: sensorMap[key].id };
   }
 
-  // 4b) Case-insensitive match
+  // Case-insensitive match
   if (key) {
     const k2 = Object.keys(sensorMap).find(k => String(k).toLowerCase() === String(key).toLowerCase());
     if (k2 && sensorMap[k2]?.id) {
@@ -2229,12 +2291,12 @@ function __resolveSelectedDevice(sensorMap){
     }
   }
 
-  // 4c) Fallback: first available
-  const first = Object.keys(sensorMap)[0] || null;
-  return { deviceLabel: first, deviceID: first ? sensorMap[first]?.id : null };
+  // NO FALLBACK — prevent binding to “first device”
+  return { deviceLabel: key, deviceID: null };
 }
 
 const { deviceLabel, deviceID } = __resolveSelectedDevice(sensorMap);
+
 
 // DEBUG: show binding to ensure we’re fetching from the selected device
 console.debug('[device binding]', { selected: document.getElementById('deviceSelect')?.value, deviceLabel, deviceID });
@@ -2372,6 +2434,7 @@ if (deviceID) {
 } else {
   console.error('Device ID not found for', deviceLabel);
 }
+
 
     // 7) Re-wire buttons in case DOM changed
     wireRangeButtons();
