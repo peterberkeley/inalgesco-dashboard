@@ -1281,8 +1281,8 @@ try {
 
 
     drawLive({
-      ts: tsPanel,
-      iccid: iccidInWnd,
+  ts: tsPanel,
+  iccid: iccidNow,
       lat: latInWnd, lon: lonInWnd,
       lastLat: null, lastLon: null, lastGpsAgeMin: null,
       speed:  speedInWnd,
