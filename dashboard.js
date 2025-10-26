@@ -183,6 +183,19 @@ async function shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline){
 
   return false;
 }
+/** While Offline, treat admin-mapped sensors as trusted only if we can prove identity via ICCID.
+ * Online -> always allow. Offline -> require admin ICCID present AND matching the device ICCID.
+ * Fail-closed otherwise (prevents ghost charts).
+ */
+async function shouldUseAdminDallas(deviceLabel, deviceID, isOnline){
+  if (isOnline) return true;
+  const adminICC = getAdminIccid(deviceLabel);
+  if (!adminICC) return false;                // no identity configured → don't trust
+  const match = await iccidMatchesAdmin(deviceLabel, deviceID);
+  return match === true;                      // only if we can *prove* identity
+}
+window.shouldUseAdminDallas = shouldUseAdminDallas;
+
 /* Rule:
  * 1) If admin set sensorMapConfig[deviceLabel].tz (IANA), use it.
  * 2) Else auto-lookup with tz-lookup (loaded once from unpkg).
@@ -948,9 +961,10 @@ async function updateCharts(deviceID, SENSORS){
 
       // 3b) Sanity guard: if v2 last_seen is stale but Dallas timestamps are fresh, blank charts (likely cross-publish)
       try {
-        const nowSec        = Math.floor(Date.now() / 1000);
-        const lastSeenSecV2 = (window.__deviceMap?.[deviceLabel]?.last_seen) || 0;
-        const tLastAgeSec   = Math.floor((Date.now() - tLast) / 1000);
+        const nowSec     = Math.floor(Date.now() / 1000);
+const selLabel   = document.getElementById('deviceSelect')?.value || null;
+const lastSeenSecV2 = (selLabel && window.__deviceMap?.[selLabel]?.last_seen) || 0;
+const tLastAgeSec   = Math.floor((Date.now() - tLast) / 1000);
 
         const STALE_V2_SEC  = 48 * 3600; // device stale if >48h
         const FRESH_ANCHOR  = 6  * 3600; // anchor “fresh” if <6h
@@ -1195,6 +1209,30 @@ async function poll(deviceID, SENSORS){
       endTimeMs   = tLast;
       startTimeMs = tLast - (60 * 60 * 1000);
     }
+// ---- LAST-mode sanity gate: v2 last_seen very stale but anchor is fresh → suppress
+if (selectedRangeMode === 'last') {
+  try {
+    const selLabel = document.getElementById('deviceSelect')?.value || null;
+    const lastSeenSecV2 = (selLabel && window.__deviceMap?.[selLabel]?.last_seen) || 0;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const tLastAgeSec = Math.floor((Date.now() - endTimeMs) / 1000);
+    const v2Stale     = lastSeenSecV2 && ((nowSec - lastSeenSecV2) > (48 * 3600));
+    const anchorFresh = (tLastAgeSec >= 0) && (tLastAgeSec < (6 * 3600));
+    if (v2Stale && anchorFresh) {
+      console.warn('[sanity] LAST: v2 last_seen stale but data anchor is fresh — suppressing draw.');
+      const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = '';
+      SENSORS.forEach(s => {
+        if (!s.chart) return;
+        s.chart.data.labels = [];
+        s.chart.data.datasets[0].data = [];
+        delete s.chart.options.scales.y.min;
+        delete s.chart.options.scales.y.max;
+        s.chart.update('none');
+      });
+      return;
+    }
+  } catch (_) {}
+}
 
     // Filter each value into the window; out-of-window → blank (null/undefined)
     const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
@@ -1505,13 +1543,10 @@ function drawLive(data, SENSORS){
      </span>`;
 
   const sensorRows = SENSORS
-    .filter(s => s.address && s.id !== "avg" && s.label !== "Chillrail Avg")
-    .map(s => [
-      s.label,
-      (s.address && readings[s.address] != null)
-        ? fmt(readings[s.address] + (s.calibration || 0), 1)
-        : ""
-    ]);
+  .filter(s => s.address && s.id !== 'avg' && s.label !== 'Chillrail Avg')
+  .filter(s => readings && readings[s.address] != null)        // hide empty rows
+  .map(s => [ s.label, fmt(readings[s.address] + (s.calibration || 0), 1) ]);
+
 
      // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
   const hasFresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
@@ -2380,18 +2415,23 @@ if (deviceID) {
   }
 
   // Prefer admin-declared; else discovered *only if online*; else none
+// Prefer admin-mapped sensors, but when Offline only if identity is proven (ICCID match).
 const adminAddrs = getAdminAddresses(deviceLabel) || [];
 let liveDallas = [];
 
-if (Array.isArray(adminAddrs) && adminAddrs.length > 0) {
+let adminOK = false;
+try {
+  adminOK = adminAddrs.length > 0 && await shouldUseAdminDallas(deviceLabel, deviceID, isOnline);
+} catch (_) { adminOK = false; }
+
+if (adminOK) {
   liveDallas = adminAddrs;
 } else if (isOnline && Array.isArray(discovered) && discovered.length > 0) {
-  liveDallas = discovered;
+  liveDallas = discovered; // discovery only while Online
 } else {
-  console.warn('[Dallas gating] No admin sensors and device offline → skip charts');
-  liveDallas = [];  // show nothing, prevents cross-truck leak
+  console.warn('[Dallas gating] No trusted sensors for', deviceLabel, '→ skip charts');
+  liveDallas = [];
 }
-
 
   console.debug('[addresses]', {
     deviceLabel, deviceID,
@@ -2401,14 +2441,7 @@ if (Array.isArray(adminAddrs) && adminAddrs.length > 0) {
     liveDallas
   });
 
-  // Build chart slots and render
-  if (!liveDallas.length) {
-    console.warn('No Dallas addresses for', deviceLabel, '→ clearing charts');
-    SENSORS = [{ id: 'avg', label: 'Chillrail Avg', chart: null, address: null, calibration: 0 }];
-    ensureCharts(SENSORS, deviceID);
-    return; // skip poll/updateCharts; prevents wrong data reuse
-  }
-
+ 
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
   ensureCharts(SENSORS, deviceID);   // key on unique deviceID
   initMap();                         // idempotent
