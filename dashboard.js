@@ -1928,42 +1928,7 @@ const __crumbSignal = __crumbAbort.signal;
                  // Compute time window for breadcrumbs:
     // - NOW: [now - selectedRangeMinutes, now]
     // - LAST: [t_last - 60min, t_last], where t_last is the most recent GPS timestamp
-        // ---- Identity fence for breadcrumbs (mirrors Dallas/ICCID gating) ----
-    // Device identity = Online OR (Offline AND ICCID matches Admin ICCID)
-    // If identity cannot be proven, clear any stale UI and exit (fail-closed).
-    let identityOK = false;
-    try {
-      const selLabel = document.getElementById('deviceSelect')?.value || null;
-      const nowSec   = Math.floor(Date.now() / 1000);
-      const lastSeen = (selLabel && window.__deviceMap?.[selLabel]?.last_seen) || 0;
-      const isOnline = (nowSec - lastSeen) < ONLINE_WINDOW_SEC;
-
-      if (isOnline) {
-        identityOK = true;
-      } else if (selLabel) {
-        const adminICC = getAdminIccid(selLabel);
-        if (adminICC) {
-          const match = await iccidMatchesAdmin(selLabel, deviceID);
-          identityOK = (match === true);
-        } else {
-          identityOK = false;
-        }
-      }
-    } catch (_) {
-      identityOK = false;
-    }
-
-    if (!identityOK) {
-      // Clear any previous breadcrumbs and exit safely
-      try {
-        segmentPolylines.forEach(p => p.remove());
-        segmentMarkers.forEach(m => m.remove());
-      } catch(_) {}
-      segmentPolylines = [];
-      segmentMarkers = [];
-      if (legendControl) { try { map.removeControl(legendControl); } catch(_) {} legendControl = null; }
-      return; // ← do not plot breadcrumbs for unproven identity
-    }
+       
 
     
     const gpsLabel = await resolveGpsLabel(deviceID);
