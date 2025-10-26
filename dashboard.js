@@ -960,33 +960,37 @@ async function updateCharts(deviceID, SENSORS){
       }
 
       // 3b) Sanity guard: if v2 last_seen is stale but Dallas timestamps are fresh, blank charts (likely cross-publish)
-      try {
-        const nowSec     = Math.floor(Date.now() / 1000);
-const selLabel   = document.getElementById('deviceSelect')?.value || null;
-const lastSeenSecV2 = (selLabel && window.__deviceMap?.[selLabel]?.last_seen) || 0;
-const tLastAgeSec   = Math.floor((Date.now() - tLast) / 1000);
+     try {
+  const nowSec   = Math.floor(Date.now() / 1000);
+  // Use fallback-corrected last-seen, not raw v2
+  const lastSeenSecComputed =
+    (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs))
+      ? Math.floor(window.__lastSeenMs / 1000) : 0;
 
-        const STALE_V2_SEC  = 48 * 3600; // device stale if >48h
-        const FRESH_ANCHOR  = 6  * 3600; // anchor “fresh” if <6h
+  const tLastAgeSec = Math.floor((Date.now() - tLast) / 1000);
 
-        const v2Stale   = lastSeenSecV2 && ((nowSec - lastSeenSecV2) > STALE_V2_SEC);
-        const anchorNew = (tLastAgeSec >= 0) && (tLastAgeSec < FRESH_ANCHOR);
+  const STALE_SEC   = 48 * 3600; // device stale if >48h
+  const FRESH_ANCHOR_SEC = 6 * 3600; // anchor “fresh” if <6h
 
-        if (v2Stale && anchorNew) {
-          console.warn('[sanity] v2 last_seen is stale but Dallas timestamps are fresh — blanking charts to avoid cross-truck illusion.');
-          const rng0 = document.getElementById('chartRange');
-          if (rng0) rng0.textContent = '';
-          SENSORS.forEach(s => {
-            if (!s?.chart) return;
-            s.chart.data.labels = [];
-            s.chart.data.datasets[0].data = [];
-            delete s.chart.options.scales.y.min;
-            delete s.chart.options.scales.y.max;
-            s.chart.update('none');
-          });
-          return;
-        }
-      } catch (_) {}
+  const staleDevice = lastSeenSecComputed && ((nowSec - lastSeenSecComputed) > STALE_SEC);
+  const anchorFresh = (tLastAgeSec >= 0) && (tLastAgeSec < FRESH_ANCHOR_SEC);
+
+  if (staleDevice && anchorFresh) {
+    console.warn('[sanity] computed last_seen is stale but Dallas anchor is fresh — blanking charts (cross-truck protection).');
+    const rng0 = document.getElementById('chartRange');
+    if (rng0) rng0.textContent = '';
+    SENSORS.forEach(s => {
+      if (!s?.chart) return;
+      s.chart.data.labels = [];
+      s.chart.data.datasets[0].data = [];
+      delete s.chart.options.scales.y.min;
+      delete s.chart.options.scales.y.max;
+      s.chart.update('none');
+    });
+    return;
+  }
+} catch (_) {}
+
 
            // 4) Fixed 60-min window ending at tLast
       wndEnd   = tLast;
@@ -1212,14 +1216,22 @@ async function poll(deviceID, SENSORS){
 // ---- LAST-mode sanity gate: v2 last_seen very stale but anchor is fresh → suppress
 if (selectedRangeMode === 'last') {
   try {
-    const selLabel = document.getElementById('deviceSelect')?.value || null;
-    const lastSeenSecV2 = (selLabel && window.__deviceMap?.[selLabel]?.last_seen) || 0;
     const nowSec = Math.floor(Date.now() / 1000);
+    // Use fallback-corrected last-seen, not raw v2
+    const lastSeenSecComputed =
+      (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs))
+        ? Math.floor(window.__lastSeenMs / 1000) : 0;
+
     const tLastAgeSec = Math.floor((Date.now() - endTimeMs) / 1000);
-    const v2Stale     = lastSeenSecV2 && ((nowSec - lastSeenSecV2) > (48 * 3600));
-    const anchorFresh = (tLastAgeSec >= 0) && (tLastAgeSec < (6 * 3600));
-    if (v2Stale && anchorFresh) {
-      console.warn('[sanity] LAST: v2 last_seen stale but data anchor is fresh — suppressing draw.');
+
+    const STALE_SEC        = 48 * 3600;
+    const FRESH_ANCHOR_SEC = 6  * 3600;
+
+    const staleDevice = lastSeenSecComputed && ((nowSec - lastSeenSecComputed) > STALE_SEC);
+    const anchorFresh = (tLastAgeSec >= 0) && (tLastAgeSec < FRESH_ANCHOR_SEC);
+
+    if (staleDevice && anchorFresh) {
+      console.warn('[sanity] LAST: computed last_seen stale but anchor is fresh — suppressing draw (cross-truck protection).');
       const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = '';
       SENSORS.forEach(s => {
         if (!s.chart) return;
@@ -1233,6 +1245,7 @@ if (selectedRangeMode === 'last') {
     }
   } catch (_) {}
 }
+
 
     // Filter each value into the window; out-of-window → blank (null/undefined)
     const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
