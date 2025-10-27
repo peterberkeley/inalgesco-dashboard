@@ -875,7 +875,14 @@ async function updateCharts(deviceID, SENSORS){
     if (idNow && deviceID && idNow !== deviceID) return;
   }
 
-  // ── HARD RESET: wipe chart datasets up-front to prevent any visual carry-over ──
+    // ── CONCURRENCY-SAFE RESET ──
+  // Acquire the lock first; only the active run is allowed to wipe/redraw.
+  if (__chartsInFlight) { __chartsQueued = true; return; }
+
+  __chartsInFlight = true;
+  const __chartsT0 = performance.now();
+
+  // Now safe to wipe, because we hold the lock.
   try {
     SENSORS.forEach(s => {
       if (!s?.chart) return;
@@ -887,34 +894,6 @@ async function updateCharts(deviceID, SENSORS){
     });
   } catch (_) {}
 
-  if (__chartsInFlight) { __chartsQueued = true; return; }
-
-  // ---- STALE DEVICE GUARD for "now" ranges ----
-  // If the device's last activity is older than the selected window,
-  // force-empty all series so offline trucks don't show spurious charts.
-  if (selectedRangeMode === 'now') {
-
-    const lastSeenMs = (typeof window.__lastSeenMs === 'number' && isFinite(window.__lastSeenMs)) ? window.__lastSeenMs : null;
-    const windowMs   = selectedRangeMinutes * 60 * 1000;
-    const isStale    = (lastSeenMs == null) || ((Date.now() - lastSeenMs) > windowMs);
-
-    if (isStale) {
-      const rng0 = document.getElementById('chartRange');
-      if (rng0) rng0.textContent = '';
-      SENSORS.forEach(s => {
-        if (!s.chart) return;
-        s.chart.data.labels = [];
-        s.chart.data.datasets[0].data = [];
-        delete s.chart.options.scales.y.min;
-        delete s.chart.options.scales.y.max;
-        s.chart.update('none');
-      });
-      return; // ← Nothing to render in this "now" window for a stale device
-    }
-  }
-  
-  __chartsInFlight = true;
-  const __chartsT0 = performance.now();
 
   try{
     // --- 0) Guard: nothing to draw if no sensor addresses ---
