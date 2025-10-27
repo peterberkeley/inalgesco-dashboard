@@ -5,6 +5,8 @@ let _maintenanceLogged = false;
 const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
 const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";   // devices via v2.0
 const UBIDOTS_V1   = "https://industrial.api.ubidots.com/api/v1.6";   // variables via v1.6 (CORS-safe)
+/** Static base for non-GPS trucks (2250 E Riverview Dr, Unit 100, Phoenix AZ). */
+const STATIC_BASE = { lat: 33.4377, lon: -112.0276 };
 
 let REFRESH_INTERVAL = 15_000;      // poll live every 15s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
@@ -1516,8 +1518,6 @@ function signalBarsFrom(value){
   const v = Number(value);
   return Math.max(0, Math.min(5, Math.round((v / 31) * 5)));
 }
-// Fallback static GPS location for non-GPS trucks (Phoenix base)
-const STATIC_BASE_COORDS = { lat: 33.43185, lon: -112.03787 };
 
 function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
@@ -1647,7 +1647,7 @@ function drawLive(data, SENSORS){
     tooltipNote = '(last known)';
   } else {
     // No GPS data ever for this truck → show Phoenix static base
-    target = [33.43185, -112.03787];
+       target = [STATIC_BASE.lat, STATIC_BASE.lon];
     zoom   = Math.max(map.getZoom(), 12);
     tooltipNote = '(static base: Phoenix AZ)';
     console.info('[map] Using static base location (Phoenix) for non-GPS truck');
@@ -1960,8 +1960,14 @@ const __crumbSignal = __crumbAbort.signal;
     let gpsRows = [];
     let startTimeMs = null, endTimeMs = null;
 
-    if (!gpsLabel) {
-      // No GPS variable → nothing to draw
+        if (!gpsLabel) {
+      // No GPS variable at all → show static base pin and stop
+      try { initMap(); } catch(_) {}
+      if (map && marker) {
+        marker.setLatLng([STATIC_BASE.lat, STATIC_BASE.lon]);
+        marker.bindTooltip('(static base: Phoenix AZ)', { direction:'top', offset:[0,-8] }).openTooltip();
+        map.setView([STATIC_BASE.lat, STATIC_BASE.lon], Math.max(map.getZoom(), 12));
+      }
       return;
     }
 
@@ -1988,10 +1994,17 @@ const __crumbSignal = __crumbAbort.signal;
     const gpsPoints = gpsRows
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
       .sort((a,b) => a.timestamp - b.timestamp);
-    if(!gpsPoints.length){
-      // No usable points in the selected range
+        if(!gpsPoints.length){
+      // No GPS values in this window → show static base
+      try { initMap(); } catch(_) {}
+      if (map && marker) {
+        marker.setLatLng([STATIC_BASE.lat, STATIC_BASE.lon]);
+        marker.bindTooltip('(static base: Phoenix AZ)', { direction:'top', offset:[0,-8] }).openTooltip();
+        map.setView([STATIC_BASE.lat, STATIC_BASE.lon], Math.max(map.getZoom(), 12));
+      }
       return;
     }
+
   // If a newer call started while we were fetching, stop now
   if (myTok !== __crumbToken) return;
 
@@ -2432,13 +2445,13 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 let dataDeviceID    = deviceID;
 let dataDeviceLabel = deviceLabel;
 
-// If admin ICCID is configured for this truck, try to bind "LAST" view by ICCID.
-// This covers cases where the variables live under a different Ubidots device.
+ // If admin ICCID is configured, only rebind when we have an explicit mismatch.
+ // If ICCID is unknown/null for this device, stay on the selected device.
 try {
   const adminICC = getAdminIccid(deviceLabel);
   if (selectedRangeMode === 'last' && adminICC) {
     const match = await iccidMatchesAdmin(deviceLabel, deviceID);
-    if (match !== true) {
+    if (match === false) {
       const rebound = await findDeviceByIccid(adminICC, window.__deviceMap);
       if (rebound && rebound.deviceID) {
         console.warn('[rebind] Using ICCID-bound device for', deviceLabel, '→', rebound.deviceLabel, rebound.deviceID);
@@ -2448,6 +2461,7 @@ try {
     }
   }
 } catch(_){}
+
 
 
  // 6) Render everything for the selected device
