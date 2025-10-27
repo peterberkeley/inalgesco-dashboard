@@ -2445,13 +2445,15 @@ window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 let dataDeviceID    = deviceID;
 let dataDeviceLabel = deviceLabel;
 
- // If admin ICCID is configured, only rebind when we have an explicit mismatch.
- // If ICCID is unknown/null for this device, stay on the selected device.
+ // LAST-mode ICCID rebind:
+// Rebind when the selected device's ICCID is a mismatch OR unknown (null).
+// This preserves the original behaviour so historical data living under the
+// ICCID-bound device is still found in LAST view.
 try {
   const adminICC = getAdminIccid(deviceLabel);
   if (selectedRangeMode === 'last' && adminICC) {
-    const match = await iccidMatchesAdmin(deviceLabel, deviceID);
-  if (match !== true) {
+    const match = await iccidMatchesAdmin(deviceLabel, deviceID); // true | false | null
+    if (match !== true) { // mismatch OR unknown → rebind
       const rebound = await findDeviceByIccid(adminICC, window.__deviceMap);
       if (rebound && rebound.deviceID) {
         console.warn('[rebind] Using ICCID-bound device for', deviceLabel, '→', rebound.deviceLabel, rebound.deviceID);
@@ -2460,7 +2462,8 @@ try {
       }
     }
   }
-} catch(_){}
+} catch (_){}
+
 
 
 
