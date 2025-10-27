@@ -156,6 +156,28 @@ async function iccidMatchesAdmin(deviceLabel, deviceID){
   return String(want).trim() === String(got).trim();
 }
 
+/* === Device binding by ICCID (for LAST-mode/offline trucks) === */
+async function findDeviceByIccid(targetIccid, sensorMap){
+  const want = String(targetIccid || '').trim();
+  if (!want) return null;
+  const entries = Object.entries(sensorMap || window.__deviceMap || {});
+  for (const [label, info] of entries){
+    const id = info && info.id;
+    if (!id) continue;
+    try{
+      const icc = await fetchDeviceIccid(id); // v2-bulk first, v1.6 fallback inside
+      if (icc && String(icc).trim() === want) {
+        return { deviceLabel: label, deviceID: id };
+      }
+    }catch(_){}
+  }
+  return null;
+}
+window.findDeviceByIccid = findDeviceByIccid;
+
+
+
+
 /** Decide whether to suppress auto-discovered Dallas addresses to avoid
  *  showing another truck's live data.
  *  Rule:
@@ -2424,17 +2446,39 @@ console.log('[lastSeen]', {
     }
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
+    // --- Choose the actual device to fetch data from ---
+// default = the selected dropdown device
+let dataDeviceID    = deviceID;
+let dataDeviceLabel = deviceLabel;
+
+// If admin ICCID is configured for this truck, try to bind "LAST" view by ICCID.
+// This covers cases where the variables live under a different Ubidots device.
+try {
+  const adminICC = getAdminIccid(deviceLabel);
+  if (selectedRangeMode === 'last' && adminICC) {
+    const match = await iccidMatchesAdmin(deviceLabel, deviceID);
+    if (match !== true) {
+      const rebound = await findDeviceByIccid(adminICC, window.__deviceMap);
+      if (rebound && rebound.deviceID) {
+        console.warn('[rebind] Using ICCID-bound device for', deviceLabel, '→', rebound.deviceLabel, rebound.deviceID);
+        dataDeviceID    = rebound.deviceID;
+        dataDeviceLabel = rebound.deviceLabel;
+      }
+    }
+  }
+} catch(_){}
+
+
  // 6) Render everything for the selected device
 if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
   // 6) Discovered addresses for this device — recompute per device
-  // NEW: suppress auto-discovered Dallas when device has no admin mapping AND appears Offline in "NOW" mode
   let discovered = [];
   try {
-    const suppress = await shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline);
+    const suppress = await shouldSuppressAutoDallas(deviceLabel, dataDeviceID, isOnline);
     if (!suppress) {
-      discovered = await fetchDallasAddresses(deviceID);
+      discovered = await fetchDallasAddresses(dataDeviceID);
     } else {
       console.warn('[gating] Suppressing auto-discovered Dallas for', deviceLabel, '(Offline + no admin mapping, NOW view)');
     }
@@ -2442,53 +2486,49 @@ if (deviceID) {
     console.warn('Dallas discovery failed for', deviceLabel, e);
   }
 
-  // Prefer admin-declared; else discovered *only if online*; else none
-// Prefer admin-mapped sensors, but when Offline only if identity is proven (ICCID match).
-const adminAddrs = getAdminAddresses(deviceLabel) || [];
-let liveDallas = [];
+  // Prefer admin-declared; else discovered (rules vary by mode, keep NOW safe)
+  const adminAddrs = getAdminAddresses(deviceLabel) || [];
+  let liveDallas = [];
 
-let adminOK = false;
-try {
-  adminOK = adminAddrs.length > 0 && await shouldUseAdminDallas(deviceLabel, deviceID, isOnline);
-} catch (_) { adminOK = false; }
+  let adminOK = false;
+  try {
+    adminOK = adminAddrs.length > 0 && await shouldUseAdminDallas(deviceLabel, dataDeviceID, isOnline);
+  } catch (_) { adminOK = false; }
 
-// NEW: In "LAST" mode we want the device's last hour regardless of current online state.
-// Use admin addresses if present; otherwise use discovered (fresh ≤48h) addresses.
-if (selectedRangeMode === 'last') {
-  liveDallas = adminAddrs.length ? adminAddrs
-                                 : (Array.isArray(discovered) ? discovered : []);
-} else {
-  // Original gating for "NOW" view (identity/online safety)
-  if (adminOK) {
-    liveDallas = adminAddrs;
-  } else if (isOnline && Array.isArray(discovered) && discovered.length > 0) {
-    liveDallas = discovered; // discovery only while Online
+  // LAST: always plot from this device's own vars (admin first, else discovered)
+  if (selectedRangeMode === 'last') {
+    liveDallas = adminAddrs.length ? adminAddrs
+                                   : (Array.isArray(discovered) ? discovered : []);
   } else {
-    console.warn('[Dallas gating] No trusted sensors for', deviceLabel, '→ skip charts');
-    liveDallas = [];
+    // NOW: keep identity/online safety
+    if (adminOK) {
+      liveDallas = adminAddrs;
+    } else if (isOnline && Array.isArray(discovered) && discovered.length > 0) {
+      liveDallas = discovered;
+    } else {
+      console.warn('[Dallas gating] No trusted sensors for', deviceLabel, '→ skip charts');
+      liveDallas = [];
+    }
   }
-}
 
-console.debug('[addresses]', {
-  deviceLabel, deviceID,
-  adminCount: adminAddrs.length,
-  discoveredCount: Array.isArray(discovered) ? discovered.length : 0,
-  finalCount: liveDallas.length,
-  mode: selectedRangeMode,
-  liveDallas
-});
+  console.debug('[addresses]', {
+    deviceLabel, deviceID: dataDeviceID,
+    adminCount: adminAddrs.length,
+    discoveredCount: Array.isArray(discovered) ? discovered.length : 0,
+    finalCount: liveDallas.length,
+    mode: selectedRangeMode,
+    liveDallas
+  });
 
-
- 
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
-  ensureCharts(SENSORS, deviceID);   // key on unique deviceID
-  initMap();                         // idempotent
-  await poll(deviceID, SENSORS);     // KPI / quick last values
-  await updateCharts(deviceID, SENSORS);  // windowed history
-  await renderMaintenanceBox(deviceLabel, deviceID);
+  ensureCharts(SENSORS, dataDeviceID);      // key on the actual data device
+  initMap();                                // idempotent
+  await poll(dataDeviceID, SENSORS);        // KPI / quick last values from the data device
+  await updateCharts(dataDeviceID, SENSORS);// windowed history from the data device
+  await renderMaintenanceBox(deviceLabel, dataDeviceID);
 
   const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
-  idle(() => { updateBreadcrumbs(deviceID, selectedRangeMinutes); });
+  idle(() => { updateBreadcrumbs(dataDeviceID, selectedRangeMinutes); });
 } else {
   console.error('Device ID not found for', deviceLabel);
 }
