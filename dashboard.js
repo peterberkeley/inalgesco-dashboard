@@ -961,44 +961,43 @@ async function updateCharts(deviceID, SENSORS){
         return;
       }
 
-    // 3b) Sanity guard (RELAXED for LAST mode):
-// We never blank in LAST mode. LAST uses strict per-device var IDs and a fixed tLast window,
-// so stale v2 last_seen is not a reason to suppress charts here.
-try {
-  if (selectedRangeMode !== 'last') {
-    const nowSec = Math.floor(Date.now() / 1000);
-    // Use last_seen for the actual deviceID we are rendering
-    let lastSeenSecV2 = 0;
-    try {
-      const entries = Object.entries(window.__deviceMap || {});
-      const hit = entries.find(([,info]) => info && info.id === deviceID);
-      lastSeenSecV2 = hit ? (hit[1].last_seen || 0) : 0;
-    } catch (_){}
-    const tLastAgeSec = Math.floor((Date.now() - tLast) / 1000);
+      // 3b) Sanity guard (RELAXED for LAST mode):
+      // We never blank in LAST mode. LAST uses strict per-device var IDs and a fixed tLast window,
+      // so stale v2 last_seen is not a reason to suppress charts here.
+      try {
+        if (selectedRangeMode !== 'last') {
+          const nowSec = Math.floor(Date.now() / 1000);
+          // Use last_seen for the actual deviceID we are rendering
+          let lastSeenSecV2 = 0;
+          try {
+            const entries = Object.entries(window.__deviceMap || {});
+            const hit = entries.find(([,info]) => info && info.id === deviceID);
+            lastSeenSecV2 = hit ? (hit[1].last_seen || 0) : 0;
+          } catch (_){}
+          const tLastAgeSec = Math.floor((Date.now() - tLast) / 1000);
 
-    const STALE_V2_SEC = 48 * 3600;
-    const FRESH_ANCHOR = 6  * 3600;
+          const STALE_V2_SEC = 48 * 3600;
+          const FRESH_ANCHOR = 6  * 3600;
 
-    const v2Stale   = lastSeenSecV2 && ((nowSec - lastSeenSecV2) > STALE_V2_SEC);
-    const anchorNew = (tLastAgeSec >= 0) && (tLastAgeSec < FRESH_ANCHOR);
+          const v2Stale   = lastSeenSecV2 && ((nowSec - lastSeenSecV2) > STALE_V2_SEC);
+          const anchorNew = (tLastAgeSec >= 0) && (tLastAgeSec < FRESH_ANCHOR);
 
-    if (v2Stale && anchorNew) {
-      console.warn('[sanity] NOW: v2 last_seen stale + fresh anchor — blanking to avoid cross-truck illusion.');
-      const rng0 = document.getElementById('chartRange');
-      if (rng0) rng0.textContent = '';
-      SENSORS.forEach(s => {
-        if (!s?.chart) return;
-        s.chart.data.labels = [];
-        s.chart.data.datasets[0].data = [];
-        delete s.chart.options.scales.y.min;
-        delete s.chart.options.scales.y.max;
-        s.chart.update('none');
-      });
-      return;
-    }
-  }
-} catch (_) {}
-
+          if (v2Stale && anchorNew) {
+            console.warn('[sanity] NOW: v2 last_seen stale + fresh anchor — blanking to avoid cross-truck illusion.');
+            const rng0 = document.getElementById('chartRange');
+            if (rng0) rng0.textContent = '';
+            SENSORS.forEach(s => {
+              if (!s?.chart) return;
+              s.chart.data.labels = [];
+              s.chart.data.datasets[0].data = [];
+              delete s.chart.options.scales.y.min;
+              delete s.chart.options.scales.y.max;
+              s.chart.update('none');
+            });
+            return;
+          }
+        }
+      } catch (_) {}
 
 
 
