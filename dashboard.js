@@ -884,20 +884,15 @@ async function updateCharts(deviceID, SENSORS){
 
   try{
     // --- 0) Guard: nothing to draw if no sensor addresses ---
+        // --- 0) Guard: nothing to draw if no sensor addresses ---
     const addrs = SENSORS.filter(s => s.address).map(s => s.address);
     if (!addrs.length) {
+      // Do NOT clear charts here; keep last visible data.
       const rng0 = document.getElementById('chartRange');
       if (rng0) rng0.textContent = '';
-      const avg0 = SENSORS.find(x => x.id === 'avg');
-      if (avg0 && avg0.chart) {
-        avg0.chart.data.labels = [];
-        avg0.chart.data.datasets[0].data = [];
-        delete avg0.chart.options.scales.y.min;
-        delete avg0.chart.options.scales.y.max;
-        avg0.chart.update('none');
-      }
       return;
     }
+
 
       // --- 1) Compute window (absolute ms) ---
     let wndStart, wndEnd;
@@ -935,19 +930,14 @@ async function updateCharts(deviceID, SENSORS){
       }
 
                    // 3) No anchor → clear charts and exit (prevents painting another device's data)
+            // 3) No anchor → keep previous draw and exit
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         const rng0 = document.getElementById('chartRange');
         if (rng0) rng0.textContent = '';
-        SENSORS.forEach(s => {
-          if (!s?.chart) return;
-          s.chart.data.labels = [];
-          s.chart.data.datasets[0].data = [];
-          delete s.chart.options.scales.y.min;
-          delete s.chart.options.scales.y.max;
-          s.chart.update('none');
-        });
+        // Do NOT clear charts; leave last datasets visible.
         return;
       }
+
 
       // 3b) Sanity guard (RELAXED for LAST mode):
       // We never blank in LAST mode. LAST uses strict per-device var IDs and a fixed tLast window,
