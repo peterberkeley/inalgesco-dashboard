@@ -1625,20 +1625,43 @@ function drawLive(data, SENSORS){
       return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
     }).join("");
 
-  // --- Final: map/marker handling (race-proof, no duplication) ---
-// Idempotent: ensure map + marker right now (safe every tick)
-try { initMap(); } catch (_) {}
-if (!map || typeof map.addLayer !== 'function') return;
-if (!marker || typeof marker.setLatLng !== 'function') return;
+   // --- Place map pin with full fallback logic ---
+  try { initMap(); } catch (_) {}
+  if (!map || typeof map.addLayer !== 'function' || !marker) return;
 
-// Place pin: prefer fresh, else last-known
-if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
-  marker.setLatLng([lat, lon]);
-  map.setView([lat, lon], Math.max(map.getZoom(), 13));
-} else if (lastLat != null && lastLon != null && isFinite(lastLat) && isFinite(lastLon)) {
-  marker.setLatLng([lastLat, lastLon]);
-  map.setView([lastLat, lastLon], Math.max(map.getZoom(), 12));
-}
+  const isValid = (v) => (v != null && isFinite(v) && Math.abs(v) > 0.0001);
+
+  const haveFresh = isValid(lat) && isValid(lon);
+  const haveLast  = isValid(lastLat) && isValid(lastLon);
+
+  let target = null;
+  let zoom   = 13;
+  let tooltipNote = '';
+
+  if (haveFresh) {
+    target = [lat, lon];
+    zoom   = Math.max(map.getZoom(), 13);
+  } else if (haveLast) {
+    target = [lastLat, lastLon];
+    zoom   = Math.max(map.getZoom(), 12);
+    tooltipNote = '(last known)';
+  } else {
+    // No GPS data ever for this truck → show Phoenix static base
+    target = [33.43185, -112.03787];
+    zoom   = Math.max(map.getZoom(), 12);
+    tooltipNote = '(static base: Phoenix AZ)';
+    console.info('[map] Using static base location (Phoenix) for non-GPS truck');
+  }
+
+  // Ensure marker visible and positioned
+  if (target) {
+    if (!map.hasLayer(marker)) marker.addTo(map);
+    marker.setOpacity(1);
+    marker.setLatLng(target);
+    marker.bindTooltip(tooltipNote, { direction:'top', offset:[0,-8] }).openTooltip();
+    map.setView(target, zoom);
+  }
+
   }
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
