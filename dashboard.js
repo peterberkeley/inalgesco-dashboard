@@ -1223,17 +1223,28 @@ async function poll(deviceID, SENSORS){
       endTimeMs   = tLast;
       startTimeMs = tLast - (60 * 60 * 1000);
     }
-// ---- LAST-mode sanity gate: v2 last_seen very stale but anchor is fresh → suppress
+// ---- LAST-mode sanity gate (RELAXED): never blank in LAST.
+// We already anchor to a fixed [tLast-60m, tLast] and use strict per-device var IDs.
 if (selectedRangeMode === 'last') {
+  // No-op: do not suppress draw in LAST mode.
+} else {
+  // Keep the protection for NOW mode only.
   try {
-    const selLabel = document.getElementById('deviceSelect')?.value || null;
-    const lastSeenSecV2 = (selLabel && window.__deviceMap?.[selLabel]?.last_seen) || 0;
     const nowSec = Math.floor(Date.now() / 1000);
+    // Use last_seen for the actual deviceID we are rendering (not the dropdown label)
+    let lastSeenSecV2 = 0;
+    try {
+      const entries = Object.entries(window.__deviceMap || {});
+      const hit = entries.find(([,info]) => info && info.id === deviceID);
+      lastSeenSecV2 = hit ? (hit[1].last_seen || 0) : 0;
+    } catch (_) {}
     const tLastAgeSec = Math.floor((Date.now() - endTimeMs) / 1000);
+
     const v2Stale     = lastSeenSecV2 && ((nowSec - lastSeenSecV2) > (48 * 3600));
     const anchorFresh = (tLastAgeSec >= 0) && (tLastAgeSec < (6 * 3600));
+
     if (v2Stale && anchorFresh) {
-      console.warn('[sanity] LAST: v2 last_seen stale but data anchor is fresh — suppressing draw.');
+      console.warn('[sanity] NOW: v2 last_seen stale + fresh anchor — suppressing draw.');
       const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = '';
       SENSORS.forEach(s => {
         if (!s.chart) return;
