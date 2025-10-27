@@ -1048,10 +1048,18 @@ async function updateCharts(deviceID, SENSORS){
       await Promise.all(SENSORS.map(async s => {
         if (!s.address || !s.chart) return;
         const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000);
-        const ordered = rows
-          .filter(r => Number.isFinite(r?.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
-          .sort((a,b) => a.timestamp - b.timestamp);
-        seriesByAddr.set(s.address, ordered);
+        // Coerce timestamp/value to numbers, then in-window filter & sort
+const ordered = rows
+  .map(r => {
+    const ts  = +r.timestamp;                        // force numeric timestamp
+    const val = (r.value != null) ? +r.value : null; // force numeric value
+    return { ...r, timestamp: ts, value: val };
+  })
+  .filter(r => isFinite(r.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
+  .sort((a,b) => a.timestamp - b.timestamp);
+
+seriesByAddr.set(s.address, ordered);
+
       }));
     }
 
