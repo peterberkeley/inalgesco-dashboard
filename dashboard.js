@@ -133,9 +133,8 @@ async function fetchDeviceIccid(deviceID){
     await ensureVarCache(deviceID);
     const id = getVarIdCI(deviceID, 'iccid') || await resolveVarIdStrict(deviceID, 'iccid');
     if (!id) return null;
-    const r = await fetch(
-      `${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`
-    );
+    const r = await fetch( ${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)} );
+    
     if (!r.ok) return null;
     const j = await r.json();
     const v = j?.results?.[0]?.value;
