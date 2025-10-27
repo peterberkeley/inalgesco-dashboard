@@ -986,55 +986,77 @@ async function updateCharts(deviceID, SENSORS){
       wndStart = tLast - (60 * 60 * 1000);
     } // ← CLOSE the `else { ... }` block for selectedRangeMode !== 'now'
 
-    // --- 2) Time-window fetch per variable (not by point count) ---
-// STRICT per-device lookup with case-insensitive label resolution
-async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000){
+       // --- 2) Fetch series: window for NOW, last-N for LAST ---
 
-  await ensureVarCache(deviceID);
+    // STRICT per-device lookup with case-insensitive label resolution
+    async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000){
+      await ensureVarCache(deviceID);
+      let id = getVarIdCI(deviceID, varLabel);
+      if (!id) id = await resolveVarIdStrict(deviceID, varLabel);
+      if (!id) return [];
 
-  // Try cache first (fast)
-  let id = getVarIdCI(deviceID, varLabel);
+      let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+      const out = [];
+      while (url) {
+        const r = await fetch(url);
+        if (!r.ok) break;
+        const j = await r.json();
+        const rows = j?.results || [];
+        out.push(...rows);
+        if (out.length >= hardCap) break;
+        url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}` : null;
+      }
+      return out;
+    }
 
-  // Strict per-device fallback if cache miss
-  if (!id) id = await resolveVarIdStrict(deviceID, varLabel);
-  if (!id) return [];
+    // NEW: fetch newest N values with no time window (for LAST view)
+    async function fetchVarLastN(deviceID, varLabel, hardCap = 2000){
+      await ensureVarCache(deviceID);
+      let id = getVarIdCI(deviceID, varLabel);
+      if (!id) id = await resolveVarIdStrict(deviceID, varLabel);
+      if (!id) return [];
 
-  let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1000&start=${startMs}&end=${endMs}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-  const out = [];
-  while (url) {
-    const r = await fetch(url);
-    if (!r.ok) break;
-    const j = await r.json();
-    const rows = j?.results || [];
-    out.push(...rows);
-    if (out.length >= hardCap) break;
-    url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}` : null;
-  }
-  return out;
-}
+      let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+      const out = [];
+      while (url) {
+        const r = await fetch(url);
+        if (!r.ok) break;
+        const j = await r.json();
+        const rows = j?.results || [];
+        out.push(...rows);
+        if (out.length >= hardCap) break;
+        url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}` : null;
+      }
+      return out;
+    }
 
-
-    // Fetch time-windowed series for each sensor in parallel
+    // Fetch series per sensor according to mode
     const seriesByAddr = new Map();
-    await Promise.all(SENSORS.map(async s => {
-      if (!s.address || !s.chart) return;
-      const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000);
-// Coerce timestamps to numbers (Ub idots can send strings), then in-window filter
-const ordered = rows
-  .map(r => {
-    const ts = +r.timestamp;                // ← numeric coercion
-    const val = (r.value != null) ? +r.value : null;
-    return { ...r, timestamp: ts, value: val };
-  })
-  .filter(r => isFinite(r.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
-  .sort((a,b) => a.timestamp - b.timestamp);
 
-seriesByAddr.set(s.address, ordered);
-
-
-    }));
+    if (selectedRangeMode === 'last') {
+      // Last = newest N points, no window filter
+      await Promise.all(SENSORS.map(async s => {
+        if (!s.address || !s.chart) return;
+        const rows = await fetchVarLastN(deviceID, s.address, /*cap*/ 20000);
+        const ordered = rows
+          .filter(r => Number.isFinite(r?.timestamp))
+          .sort((a,b) => a.timestamp - b.timestamp);
+        seriesByAddr.set(s.address, ordered);
+      }));
+    } else {
+      // Now = explicit time window
+      await Promise.all(SENSORS.map(async s => {
+        if (!s.address || !s.chart) return;
+        const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000);
+        const ordered = rows
+          .filter(r => Number.isFinite(r?.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
+          .sort((a,b) => a.timestamp - b.timestamp);
+        seriesByAddr.set(s.address, ordered);
+      }));
+    }
 
     // --- 3) Render each sensor in-window (explicit window already enforced) ---
+
     SENSORS.forEach(s => {
       if (!s.address || !s.chart) return;
       const ordered = seriesByAddr.get(s.address) || [];
