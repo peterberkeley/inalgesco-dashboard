@@ -2429,22 +2429,32 @@ try {
   adminOK = adminAddrs.length > 0 && await shouldUseAdminDallas(deviceLabel, deviceID, isOnline);
 } catch (_) { adminOK = false; }
 
-if (adminOK) {
-  liveDallas = adminAddrs;
-} else if (isOnline && Array.isArray(discovered) && discovered.length > 0) {
-  liveDallas = discovered; // discovery only while Online
+// NEW: In "LAST" mode we want the device's last hour regardless of current online state.
+// Use admin addresses if present; otherwise use discovered (fresh ≤48h) addresses.
+if (selectedRangeMode === 'last') {
+  liveDallas = adminAddrs.length ? adminAddrs
+                                 : (Array.isArray(discovered) ? discovered : []);
 } else {
-  console.warn('[Dallas gating] No trusted sensors for', deviceLabel, '→ skip charts');
-  liveDallas = [];
+  // Original gating for "NOW" view (identity/online safety)
+  if (adminOK) {
+    liveDallas = adminAddrs;
+  } else if (isOnline && Array.isArray(discovered) && discovered.length > 0) {
+    liveDallas = discovered; // discovery only while Online
+  } else {
+    console.warn('[Dallas gating] No trusted sensors for', deviceLabel, '→ skip charts');
+    liveDallas = [];
+  }
 }
 
-  console.debug('[addresses]', {
-    deviceLabel, deviceID,
-    adminCount: adminAddrs.length,
-    discoveredCount: discovered.length,
-    finalCount: liveDallas.length,
-    liveDallas
-  });
+console.debug('[addresses]', {
+  deviceLabel, deviceID,
+  adminCount: adminAddrs.length,
+  discoveredCount: Array.isArray(discovered) ? discovered.length : 0,
+  finalCount: liveDallas.length,
+  mode: selectedRangeMode,
+  liveDallas
+});
+
 
  
   SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
