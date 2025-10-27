@@ -1516,6 +1516,8 @@ function signalBarsFrom(value){
   const v = Number(value);
   return Math.max(0, Math.min(5, Math.round((v / 31) * 5)));
 }
+// Fallback static GPS location for non-GPS trucks (Phoenix base)
+const STATIC_BASE_COORDS = { lat: 33.43185, lon: -112.03787 };
 
 function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
