@@ -2475,29 +2475,84 @@ console.log('[lastSeen]', {
     }
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
-    // --- Choose the actual device to fetch data from ---
+      // --- Choose the actual device to fetch data from ---
 // default = the selected dropdown device
 let dataDeviceID    = deviceID;
 let dataDeviceLabel = deviceLabel;
 
- // LAST-mode ICCID rebind:
-// Rebind when the selected device's ICCID is a mismatch OR unknown (null).
-// This preserves the original behaviour so historical data living under the
-// ICCID-bound device is still found in LAST view.
+/**
+ * LAST-mode robust selector:
+ * 1) If Admin ICCID exists AND matches the selected device → keep selected.
+ * 2) Else if Admin ICCID exists but mismatch → rebind by ICCID (if found).
+ * 3) Else (no Admin ICCID): pick the device that actually holds the most rows
+ *    for the first admin-mapped Dallas address (fast heuristic).
+ */
 try {
-  const adminICC = getAdminIccid(deviceLabel);
-  if (selectedRangeMode === 'last' && adminICC) {
-    const match = await iccidMatchesAdmin(deviceLabel, deviceID); // true | false | null
-    if (match !== true) { // mismatch OR unknown → rebind
-      const rebound = await findDeviceByIccid(adminICC, window.__deviceMap);
-      if (rebound && rebound.deviceID) {
-        console.warn('[rebind] Using ICCID-bound device for', deviceLabel, '→', rebound.deviceLabel, rebound.deviceID);
-        dataDeviceID    = rebound.deviceID;
-        dataDeviceLabel = rebound.deviceLabel;
+  if (selectedRangeMode === 'last') {
+    const adminICC = getAdminIccid(deviceLabel);
+    if (adminICC) {
+      const match = await iccidMatchesAdmin(deviceLabel, deviceID); // true | false | null
+      if (match !== true) {
+        const rebound = await findDeviceByIccid(adminICC, window.__deviceMap);
+        if (rebound && rebound.deviceID) {
+          console.warn('[rebind] ICCID-bound device for', deviceLabel, '→', rebound.deviceLabel, rebound.deviceID);
+          dataDeviceID    = rebound.deviceID;
+          dataDeviceLabel = rebound.deviceLabel;
+        }
+      }
+    } else {
+      // No ICCID in admin map → pick best device by row count for first admin address
+      const adminAddrs = getAdminAddresses(deviceLabel) || [];
+      const targetAddr = adminAddrs[0] || null;
+
+      if (targetAddr) {
+        // Count rows for targetAddr on each device; pick max
+        const token = encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN);
+        const entries = Object.entries(window.__deviceMap || {});
+        let best = { count: -1, label: dataDeviceLabel, id: dataDeviceID };
+
+        // helper: strict varId resolve + count pages quickly (up to a sane cap)
+        async function countRows(devId){
+          try{
+            await ensureVarCache(devId);
+            let vid = getVarIdCI(devId, targetAddr);
+            if (!vid) vid = await resolveVarIdStrict(devId, targetAddr);
+            if (!vid) return 0;
+            let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1000&token=${token}`;
+            let n = 0;
+            // read up to 10 pages max (≈10k points) to keep latency bounded
+            for (let i=0; i<10 && url; i++){
+              const r = await fetch(url);
+              if (!r.ok) break;
+              const j = await r.json();
+              const rows = j?.results || [];
+              n += rows.length;
+              url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${token}` : null;
+            }
+            return n;
+          }catch{ return 0; }
+        }
+
+        // Scan all Skycafe devices (bounded by your dropdown list)
+        for (const [lbl, info] of entries){
+          const id = info && info.id;
+          if (!id) continue;
+          const cnt = await countRows(id);
+          if (cnt > best.count){
+            best = { count: cnt, label: lbl, id };
+          }
+        }
+
+        if (best.id && best.id !== dataDeviceID && best.count > 2) {
+          console.warn('[rebind] row-count selector for', deviceLabel, '→', best.label, best.id, 'rows=', best.count);
+          dataDeviceID    = best.id;
+          dataDeviceLabel = best.label;
+        }
       }
     }
   }
 } catch (_){}
+
 
 
 
