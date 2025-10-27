@@ -1019,14 +1019,18 @@ async function fetchVarWindow(deviceID, varLabel, startMs, endMs, hardCap = 5000
     await Promise.all(SENSORS.map(async s => {
       if (!s.address || !s.chart) return;
       const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000);
-
-// Strict in-window filter (defensive in case API returns out-of-range points),
-// then ensure chronological order oldest..newest
+// Coerce timestamps to numbers (Ub idots can send strings), then in-window filter
 const ordered = rows
-  .filter(r => Number.isFinite(r?.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
+  .map(r => {
+    const ts = +r.timestamp;                // ← numeric coercion
+    const val = (r.value != null) ? +r.value : null;
+    return { ...r, timestamp: ts, value: val };
+  })
+  .filter(r => isFinite(r.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
   .sort((a,b) => a.timestamp - b.timestamp);
 
 seriesByAddr.set(s.address, ordered);
+
 
     }));
 
