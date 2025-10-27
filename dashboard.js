@@ -875,24 +875,11 @@ async function updateCharts(deviceID, SENSORS){
     if (idNow && deviceID && idNow !== deviceID) return;
   }
 
-    // ── CONCURRENCY-SAFE RESET ──
-  // Acquire the lock first; only the active run is allowed to wipe/redraw.
+     // ── LOCK ONLY: prevent overlapping repaints; no pre-wipe ──
   if (__chartsInFlight) { __chartsQueued = true; return; }
-
   __chartsInFlight = true;
   const __chartsT0 = performance.now();
 
-  // Now safe to wipe, because we hold the lock.
-  try {
-    SENSORS.forEach(s => {
-      if (!s?.chart) return;
-      s.chart.data.labels = [];
-      s.chart.data.datasets[0].data = [];
-      delete s.chart.options.scales.y.min;
-      delete s.chart.options.scales.y.max;
-      s.chart.update('none');
-    });
-  } catch (_) {}
 
 
   try{
