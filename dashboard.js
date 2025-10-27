@@ -2451,7 +2451,7 @@ try {
   const adminICC = getAdminIccid(deviceLabel);
   if (selectedRangeMode === 'last' && adminICC) {
     const match = await iccidMatchesAdmin(deviceLabel, deviceID);
-    if (match === false) {
+  if (match !== true) {
       const rebound = await findDeviceByIccid(adminICC, window.__deviceMap);
       if (rebound && rebound.deviceID) {
         console.warn('[rebind] Using ICCID-bound device for', deviceLabel, '→', rebound.deviceLabel, rebound.deviceID);
