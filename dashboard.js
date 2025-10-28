@@ -960,6 +960,7 @@ async function updateCharts(deviceID, SENSORS){
   if (__chartsInFlight) { __chartsQueued = true; return; }
   __chartsInFlight = true;
   const __chartsT0 = performance.now();
+  const __epochAtStart = Number(window.__selEpoch) || 0;
 
 
 
@@ -1163,6 +1164,8 @@ async function updateCharts(deviceID, SENSORS){
     }
   
     // --- 3) Render each sensor in-window (explicit window already enforced) ---
+    // Abort if selection changed while fetching series
+    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
 
     SENSORS.forEach(s => {
       if (!s.address || !s.chart) return;
@@ -1613,6 +1616,8 @@ try {
   // - 'last' mode: anchor to the last data window
   // - 'now' mode: only if there is in-window data; else null (prevents “today” on offline)
   const tsPanel = (selectedRangeMode === 'last') ? endTimeMs : (hasAny ? endTimeMs : null);
+  // Abort if selection changed while we were fetching
+  if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
 
   drawLive({
     ts: tsPanel,
