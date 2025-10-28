@@ -1319,10 +1319,11 @@ async function poll(deviceID, SENSORS){
       endTimeMs   = Date.now();
       startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
     } else {
-      // 'last' mode: anchor to latest available timestamp across fetched items
-      const tLast = tsList.length ? Math.max(...tsList) : Date.now();
-      endTimeMs   = tLast;
-      startTimeMs = tLast - (60 * 60 * 1000);
+       } else {
+    // 'last' mode: use unified anchor (v2 bulk first, then v1.6 parallel)
+    const tLast = await computeLastAnchorMs(deviceID, SENSORS);
+    endTimeMs   = tLast ?? Date.now();
+    startTimeMs = endTimeMs - (60 * 60 * 1000);
     }
 // ---- LAST-mode sanity gate (RELAXED): never blank in LAST.
 // We already anchor to a fixed [tLast-60m, tLast] and use strict per-device var IDs.
