@@ -3135,6 +3135,53 @@ function closeMapAll(){
   // Force the global reference used by all call sites to this CI version.
   window.getDisplayName = getDisplayNameCI;
 })();
+/* === HOTFIX: make resolveVarIdStrict device-scoped (CT5999 vs Warehouse2) === */
+(function(){
+  const V1 = window.UBIDOTS_V1 || 'https://industrial.api.ubidots.com/api/v1.6';
+  const getToken = () => window.UBIDOTS_ACCOUNT_TOKEN || window.UBIDOTS_TOKEN || '';
+  const withTokenQS = (url) => `${url}${url.includes('?')?'&':'?'}token=${encodeURIComponent(getToken())}`;
+  const authHeaders = () => (getToken() ? { 'X-Auth-Token': getToken() } : {});
+
+  // Device -> Map<label -> varId>
+  window.__varMapByDevice = window.__varMapByDevice || new Map();
+
+  async function buildVarMapForDevice(devId){
+    const cached = window.__varMapByDevice.get(devId);
+    if (cached && cached.byLabel && cached.byLabel.size) return cached.byLabel;
+
+    const url = `${V1}/variables/?device=${encodeURIComponent(devId)}&page_size=1000`;
+    const res = await fetch(withTokenQS(url), { headers: authHeaders() });
+    const j = await res.json();
+    const list = (j && j.results) ? j.results : [];
+
+    const byLabel = new Map();
+    for (const v of list) byLabel.set(String(v.label || ''), String(v.id));
+    window.__varMapByDevice.set(devId, { byLabel, ts: Date.now() });
+    return byLabel;
+  }
+
+  // Preserve the original for rollback
+  const orig = window.resolveVarIdStrict;
+  window.__resolveVarIdStrict_orig = orig;
+
+  // New device-scoped resolver
+  window.resolveVarIdStrict = async function(devId, label){
+    if (!devId || !label) return null;
+    try {
+      const byLabel = await buildVarMapForDevice(devId);
+      const vid = byLabel.get(String(label)) || null;
+      if (vid) return vid;
+
+      // fallback to original if not found
+      if (typeof orig === 'function') return await orig.call(this, devId, label);
+      return null;
+    } catch (e) {
+      if (typeof orig === 'function') return await orig.call(this, devId, label);
+      return null;
+    }
+  };
+})();
+
 
 // EOF
 
