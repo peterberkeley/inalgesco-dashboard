@@ -1031,22 +1031,29 @@ async function updateCharts(deviceID, SENSORS){
       return out;
     }
 
-    // Fetch series per sensor according to mode
-    const seriesByAddr = new Map();
-
-    if (selectedRangeMode === 'last') {
-      // Last = newest N points, no window filter
+        if (selectedRangeMode === 'last') {
+      // Last = fixed 60‑min window [wndStart, wndEnd] anchored to tLast
       await Promise.all(SENSORS.map(async s => {
         if (!s.address || !s.chart) return;
-        const rows = await fetchVarLastN(deviceID, s.address, /*cap*/ 20000);
+
+        // Fetch only the needed window (faster + correct range)
+        const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*hardCap*/ 4000);
+
         const ordered = rows
-          .filter(r => Number.isFinite(r?.timestamp))
+          .map(r => {
+            const ts  = +r.timestamp;                        // force numeric timestamp
+            const val = (r.value != null) ? +r.value : null; // force numeric value
+            return { ...r, timestamp: ts, value: val };
+          })
+          .filter(r => Number.isFinite(r.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
           .sort((a,b) => a.timestamp - b.timestamp);
+
         seriesByAddr.set(s.address, ordered);
       }));
     } else {
       // Now = explicit time window
       await Promise.all(SENSORS.map(async s => {
+
         if (!s.address || !s.chart) return;
         const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000);
         // Coerce timestamp/value to numbers, then in-window filter & sort
