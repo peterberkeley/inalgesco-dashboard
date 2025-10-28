@@ -2760,56 +2760,31 @@ try {
           dataDeviceLabel = rebound.deviceLabel;
         }
       }
-    } else {
-      // No ICCID in admin map → pick best device by row count for first admin address
+        } else {
+      // PATCH: disable automatic row-count rebinding — keep current device.
       const adminAddrs = getAdminAddresses(deviceLabel) || [];
       const targetAddr = adminAddrs[0] || null;
 
       if (targetAddr) {
-        // Count rows for targetAddr on each device; pick max
-        const token = encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN);
-        const entries = Object.entries(window.__deviceMap || {});
-        let best = { count: -1, label: dataDeviceLabel, id: dataDeviceID };
-
-        // helper: strict varId resolve + count pages quickly (up to a sane cap)
-        async function countRows(devId){
-          try{
-            await ensureVarCache(devId);
-            let vid = getVarIdCI(devId, targetAddr);
-            if (!vid) vid = await resolveVarIdStrict(devId, targetAddr);
-            if (!vid) return 0;
-            let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1000&token=${token}`;
-            let n = 0;
-            // read up to 10 pages max (≈10k points) to keep latency bounded
-            for (let i=0; i<10 && url; i++){
-              const r = await fetch(url);
-              if (!r.ok) break;
-              const j = await r.json();
-              const rows = j?.results || [];
-              n += rows.length;
-              url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${token}` : null;
-            }
-            return n;
-          }catch{ return 0; }
-        }
-
-        // Scan all Skycafe devices (bounded by your dropdown list)
-        for (const [lbl, info] of entries){
-          const id = info && info.id;
-          if (!id) continue;
-          const cnt = await countRows(id);
-          if (cnt > best.count){
-            best = { count: cnt, label: lbl, id };
+        // Optional: quick diagnostic only (do not change deviceID)
+        try {
+          const token = encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN);
+          await ensureVarCache(dataDeviceID);
+          let vid = getVarIdCI(dataDeviceID, targetAddr);
+          if (!vid) vid = await resolveVarIdStrict(dataDeviceID, targetAddr);
+          if (vid) {
+            const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1&token=${token}`);
+            const ok = r.ok;
+            console.debug('[rebind-check]', deviceLabel, targetAddr, ok ? 'ok' : 'no data');
           }
-        }
-
-        if (best.id && best.id !== dataDeviceID && best.count > 2) {
-          console.warn('[rebind] row-count selector for', deviceLabel, '→', best.label, best.id, 'rows=', best.count);
-          dataDeviceID    = best.id;
-          dataDeviceLabel = best.label;
+        } catch (e) {
+          console.warn('[rebind-check failed]', e);
         }
       }
+      // Always keep current selection (no automatic jump)
+      console.warn('[rebind skipped] keeping', deviceLabel, '→', dataDeviceLabel);
     }
+
   }
 } catch (_){}
 
