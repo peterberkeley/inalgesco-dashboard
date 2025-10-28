@@ -53,12 +53,14 @@ let __updateQueued   = false;
 let __selEpoch = 0;
 function bumpSelEpoch(){
   // increment based on the public mirror to avoid any drift
-  __selEpoch = (Number(window.__selEpoch) || 0) + 1;
+  const cur = Number(window.__selEpoch);
+  __selEpoch = Number.isFinite(cur) ? (cur + 1) : (__selEpoch + 1);
   window.__selEpoch = __selEpoch;
 }
 // Expose for console/tests (bind directly; no wrapper)
 window.__selEpoch = 0;
 window.bumpSelEpoch = bumpSelEpoch;
+
 
 /* =================== Helpers =================== */
 function onReady(fn){
