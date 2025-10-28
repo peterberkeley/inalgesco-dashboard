@@ -2389,6 +2389,9 @@ async function __topHexByRows(deviceID, k = 3){
   rows.sort((a,b)=>b.n-a.n);
   return rows.slice(0, Math.max(1,k)).map(x=>x.lab);
 }
+
+
+// === INSERT ↑ ===============================================================
 // New: pick top hex labels by newest timestamp (no pagination, 1 row per label)
 async function __topHexByNewestTs(deviceID, k = 3){
   await ensureVarCache(deviceID);
@@ -2426,8 +2429,6 @@ async function __topHexByNewestTs(deviceID, k = 3){
 }
 // Expose for console/tests
 window.__topHexByNewestTs = __topHexByNewestTs;
-
-// === INSERT ↑ ===============================================================
 
 
 async function updateAll(){
