@@ -569,6 +569,39 @@ async function fetchDeviceLastValuesV2(deviceID){
     return null;
   }
 }
+// Unified LAST anchor computation used by both poll() and updateCharts().
+// Strategy: v2 bulk first (single request), then parallel v1.6 fallback.
+async function computeLastAnchorMs(deviceID, SENSORS){
+  let tLast = -Infinity;
+
+  // 1) Try v2 bulk once
+  try {
+    const bulk = await fetchDeviceLastValuesV2(deviceID);
+    if (bulk && typeof bulk === 'object') {
+      for (const s of SENSORS) {
+        if (!s.address) continue;
+        const o = bulk[s.address];
+        const ts = o && o.timestamp;
+        if (Number.isFinite(ts) && ts > tLast) tLast = ts;
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  // 2) Parallel v1.6 fallback
+  if (!Number.isFinite(tLast) || tLast === -Infinity) {
+    await ensureVarCache(deviceID);
+    const addrs = SENSORS.filter(s => s.address).map(s => s.address);
+    const ids   = await Promise.all(addrs.map(a => resolveVarIdStrict(deviceID, a)));
+    const tsArr = await Promise.all(ids.map(id => id ? fetchLastTsV1(id) : null));
+    for (const ts of tsArr) {
+      if (Number.isFinite(ts) && ts > tLast) tLast = ts;
+    }
+  }
+
+  return Number.isFinite(tLast) ? tLast : null;
+}
+// Expose for console/tests and to ensure global visibility in Safari
+window.computeLastAnchorMs = computeLastAnchorMs;
 
 // ------------- FRESH-ONLY DALLAS RESOLVER (≤48 h) -------------
 async function fetchDallasAddresses(deviceID){
