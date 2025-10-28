@@ -2143,6 +2143,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
 if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
 __crumbAbort = new AbortController();
 const __crumbSignal = __crumbAbort.signal;
+const __epochAtStart = Number(window.__selEpoch) || 0;
 
   try{
   initMap(); // idempotent
@@ -2191,6 +2192,8 @@ const __crumbSignal = __crumbAbort.signal;
       startTimeMs = tLast - (60 * 60 * 1000);
       gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTimeMs, endTimeMs, __crumbSignal);
     }
+    // Abort if selection changed while fetching breadcrumbs
+    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
 
 
 
