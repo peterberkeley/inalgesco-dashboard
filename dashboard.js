@@ -954,8 +954,7 @@ async function updateCharts(deviceID, SENSORS){
     const selNow = document.getElementById('deviceSelect')?.value || null;
     const idNow  = window.__deviceMap?.[selNow]?.id || null;
     if (idNow && deviceID && idNow !== deviceID) return;
-    // ⬅️ ADD THIS LINE (matches updateCharts / updateBreadcrumbs)
-  const __epochAtStart = Number(window.__selEpoch) || 0;
+
   }
 
      // ── LOCK ONLY: prevent overlapping repaints; no pre-wipe ──
@@ -1277,7 +1276,9 @@ async function poll(deviceID, SENSORS){
     const idNow  = window.__deviceMap?.[selNow]?.id || null;
     if (idNow && deviceID && idNow !== deviceID) return;
   }
+  const __epochAtStart = Number(window.__selEpoch) || 0;
   // ---- FAST PATH: one call gets all last values; draw immediately if available ----
+
   const bulk = await fetchDeviceLastValuesV2(deviceID);
   if (bulk) {
     const readings = {};
