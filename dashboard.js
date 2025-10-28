@@ -2180,7 +2180,7 @@ const __epochAtStart = Number(window.__selEpoch) || 0;
       try { initMap(); } catch(_) {}
       if (map && marker) {
         marker.setLatLng([STATIC_BASE.lat, STATIC_BASE.lon]);
-        marker.bindTooltip('(static base: Phoenix AZ)', { direction:'top', offset:[0,-8] }).openTooltip();
+        marker.bindTooltip('(SkyCafè PHX)', { direction:'top', offset:[0,-8] }).openTooltip();
         map.setView([STATIC_BASE.lat, STATIC_BASE.lon], Math.max(map.getZoom(), 12));
       }
       return;
@@ -2216,7 +2216,7 @@ const __epochAtStart = Number(window.__selEpoch) || 0;
       try { initMap(); } catch(_) {}
       if (map && marker) {
         marker.setLatLng([STATIC_BASE.lat, STATIC_BASE.lon]);
-        marker.bindTooltip('(static base: Phoenix AZ)', { direction:'top', offset:[0,-8] }).openTooltip();
+        marker.bindTooltip('(SkyCafè PHX)', { direction:'top', offset:[0,-8] }).openTooltip();
         map.setView([STATIC_BASE.lat, STATIC_BASE.lon], Math.max(map.getZoom(), 12));
       }
       return;
