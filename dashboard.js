@@ -2751,17 +2751,32 @@ if (deviceID) {
     if (adminAddrs.length) {
       // Health check: if Admin labels are effectively empty (~2 rows each), fall back
       const counts = await Promise.all(adminAddrs.map(a => __countRowsFast(dataDeviceID, a, 2)));
-      const adminTotal = counts.reduce((a,b)=>a+b,0);
-      const stale = adminTotal <= (2 * adminAddrs.length);  // ≈2 per address → stale mapping
+           // Health check (no pagination): newest timestamp per admin label
+      const token = encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN);
+      async function __latestTsForLabel(devId, lab){
+        try{
+          await ensureVarCache(devId);
+          let vid = getVarIdCI(devId, lab);
+          if (!vid) vid = await resolveVarIdStrict(devId, lab);
+          if (!vid) return -Infinity;
+          const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1&token=${token}`);
+          if (!r.ok) return -Infinity;
+          const j = await r.json();
+          const ts = j?.results?.[0]?.timestamp;
+          return Number.isFinite(ts) ? ts : -Infinity;
+        }catch(_){ return -Infinity; }
+      }
+      const tsList = await Promise.all(adminAddrs.map(a => __latestTsForLabel(dataDeviceID, a)));
+      const FRESH_MS = 48 * 3600 * 1000; // 48h window for admin map freshness
+      const nowMs = Date.now();
+      const stale = tsList.every(ts => !Number.isFinite(ts) || (nowMs - ts) > FRESH_MS);
+
       liveDallas = stale
-      ? await __topHexByNewestTs(dataDeviceID, adminAddrs.length || 3)
+        ? await __topHexByNewestTs(dataDeviceID, adminAddrs.length || 3)
         : adminAddrs;
-      console.warn('[LAST select]', { adminAddrs, counts, stale, liveDallas });
-    } else {
-      liveDallas = (Array.isArray(discovered) && discovered.length)
-        ? discovered
-     : await __topHexByNewestTs(dataDeviceID, 3);
-      console.warn('[LAST select] no adminAddrs; using', liveDallas);
+
+      console.warn('[LAST select]', { adminAddrs, tsList, stale, liveDallas });
+
     }
   } else {
     // NOW: keep identity/online safety
