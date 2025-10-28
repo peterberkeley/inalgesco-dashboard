@@ -673,9 +673,10 @@ async function fetchDallasAddresses(deviceID){
   }catch(e){
     console.error('fetchDallasAddresses (fresh-only)', e);
     return [];
+    window.fetchDallasAddresses = fetchDallasAddresses;
   }
 }
-window.fetchDallasAddresses = fetchDallasAddresses;
+
 
 
 
