@@ -2754,13 +2754,13 @@ if (deviceID) {
       const adminTotal = counts.reduce((a,b)=>a+b,0);
       const stale = adminTotal <= (2 * adminAddrs.length);  // ≈2 per address → stale mapping
       liveDallas = stale
-        ? await __topHexByRows(dataDeviceID, adminAddrs.length || 3)
+      ? await __topHexByNewestTs(dataDeviceID, adminAddrs.length || 3)
         : adminAddrs;
       console.warn('[LAST select]', { adminAddrs, counts, stale, liveDallas });
     } else {
       liveDallas = (Array.isArray(discovered) && discovered.length)
         ? discovered
-        : await __topHexByRows(dataDeviceID, 3);
+     : await __topHexByNewestTs(dataDeviceID, 3);
       console.warn('[LAST select] no adminAddrs; using', liveDallas);
     }
   } else {
