@@ -1863,7 +1863,7 @@ function drawLive(data, SENSORS){
     // No GPS data ever for this truck → show Phoenix static base
        target = [STATIC_BASE.lat, STATIC_BASE.lon];
     zoom   = Math.max(map.getZoom(), 12);
-    tooltipNote = '(static base: Phoenix AZ)';
+    tooltipNote = '(SkyCafè PHX)';
     console.info('[map] Using static base location (Phoenix) for non-GPS truck');
   }
 
