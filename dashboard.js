@@ -955,16 +955,15 @@ async function updateCharts(deviceID, SENSORS){
     const idNow  = window.__deviceMap?.[selNow]?.id || null;
     if (idNow && deviceID && idNow !== deviceID) return;
   }
-  const __epochAtStart = Number(window.__selEpoch) || 0;
+
      // ── LOCK ONLY: prevent overlapping repaints; no pre-wipe ──
-  if (__chartsInFlight) { __chartsQueued = true; return; }
+    if (__chartsInFlight) { __chartsQueued = true; return; }
   __chartsInFlight = true;
   const __chartsT0 = performance.now();
   const __epochAtStart = Number(window.__selEpoch) || 0;
 
-
-
   try{
+
     // --- 0) Guard: nothing to draw if no sensor addresses ---
         // --- 0) Guard: nothing to draw if no sensor addresses ---
     const addrs = SENSORS.filter(s => s.address).map(s => s.address);
