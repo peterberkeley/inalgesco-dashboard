@@ -2389,6 +2389,44 @@ async function __topHexByRows(deviceID, k = 3){
   rows.sort((a,b)=>b.n-a.n);
   return rows.slice(0, Math.max(1,k)).map(x=>x.lab);
 }
+// New: pick top hex labels by newest timestamp (no pagination, 1 row per label)
+async function __topHexByNewestTs(deviceID, k = 3){
+  await ensureVarCache(deviceID);
+  const caps = variableCache[deviceID] || {};
+  const hexLabs = Object.keys(caps).filter(l => /^[0-9a-fA-F]{16}$/.test(l));
+  if (!hexLabs.length) return [];
+
+  const token = encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN);
+  // Resolve varIds once (CI map already built)
+  const pairs = await Promise.all(hexLabs.map(async lab => {
+    let vid = getVarIdCI(deviceID, lab);
+    if (!vid) vid = await resolveVarIdStrict(deviceID, lab);
+    return { lab, vid: vid || null };
+  }));
+
+  // Fetch newest ts per id in parallel (page_size=1)
+  const tsList = await Promise.all(pairs.map(async ({lab, vid}) => {
+    if (!vid) return { lab, ts: -Infinity };
+    try{
+      const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1&token=${token}`);
+      if (!r.ok) return { lab, ts: -Infinity };
+      const j = await r.json();
+      const ts = j?.results?.[0]?.timestamp;
+      return { lab, ts: Number.isFinite(ts) ? ts : -Infinity };
+    }catch(_){
+      return { lab, ts: -Infinity };
+    }
+  }));
+
+  tsList.sort((a,b) => (b.ts - a.ts));
+  return tsList
+    .filter(x => Number.isFinite(x.ts) && x.ts > 0)
+    .slice(0, Math.max(1, k))
+    .map(x => x.lab);
+}
+// Expose for console/tests
+window.__topHexByNewestTs = __topHexByNewestTs;
+
 // === INSERT ↑ ===============================================================
 
 
