@@ -1521,11 +1521,10 @@ try {
     endTimeMs   = Date.now();
     startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
   } else {
-    // 'last' mode: anchor to latest timestamp among fetched items
-    const candidates = [tsGps, tsIccid, tsSensorMax, tsSignal, tsVolt].filter(x => isFinite(x));
-    const tLast = candidates.length ? Math.max(...candidates) : Date.now();
-    endTimeMs   = tLast;
-    startTimeMs = tLast - (60 * 60 * 1000);
+         // 'last' mode: use unified anchor
+      const tLast = await computeLastAnchorMs(deviceID, SENSORS);
+      endTimeMs   = tLast ?? Date.now();
+      startTimeMs = endTimeMs - (60 * 60 * 1000);
   }
   const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
 
