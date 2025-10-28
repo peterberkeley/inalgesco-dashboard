@@ -2267,6 +2267,44 @@ onReady(() => {
   if (sel) sel.addEventListener("change", updateAll);
 });
 
+
+// === INSERT ↓ (helpers used by LAST-mode selection) =========================
+async function __countRowsFast(deviceID, varLabel, maxPages = 3){
+  try{
+    await ensureVarCache(deviceID);
+    let vid = getVarIdCI(deviceID, varLabel);
+    if (!vid) vid = await resolveVarIdStrict(deviceID, varLabel);
+    if (!vid) return 0;
+
+    const token = encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN);
+    let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1000&token=${token}`;
+    let n = 0, p = 0;
+    while (url && p < maxPages) {
+      const r = await fetch(url);
+      if (!r.ok) break;
+      const j = await r.json();
+      n += (j?.results?.length || 0);
+      url = (j.next && typeof j.next === 'string') ? `${j.next}&token=${token}` : null;
+      p++;
+    }
+    return n;
+  }catch{ return 0; }
+}
+
+async function __topHexByRows(deviceID, k = 3){
+  await ensureVarCache(deviceID);
+  const caps = variableCache[deviceID] || {};
+  const hexLabs = Object.keys(caps).filter(l => /^[0-9a-fA-F]{16}$/.test(l));
+  const rows = [];
+  for (const lab of hexLabs){
+    rows.push({ lab, n: await __countRowsFast(deviceID, lab, 4) }); // ~4k sample per label
+  }
+  rows.sort((a,b)=>b.n-a.n);
+  return rows.slice(0, Math.max(1,k)).map(x=>x.lab);
+}
+// === INSERT ↑ ===============================================================
+
+
 async function updateAll(){
     if (__updateInFlight) {
     __updateQueued = true;
@@ -2583,10 +2621,22 @@ if (deviceID) {
     adminOK = adminAddrs.length > 0 && await shouldUseAdminDallas(deviceLabel, dataDeviceID, isOnline);
   } catch (_) { adminOK = false; }
 
-  // LAST: always plot from this device's own vars (admin first, else discovered)
-  if (selectedRangeMode === 'last') {
-    liveDallas = adminAddrs.length ? adminAddrs
-                                   : (Array.isArray(discovered) ? discovered : []);
+    if (selectedRangeMode === 'last') {
+    if (adminAddrs.length) {
+      // Health check: if Admin labels are effectively empty (~2 rows each), fall back
+      const counts = await Promise.all(adminAddrs.map(a => __countRowsFast(dataDeviceID, a, 2)));
+      const adminTotal = counts.reduce((a,b)=>a+b,0);
+      const stale = adminTotal <= (2 * adminAddrs.length);  // ≈2 per address → stale mapping
+      liveDallas = stale
+        ? await __topHexByRows(dataDeviceID, adminAddrs.length || 3)
+        : adminAddrs;
+      console.warn('[LAST select]', { adminAddrs, counts, stale, liveDallas });
+    } else {
+      liveDallas = (Array.isArray(discovered) && discovered.length)
+        ? discovered
+        : await __topHexByRows(dataDeviceID, 3);
+      console.warn('[LAST select] no adminAddrs; using', liveDallas);
+    }
   } else {
     // NOW: keep identity/online safety
     if (adminOK) {
@@ -2598,6 +2648,7 @@ if (deviceID) {
       liveDallas = [];
     }
   }
+
 
   console.debug('[addresses]', {
     deviceLabel, deviceID: dataDeviceID,
