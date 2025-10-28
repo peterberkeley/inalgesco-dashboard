@@ -1319,7 +1319,7 @@ async function poll(deviceID, SENSORS){
       endTimeMs   = Date.now();
       startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
     } else {
-       } else {
+      
     // 'last' mode: use unified anchor (v2 bulk first, then v1.6 parallel)
     const tLast = await computeLastAnchorMs(deviceID, SENSORS);
     endTimeMs   = tLast ?? Date.now();
