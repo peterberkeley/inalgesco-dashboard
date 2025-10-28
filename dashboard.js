@@ -1141,7 +1141,6 @@ async function updateCharts(deviceID, SENSORS){
         seriesByAddr.set(s.address, ordered);
       }));
     } else {
-     } else {
   // NOW = explicit time window [wndStart, wndEnd]
   await Promise.all(SENSORS.map(async s => {
     if (!s.address || !s.chart) return;
