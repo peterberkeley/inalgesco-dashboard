@@ -954,6 +954,8 @@ async function updateCharts(deviceID, SENSORS){
     const selNow = document.getElementById('deviceSelect')?.value || null;
     const idNow  = window.__deviceMap?.[selNow]?.id || null;
     if (idNow && deviceID && idNow !== deviceID) return;
+    // ⬅️ ADD THIS LINE (matches updateCharts / updateBreadcrumbs)
+  const __epochAtStart = Number(window.__selEpoch) || 0;
   }
 
      // ── LOCK ONLY: prevent overlapping repaints; no pre-wipe ──
