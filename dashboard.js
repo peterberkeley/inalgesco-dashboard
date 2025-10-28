@@ -52,14 +52,13 @@ let __updateQueued   = false;
 // Unified selection epoch — increment on any user selection that should cancel in-flight work
 let __selEpoch = 0;
 function bumpSelEpoch(){
-  __selEpoch++;
-  // keep the public mirror in sync
+  // increment based on the public mirror to avoid any drift
+  __selEpoch = (Number(window.__selEpoch) || 0) + 1;
   window.__selEpoch = __selEpoch;
 }
-// Expose for console/tests
-window.__selEpoch = __selEpoch;
-window.bumpSelEpoch = function(){ bumpSelEpoch(); };
-
+// Expose for console/tests (bind directly; no wrapper)
+window.__selEpoch = 0;
+window.bumpSelEpoch = bumpSelEpoch;
 
 /* =================== Helpers =================== */
 function onReady(fn){
