@@ -906,29 +906,34 @@ async function updateCharts(deviceID, SENSORS){
       // --- 'last' mode: anchor strictly to the selected device's freshest timestamp ---
       let tLast = -Infinity;
 
-      // 1) v1.6 per-address timestamps with strict per-device resolution
-      await ensureVarCache(deviceID);
-      for (const addr of addrs) {
-        const id = await resolveVarIdStrict(deviceID, addr); // strict per-device, not cache-only
-        if (!id) continue;
-        const ts = await fetchLastTsV1(id);
-        if (Number.isFinite(ts) && ts > tLast) tLast = ts;
+           // A) Prefer v2 bulk last-values (single request) to determine tLast
+      try {
+        const bulk = await fetchDeviceLastValuesV2(deviceID);
+        if (bulk && typeof bulk === 'object') {
+          for (const s of SENSORS) {
+            if (!s.address) continue;
+            const o = bulk[s.address];
+            const ts = o && o.timestamp;
+            if (Number.isFinite(ts) && ts > tLast) tLast = ts;
+          }
+        }
+      } catch (_) {
+        // ignore; fall through to v1.6 parallel fallback
       }
 
-      // 2) Try v2 bulk once if still nothing (header auth only)
+      // B) If still unknown, resolve in PARALLEL via v1.6 (ids + newest row)
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
-        try {
-          const bulk = await fetchDeviceLastValuesV2(deviceID); // uses X-Auth-Token header
-          if (bulk && typeof bulk === 'object') {
-            for (const s of SENSORS) {
-              if (!s.address) continue;
-              const o   = bulk[s.address];
-              const ts2 = o && o.timestamp;
-              if (Number.isFinite(ts2) && ts2 > tLast) tLast = ts2;
-            }
-          }
-        } catch (e) {
-          console.warn('v2 bulk fallback failed', e);
+        await ensureVarCache(deviceID);
+        // Resolve IDs in parallel
+        const ids = await Promise.all(
+          addrs.map(a => resolveVarIdStrict(deviceID, a))
+        );
+        // Fetch newest timestamps in parallel
+        const tsList = await Promise.all(
+          ids.map(id => id ? fetchLastTsV1(id) : null)
+        );
+        for (const ts of tsList) {
+          if (Number.isFinite(ts) && ts > tLast) tLast = ts;
         }
       }
 
