@@ -1031,10 +1031,10 @@ async function updateCharts(deviceID, SENSORS){
       return out;
     }
 
-           // Fetch series: window for NOW, fixed 60-min for LAST
+             // Fetch series: window for NOW, fixed 60-min for LAST
     const seriesByAddr = new Map();
 
-st') {
+    if (selectedRangeMode === 'last') {
       // LAST = strictly the anchored 60-min window [wndStart, wndEnd]
       await Promise.all(SENSORS.map(async s => {
         if (!s.address || !s.chart) return;
@@ -1057,12 +1057,14 @@ st') {
         seriesByAddr.set(s.address, ordered);
       }));
     } else {
-      // NOW = explicit time window [wndStart, wndEnd] (unchanged logic)
+      // NOW = explicit time window [wndStart, wndEnd]
       await Promise.all(SENSORS.map(async s => {
         if (!s.address || !s.chart) return;
+
         const rows = await fetchVarWindow(
           deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000
         );
+
         const ordered = rows
           .map(r => {
             const ts  = +r.timestamp;
@@ -1076,9 +1078,7 @@ st') {
         seriesByAddr.set(s.address, ordered);
       }));
     }
-
   
-
     // --- 3) Render each sensor in-window (explicit window already enforced) ---
 
     SENSORS.forEach(s => {
