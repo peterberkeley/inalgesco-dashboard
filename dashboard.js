@@ -1031,26 +1031,52 @@ async function updateCharts(deviceID, SENSORS){
       return out;
     }
 
-        if (selectedRangeMode === 'last') {
-      // Last = fixed 60‑min window [wndStart, wndEnd] anchored to tLast
+           // Fetch series: window for NOW, fixed 60-min for LAST
+    const seriesByAddr = new Map();
+
+    if (selectedRangeMode === 'last') {
+      // LAST = strictly the anchored 60-min window [wndStart, wndEnd]
       await Promise.all(SENSORS.map(async s => {
         if (!s.address || !s.chart) return;
 
-        // Fetch only the needed window (faster + correct range)
-        const rows = await fetchVarWindow(deviceID, s.address, wndStart, wndEnd, /*hardCap*/ 4000);
+        // Request only the window → faster + correct
+        const rows = await fetchVarWindow(
+          deviceID, s.address, wndStart, wndEnd, /*hardCap*/ 4000
+        );
 
         const ordered = rows
           .map(r => {
-            const ts  = +r.timestamp;                        // force numeric timestamp
-            const val = (r.value != null) ? +r.value : null; // force numeric value
+            const ts  = +r.timestamp;
+            const val = (r.value != null) ? +r.value : null;
             return { ...r, timestamp: ts, value: val };
           })
-          .filter(r => Number.isFinite(r.timestamp) && r.timestamp >= wndStart && r.timestamp <= wndEnd)
+          .filter(r => Number.isFinite(r.timestamp) &&
+                       r.timestamp >= wndStart && r.timestamp <= wndEnd)
           .sort((a,b) => a.timestamp - b.timestamp);
 
         seriesByAddr.set(s.address, ordered);
       }));
     } else {
+      // NOW = explicit time window [wndStart, wndEnd] (unchanged logic)
+      await Promise.all(SENSORS.map(async s => {
+        if (!s.address || !s.chart) return;
+        const rows = await fetchVarWindow(
+          deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000
+        );
+        const ordered = rows
+          .map(r => {
+            const ts  = +r.timestamp;
+            const val = (r.value != null) ? +r.value : null;
+            return { ...r, timestamp: ts, value: val };
+          })
+          .filter(r => Number.isFinite(r.timestamp) &&
+                       r.timestamp >= wndStart && r.timestamp <= wndEnd)
+          .sort((a,b) => a.timestamp - b.timestamp);
+
+        seriesByAddr.set(s.address, ordered);
+      }));
+    }
+
       // Now = explicit time window
       await Promise.all(SENSORS.map(async s => {
 
