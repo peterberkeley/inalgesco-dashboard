@@ -1141,27 +1141,35 @@ async function updateCharts(deviceID, SENSORS){
         seriesByAddr.set(s.address, ordered);
       }));
     } else {
-      // NOW = explicit time window [wndStart, wndEnd]
-      await Promise.all(SENSORS.map(async s => {
-        if (!s.address || !s.chart) return;
+     } else {
+  // NOW = explicit time window [wndStart, wndEnd]
+  await Promise.all(SENSORS.map(async s => {
+    if (!s.address || !s.chart) return;
 
-        const rows = await fetchVarWindow(
-          deviceID, s.address, wndStart, wndEnd, /*cap*/ 20000
-        );
+    // PATCH: fetch newest N values then filter locally into the window.
+    // This avoids v1.6 ?start/&end returning empty sets on your account.
+    const rows = await fetchVarLastN(
+      deviceID,
+      s.address,
+      /*hardCap*/ 4000
+    );
 
-        const ordered = rows
-          .map(r => {
-            const ts  = +r.timestamp;
-            const val = (r.value != null) ? +r.value : null;
-            return { ...r, timestamp: ts, value: val };
-          })
-          .filter(r => Number.isFinite(r.timestamp) &&
-                       r.timestamp >= wndStart && r.timestamp <= wndEnd)
-          .sort((a,b) => a.timestamp - b.timestamp);
+    const ordered = rows
+      .map(r => {
+        const ts  = +r.timestamp;
+        const val = (r.value != null) ? +r.value : null;
+        return { ...r, timestamp: ts, value: val };
+      })
+      .filter(r =>
+        Number.isFinite(r.timestamp) &&
+        r.timestamp >= wndStart && r.timestamp <= wndEnd
+      )
+      .sort((a,b) => a.timestamp - b.timestamp);
 
-        seriesByAddr.set(s.address, ordered);
-      }));
-    }
+    seriesByAddr.set(s.address, ordered);
+  }));
+}
+
   
     // --- 3) Render each sensor in-window (explicit window already enforced) ---
     // Abort if selection changed while fetching series
