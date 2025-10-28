@@ -53,6 +53,8 @@ let __updateQueued   = false;
 let __selEpoch = 0;
 function bumpSelEpoch(){
   __selEpoch++;
+  // keep the public mirror in sync
+  window.__selEpoch = __selEpoch;
 }
 // Expose for console/tests
 window.__selEpoch = __selEpoch;
@@ -2425,9 +2427,10 @@ onReady(() => {
   setInterval(updateAll, REFRESH_INTERVAL);
 
   const sel = document.getElementById("deviceSelect");
-  if (sel) sel.addEventListener("change", updateAll);
-});
-
+  if (sel) sel.addEventListener("change", () => {
+    try { window.bumpSelEpoch(); } catch(_) {}
+    updateAll();
+  });
 
 // === INSERT ↓ (helpers used by LAST-mode selection) =========================
 async function __countRowsFast(deviceID, varLabel, maxPages = 3){
