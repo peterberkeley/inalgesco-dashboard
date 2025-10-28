@@ -955,7 +955,7 @@ async function updateCharts(deviceID, SENSORS){
     const idNow  = window.__deviceMap?.[selNow]?.id || null;
     if (idNow && deviceID && idNow !== deviceID) return;
   }
-
+  const __epochAtStart = Number(window.__selEpoch) || 0;
      // ── LOCK ONLY: prevent overlapping repaints; no pre-wipe ──
   if (__chartsInFlight) { __chartsQueued = true; return; }
   __chartsInFlight = true;
@@ -1454,6 +1454,8 @@ try {
     // - 'last' mode: always anchor to the found last-timestamp window (endTimeMs)
     // - 'now' mode: only show a timestamp if we actually have in-window data; else null
     const tsPanel = (selectedRangeMode === 'last') ? endTimeMs : (hasAny ? endTimeMs : null);
+    // Abort if selection changed while we were fetching
+    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
 
 
     drawLive({
