@@ -1330,7 +1330,6 @@ async function poll(deviceID, SENSORS){
       endTimeMs   = Date.now();
       startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
     } else {
-      
     // 'last' mode: use unified anchor (v2 bulk first, then v1.6 parallel)
     const tLast = await computeLastAnchorMs(deviceID, SENSORS);
     endTimeMs   = tLast ?? Date.now();
@@ -2432,7 +2431,7 @@ onReady(() => {
     try { window.bumpSelEpoch(); } catch(_) {}
     updateAll();
   });
-
+});
 // === INSERT ↓ (helpers used by LAST-mode selection) =========================
 async function __countRowsFast(deviceID, varLabel, maxPages = 3){
   try{
