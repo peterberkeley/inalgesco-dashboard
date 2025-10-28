@@ -49,6 +49,14 @@ let __chartsQueued   = false;
 let __updateInFlight = false;
 let __updateQueued   = false;
 
+// Unified selection epoch — increment on any user selection that should cancel in-flight work
+let __selEpoch = 0;
+function bumpSelEpoch(){
+  __selEpoch++;
+}
+// Expose for console/tests
+window.__selEpoch = __selEpoch;
+window.bumpSelEpoch = function(){ bumpSelEpoch(); };
 
 
 /* =================== Helpers =================== */
@@ -1618,6 +1626,72 @@ try {
   }, SENSORS);
 
 }
+// Lightweight KPIs/map draw for LAST mode (no poll): v2 bulk + unified tLast anchor
+async function drawKpiLast(deviceID, SENSORS){
+  try{
+    // 1) Compute unified anchor and window
+    const tLast = await computeLastAnchorMs(deviceID, SENSORS);
+    const endTimeMs   = tLast ?? Date.now();
+    const startTimeMs = endTimeMs - (60 * 60 * 1000);
+
+    // 2) Try one v2 bulk fetch for KPIs/map
+    const bulk = await fetchDeviceLastValuesV2(deviceID);
+    if (!bulk) return; // no-op; charts already rendered
+
+    const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
+
+    // Temps by address in window
+    const readingsInWindow = {};
+    for (const s of SENSORS){
+      if (!s.address) continue;
+      const o = bulk[s.address];
+      if (o && inWnd(o.timestamp) && o.value != null && isFinite(o.value)){
+        readingsInWindow[s.address] = Number(o.value);
+      }
+    }
+
+    // Signal/Volt in window
+    const pick = k => {
+      const o = bulk[k];
+      return (o && inWnd(o.timestamp) && o.value != null && isFinite(o.value)) ? Number(o.value) : null;
+    };
+    const signalInWnd = pick('signal') ?? pick('rssi') ?? pick('csq');
+    const voltInWnd   = pick('volt')   ?? pick('vbatt') ?? pick('battery') ?? pick('batt');
+
+    // GPS in window
+    const gpsObj = bulk.gps || bulk.position || bulk.location || null;
+    let latInWnd=null, lonInWnd=null, speedInWnd=null;
+    if (gpsObj && inWnd(gpsObj.timestamp)) {
+      const c = gpsObj.context || {};
+      if (typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')){
+        latInWnd = c.lat; lonInWnd = (c.lng != null ? c.lng : c.lon);
+      }
+      if (typeof c.speed === 'number') speedInWnd = c.speed;
+    }
+
+    // Resolve tz from the in-window GPS if present
+    const deviceLabel = document.getElementById("deviceSelect")?.value || null;
+    const tz = await resolveDeviceTz(deviceLabel, latInWnd, lonInWnd);
+
+    // ICCID (for display)
+    const iccidNow = (bulk.iccid && bulk.iccid.value != null) ? String(bulk.iccid.value).trim() : null;
+
+    // 3) Draw KPIs/map once (no Phoenix flash; breadcrumbs will refine map path)
+    drawLive({
+      ts: endTimeMs,
+      iccid: iccidNow,
+      lat: latInWnd, lon: lonInWnd,
+      lastLat: null, lastLon: null, lastGpsAgeMin: null,
+      speed: speedInWnd,
+      signal: signalInWnd,
+      volt:   voltInWnd,
+      tz,
+      readings: readingsInWindow
+    }, SENSORS);
+  }catch(e){
+    console.warn('drawKpiLast failed', e);
+  }
+}
 
 /* =================== Live panel + map =================== */
 // Ensure we use a lexical Leaflet map/marker (not window.map DOM element)
@@ -2800,12 +2874,22 @@ if (deviceID) {
     liveDallas
   });
 
-  SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+    SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
   ensureCharts(SENSORS, dataDeviceID);      // key on the actual data device
   initMap();                                // idempotent
-  await poll(dataDeviceID, SENSORS);        // KPI / quick last values from the data device
-  await updateCharts(dataDeviceID, SENSORS);// windowed history from the data device
+
+  if (selectedRangeMode === 'last') {
+    // LAST mode — skip poll(); draw charts first, then KPIs/map via drawKpiLast
+    await updateCharts(dataDeviceID, SENSORS);
+    await drawKpiLast(dataDeviceID, SENSORS);
+  } else {
+    // NOW mode — normal fast KPI + charts
+    await poll(dataDeviceID, SENSORS);
+    await updateCharts(dataDeviceID, SENSORS);
+  }
+
   await renderMaintenanceBox(deviceLabel, dataDeviceID);
+
 
   const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
   idle(() => { updateBreadcrumbs(dataDeviceID, selectedRangeMinutes); });
