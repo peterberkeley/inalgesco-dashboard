@@ -3181,10 +3181,78 @@ function closeMapAll(){
     }
   };
 })();
+  };  // ← end of your existing main IIFE
+})();
 
+/* ────────────────────────────────────────────────
+   Anti-Phoenix Map Shim
+   Suppresses static Phoenix map jump when a non-warehouse
+   device (e.g., 5999 / skycafe-1) is in LAST mode, has no
+   admin Dallas sensors, and no GPS coordinates in this draw.
+   Map still updates normally once GPS data appears.
+   ──────────────────────────────────────────────── */
+
+(function installNoMapLastShim() {
+  const L = window.L;
+  if (!L || !L.Map || !L.Marker) return console.error('[shim] Leaflet not found');
+  if (window.drawLive?.__shimmedOnceGPS) return;
+
+  const orig = window.drawLive;
+  if (typeof orig !== 'function') return console.error('[shim] drawLive not found');
+
+  function hasAdminDallas() {
+    const label = document.getElementById('deviceSelect')?.value || '';
+    const a = (window.getAdminAddresses?.(label) || []).filter(h => /^[0-9a-fA-F]{16}$/.test(h));
+    return a.length > 0;
+  }
+
+  function isWarehouse() {
+    const label = (document.getElementById('deviceSelect')?.value || '').toLowerCase();
+    return /warehouse/.test(label);
+  }
+
+  function hasGPS(d) {
+    const lat = d?.lat, lon = d?.lon, lastLat = d?.lastLat, lastLon = d?.lastLon;
+    return (typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon)) ||
+           (typeof lastLat === 'number' && isFinite(lastLat) && typeof lastLon === 'number' && isFinite(lastLon));
+  }
+
+  window.drawLive = function drawLive_shim(data, SENSORS) {
+    const shouldShim =
+      window.selectedRangeMode === 'last' &&
+      !isWarehouse() &&
+      !hasAdminDallas() &&
+      !hasGPS(data);
+
+    if (!shouldShim) return orig.call(this, data, SENSORS);
+
+    const MP = L.Map.prototype, MkP = L.Marker.prototype;
+    const sV = MP.setView, pT = MP.panTo, fT = MP.flyTo, fB = MP.fitBounds,
+          mV = MP._move, rV = MP._resetView, sLL = MkP.setLatLng;
+    const noOp = function(){ return this; };
+    MP.setView = MP.panTo = MP.flyTo = MP.fitBounds = noOp;
+    if (mV) MP._move = noOp;
+    if (rV) MP._resetView = noOp;
+    MkP.setLatLng = noOp;
+
+    try {
+      return orig.call(this, data, SENSORS);
+    } finally {
+      MP.setView = sV;
+      MP.panTo = pT;
+      MP.flyTo = fT;
+      MP.fitBounds = fB;
+      if (mV) MP._move = mV;
+      if (rV) MP._resetView = rV;
+      MkP.setLatLng = sLL;
+    }
+  };
+
+  window.drawLive.__shimmedOnceGPS = true;
+  console.info('[shim] Anti-Phoenix map guard active: only suppresses LAST with 0 admin + no GPS.');
+})();
 
 // EOF
-
 
 
 
