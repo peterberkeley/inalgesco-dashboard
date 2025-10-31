@@ -3180,8 +3180,7 @@ function closeMapAll(){
       return null;
     }
   };
-})();
-  };  // ← end of your existing main IIFE
+  
 })();
 
 /* ────────────────────────────────────────────────
