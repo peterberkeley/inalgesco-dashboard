@@ -1438,19 +1438,20 @@ try {
 
 
     // GPS only if its timestamp is in window
-    let latInWnd = null, lonInWnd = null, speedInWnd = null;
-    if (gpsObj && inWnd(gpsObj.timestamp)) {
-      const c = gpsObj.context || {};
-      const candLat = c.lat;
-      const candLon = (c.lng!=null ? c.lng : c.lon);
-      if (typeof candLat === 'number' && typeof candLon === 'number') {
-        latInWnd = candLat;
-        lonInWnd = candLon;
-      }
-      if (typeof c.speed === 'number') speedInWnd = c.speed;
-    }
-    // No stale carry-forward in KPI box:
-    lastLat = null; lastLon = null; lastGpsAgeMin = null;
+let latInWnd = null, lonInWnd = null, speedInWnd = null;
+if (gpsObj && inWnd(gpsObj.timestamp)) {
+  const c = gpsObj.context || {};
+  const candLat = c.lat;
+  const candLon = (c.lng!=null ? c.lng : c.lon);
+  if (typeof candLat === 'number' && typeof candLon === 'number') {
+    latInWnd = candLat;
+    lonInWnd = candLon;
+  }
+  if (typeof c.speed === 'number') speedInWnd = c.speed;
+}
+// Keep last-known GPS age for fallback; drawLive shows "(last known)"
+if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
+
 
     // Resolve timezone using the (possibly in-window) GPS point
     const deviceLabel = document.getElementById("deviceSelect")?.value || null;
@@ -1601,15 +1602,19 @@ try {
 
   // GPS only if its timestamp is in window (no stale carry-forward)
   let latInWnd = null, lonInWnd = null, speedInWnd = null;
-  if (gpsArr[0] && inWnd(gpsArr[0].timestamp)) {
-    const c = gpsArr[0].context || {};
-    if (typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')) {
-      latInWnd = c.lat;
-      lonInWnd = (c.lng != null ? c.lng : c.lon);
-    }
-    if (typeof c.speed === 'number') speedInWnd = c.speed;
+ if (gpsArr[0] && inWnd(gpsArr[0].timestamp)) {
+  const c = gpsArr[0].context || {};
+  if (typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')) {
+    latInWnd = c.lat;
+    lonInWnd = (c.lng != null ? c.lng : c.lon);
   }
-  lastLat = null; lastLon = null; lastGpsAgeMin = null;
+  if (typeof c.speed === 'number') speedInWnd = c.speed;
+}
+
+// Keep last-known GPS age for label (used by drawLive to show “(last known)”)
+// Do NOT null-out lastLat/lastLon here; they may hold the previous valid GPS.
+if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
+
 
   // Resolve timezone using in-window GPS point (may be null)
   const deviceLabel = document.getElementById("deviceSelect")?.value || null;
@@ -2211,16 +2216,12 @@ const __epochAtStart = Number(window.__selEpoch) || 0;
     const gpsPoints = gpsRows
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
       .sort((a,b) => a.timestamp - b.timestamp);
-        if(!gpsPoints.length){
-      // No GPS values in this window → show static base
-      try { initMap(); } catch(_) {}
-      if (map && marker) {
-        marker.setLatLng([STATIC_BASE.lat, STATIC_BASE.lon]);
-        marker.bindTooltip('(SkyCafè PHX)', { direction:'top', offset:[0,-8] }).openTooltip();
-        map.setView([STATIC_BASE.lat, STATIC_BASE.lon], Math.max(map.getZoom(), 12));
-      }
-      return;
-    }
+       if(!gpsPoints.length){
+  // No points in this window: clear crumbs but DO NOT reposition.
+  // drawLive() will keep the last-known GPS point (or nothing).
+  return;
+}
+
 
   // If a newer call started while we were fetching, stop now
   if (myTok !== __crumbToken) return;
