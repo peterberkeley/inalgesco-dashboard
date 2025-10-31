@@ -2941,20 +2941,31 @@ function installAllTrucksMapUI(){
   }
 
   // 2) Create the full-screen overlay (once)
-  if (!document.getElementById('mapAllOverlay')) {
-    const ov = document.createElement('div');
-    ov.id = 'mapAllOverlay';
-    ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:70;background:#fff;';
-    ov.innerHTML = `
-      <button id="mapClose"
-              class="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-1 px-3 rounded"
-              style="position:absolute;top:12px;right:12px;">
-        Close
-      </button>
-      <div id="mapAll" style="position:absolute;inset:0;top:50px;"></div>
-    `;
-    document.body.appendChild(ov);
-  }
+if (!document.getElementById('mapAllOverlay')) {
+  const ov = document.createElement('div');
+  ov.id = 'mapAllOverlay';
+  ov.style.cssText = [
+    'display:none',
+    'position:fixed',
+    'inset:0',
+    'z-index:9999',              // ↑ ensure overlay beats any Leaflet panes
+    'background:#fff',
+    'box-sizing:border-box'
+  ].join(';');
+
+  ov.innerHTML = `
+    <button id="mapClose"
+            class="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-1 px-3 rounded"
+            style="position:absolute;top:12px;right:12px;z-index:10000">
+      Close
+    </button>
+    <div id="mapAll"
+         style="position:absolute;left:0;right:0;top:50px;bottom:0;
+                width:100%;height:calc(100% - 50px);"></div>
+  `;
+  document.body.appendChild(ov);
+}
+
 
   // 3) Wire events
   const ov = document.getElementById('mapAllOverlay');
@@ -2966,11 +2977,16 @@ function installAllTrucksMapUI(){
 
 /** Open overlay and render all truck markers */
 async function openMapAll(){
-  const ov = document.getElementById('mapAllOverlay');
+  const ov  = document.getElementById('mapAllOverlay');
   const div = document.getElementById('mapAll');
   if (!ov || !div) return;
 
+  // Show overlay
   ov.style.display = 'block';
+
+  // Lock background scroll while overlay is open
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
 
   // Lazily create the Leaflet map instance for the overlay
   if (!(mapAll && typeof mapAll.addLayer === 'function')) {
@@ -2983,91 +2999,95 @@ async function openMapAll(){
   // Reset legend if it exists
   if (mapAllLegend) { try { mapAll.removeControl(mapAllLegend); } catch(_){} mapAllLegend = null; }
 
+  // *** Force Leaflet to recalc container size after becoming visible ***
+  try {
+    if (mapAll && typeof mapAll.invalidateSize === 'function') {
+      // microtask + macrotask to cover different paint timings
+      Promise.resolve().then(() => mapAll.invalidateSize(true));
+      setTimeout(() => mapAll.invalidateSize(true), 0);
+    }
+  } catch(_) {}
+
   // Fetch devices list (v2) with ids + last_seen
   const sensorMap = await fetchSensorMapConfig();
-  const entries = Object.entries(sensorMap);
+  const entries   = Object.entries(sensorMap);
   if (!entries.length) return;
 
   const nowSec = Math.floor(Date.now()/1000);
   const boundsLatLngs = [];
   const cutoffMs = Date.now() - (48 * 60 * 60 * 1000); // 48h window
 
+  // For each device, try latest GPS point first, then device.location
+  for (const [devLabel, info] of entries) {
+    const deviceID = info?.id;
+    if (!deviceID) continue;
 
-  // For each device, try v2 location first, then GPS variable fallback
- for (const [devLabel, info] of entries) {
-  const deviceID = info?.id;
-  if (!deviceID) continue;
+    let lat = null, lon = null, tsMs = null;
 
-  let lat = null, lon = null, tsMs = null;
-
-  // Prefer latest GPS point so timestamp matches the location
-  try {
-    const gpsLab = await resolveGpsLabel(deviceID);
-    if (gpsLab) {
-      const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
-      const r = rows && rows[0];
-      const g = r && r.context;
-      if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
-        lat  = g.lat;
-        lon  = (g.lng != null ? g.lng : g.lon);
-        tsMs = (typeof r.timestamp === 'number') ? r.timestamp : Date.parse(r.timestamp);
-      }
-    }
-  } catch(_) {}
-
-  // Fallback: device.location (v2) for coords; and last_seen for timestamp
-  if (lat == null || lon == null) {
     try {
-      const loc = await fetchDeviceLocationV2(deviceID);
-      if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
-        lat = loc.lat; lon = loc.lon;
+      const gpsLab = await resolveGpsLabel(deviceID);
+      if (gpsLab) {
+        const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
+        const r = rows && rows[0];
+        const g = r && r.context;
+        if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
+          lat  = g.lat;
+          lon  = (g.lng != null ? g.lng : g.lon);
+          tsMs = (typeof r.timestamp === 'number') ? r.timestamp : Date.parse(r.timestamp);
+        }
       }
     } catch(_) {}
-  }
-  if (tsMs == null) {
-    const lastSeenSec = info?.last_seen || 0;
-    tsMs = lastSeenSec ? (lastSeenSec * 1000) : null;
-  }
 
-  // Require both coords and a timestamp
-  if (!(typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon) && tsMs != null && isFinite(tsMs))) {
-    continue;
-  }
-
-  // Enforce the 48h activity window
-  if (tsMs < cutoffMs) continue;
-
-  // Keep current colour logic (online = green, offline = grey)
-  const lastSeenSec = info?.last_seen || 0;
-  const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
-  const color = isOnline ? '#16a34a' : '#9ca3af';
-
-  const disp = getDisplayName(devLabel);
-  const uploadedStr = new Date(tsMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false });
-
-  const mk = L.circleMarker([lat, lon], {
-    radius: 7,
-    color,
-    fillColor: color,
-    weight: 2,
-    opacity: 1,
-    fillOpacity: 0.9
-  })
-  .bindTooltip(`${disp}<br>Uploaded: ${uploadedStr}`, { direction:'top', offset:[0,-10] })
-  .addTo(mapAllLayerGroup);
-
-  // Click-through: focus this truck on the main dashboard
-  mk.on('click', () => {
-    const sel = document.getElementById('deviceSelect');
-    if (sel) {
-      sel.value = devLabel;
-      sel.dispatchEvent(new Event('change', { bubbles:true }));
+    if (lat == null || lon == null) {
+      try {
+        const loc = await fetchDeviceLocationV2(deviceID);
+        if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+          lat = loc.lat; lon = loc.lon;
+        }
+      } catch(_) {}
     }
-    closeMapAll();
-  });
+    if (tsMs == null) {
+      const lastSeenSec = info?.last_seen || 0;
+      tsMs = lastSeenSec ? (lastSeenSec * 1000) : null;
+    }
 
-  boundsLatLngs.push([lat, lon]);
-}
+    if (!(typeof lat === 'number' && isFinite(lat) &&
+          typeof lon === 'number' && isFinite(lon) &&
+          tsMs != null && isFinite(tsMs))) {
+      continue;
+    }
+    if (tsMs < cutoffMs) continue;
+
+    const lastSeenSec = info?.last_seen || 0;
+    const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
+    const color = isOnline ? '#16a34a' : '#9ca3af';
+
+    const disp = getDisplayName(devLabel);
+    const uploadedStr = new Date(tsMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false });
+
+    const mk = L.circleMarker([lat, lon], {
+      radius: 7,
+      color,
+      fillColor: color,
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.9
+    })
+    .bindTooltip(`${disp}<br>Uploaded: ${uploadedStr}`, { direction:'top', offset:[0,-10] })
+    .addTo(mapAllLayerGroup);
+
+    // Click → focus this truck on main dashboard
+    mk.on('click', () => {
+      const sel = document.getElementById('deviceSelect');
+      if (sel) {
+        sel.value = devLabel;
+        sel.dispatchEvent(new Event('change', { bubbles:true }));
+      }
+      closeMapAll();
+    });
+
+    boundsLatLngs.push([lat, lon]);
+  }
 
   // Fit bounds if we plotted anything; else show world
   if (boundsLatLngs.length) {
@@ -3095,11 +3115,17 @@ async function openMapAll(){
   };
   mapAllLegend.addTo(mapAll);
 }
+
  /** Close overlay */
 function closeMapAll(){
   const ov = document.getElementById('mapAllOverlay');
   if (ov) ov.style.display = 'none';
+
+  // Restore background scroll when overlay closes
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
 }
+
 // --- Final override: ensure alias lookup is case-insensitive everywhere ---
 (function(){
   function getDisplayNameCI(deviceLabel){
