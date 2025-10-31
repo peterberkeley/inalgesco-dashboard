@@ -3117,9 +3117,25 @@ let plotted = 0, skippedNoCoord = 0, skippedOld = 0;
     `;
     return div;
   };
-  mapAllLegend.addTo(mapAll);
-console.log('[mapAll] plotted=', plotted, 'skipped_no_coord=', skippedNoCoord, 'skipped_old=', skippedOld, 'cutoffMs=', new Date(cutoffMs).toISOString());
+mapAllLegend.addTo(mapAll);
+
+// ──────────────────────────────
+// SAFE ASCII-ONLY DIAGNOSTIC LOG
+// ──────────────────────────────
+// This prevents Safari parser errors and logs useful info
+try {
+  const summary = {
+    plotted: plotted,
+    skipped_no_coord: skippedNoCoord,
+    skipped_old: skippedOld,
+    cutoffMs: new Date(cutoffMs).toISOString()
+  };
+
+  console.log('[mapAll] ' + JSON.stringify(summary, null, 2));
+} catch (e) {
+  console.warn('[mapAll] diagnostic log failed:', e);
 }
+
 
  /** Close overlay */
 function closeMapAll(){
