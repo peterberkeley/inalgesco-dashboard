@@ -3047,16 +3047,56 @@ async function openMapAll(){
       } catch(_) {}
     }
 
-    // 2) Activity gate: use last_seen as the definitive “recentness” signal
-    const lastSeenSec = info?.last_seen || 0;
-    const lastSeenMs  = lastSeenSec ? (lastSeenSec * 1000) : 0;
+    // 2) Activity gate: v2 last_seen OR v1.6 heartbeat/GPS fallback (48h window)
+let lastSeenSec = info?.last_seen || 0;
+let lastSeenMs  = lastSeenSec ? (lastSeenSec * 1000) : 0;
 
-    // If we have no coordinates at all, we cannot place a marker
-    const hasCoord = (typeof lat === 'number' && isFinite(lat) &&
-                      typeof lon === 'number' && isFinite(lon));
-    if (!hasCoord) { skippedNoCoord++; continue; }
+// If v2 is stale, fall back to heartbeat (signal/volt) and GPS timestamps (v1.6)
+if (!lastSeenMs || lastSeenMs < cutoffMs) {
+  async function __heartbeatFreshMs(devId){
+    let best = 0;
+    try{
+      await ensureVarCache(devId);
+      const caps = variableCache[devId] || {};
+      const hbLabs = ['signal','rssi','csq','volt','vbatt','battery','batt'];
 
-    // Drop only if last_seen is older than 48 h (ignore devices with no recent publish)
+      // Radio/power heartbeats
+      for (const lab of hbLabs){
+        const vid = caps[lab];
+        if (!vid) continue;
+        const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
+        if (!r.ok) continue;
+        const j  = await r.json();
+        const ts = j?.results?.[0]?.timestamp || 0;
+        if (Number.isFinite(ts) && ts > best) best = ts;
+      }
+
+      // GPS (if present)
+      const gpsLab = await resolveGpsLabel(devId);
+      if (gpsLab){
+        const rows = await fetchUbidotsVar(devId, gpsLab, 1);
+        const ts   = rows?.[0]?.timestamp || 0;
+        if (Number.isFinite(ts) && ts > best) best = ts;
+      }
+    }catch(_){}
+    return best; // 0 if none found
+  }
+
+  const hbMs = await __heartbeatFreshMs(deviceID);
+  if (hbMs && hbMs > lastSeenMs) {
+    lastSeenMs  = hbMs;
+    lastSeenSec = Math.floor(hbMs / 1000);
+  }
+}
+
+// If we have no coordinates at all, we cannot place a marker
+const hasCoord = (typeof lat === 'number' && isFinite(lat) &&
+                  typeof lon === 'number' && isFinite(lon));
+if (!hasCoord) { skippedNoCoord++; continue; }
+
+// Drop only if unified recency (v2 or fallback) is older than 48 h
+if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
+
     if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
 
     // Online/offline coloring from last_seen
