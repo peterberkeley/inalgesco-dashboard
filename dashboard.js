@@ -3097,7 +3097,6 @@ if (!hasCoord) { skippedNoCoord++; continue; }
 // Drop only if unified recency (v2 or fallback) is older than 48 h
 if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
 
-    if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
 
     // Online/offline coloring from last_seen
     const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
