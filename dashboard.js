@@ -3010,87 +3010,84 @@ async function openMapAll(){
 
   // Fetch devices list (v2) with ids + last_seen
   const sensorMap = await fetchSensorMapConfig();
-const entries   = Object.entries(sensorMap);
-if (!entries.length) return;
+  const entries   = Object.entries(sensorMap);
+  if (!entries.length) return;
 
-// Activity window and containers
-const nowSec = Math.floor(Date.now()/1000);
-const cutoffMs = Date.now() - (48 * 60 * 60 * 1000); // 48h window
-const boundsLatLngs = [];
-let plotted = 0, skippedNoCoord = 0, skippedOld = 0;
-
+  // Activity window and containers
+  const nowSec = Math.floor(Date.now()/1000);
+  const cutoffMs = Date.now() - (48 * 60 * 60 * 1000); // 48h window
+  const boundsLatLngs = [];
+  let plotted = 0, skippedNoCoord = 0, skippedOld = 0;
 
   // For each device, try latest GPS point first, then device.location
   for (const [devLabel, info] of entries) {
-  const deviceID = info?.id;
-  if (!deviceID) continue;
+    const deviceID = info?.id;
+    if (!deviceID) continue;
 
-  // 1) Coordinates: prefer freshest GPS point; else device.location
-  let lat = null, lon = null;
-  try {
-    const gpsLab = await resolveGpsLabel(deviceID);
-    if (gpsLab) {
-      const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
-      const r = rows && rows[0];
-      const g = r && r.context;
-      if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
-        lat = g.lat;
-        lon = (g.lng != null ? g.lng : g.lon);
-      }
-    }
-  } catch(_) {}
-  if (lat == null || lon == null) {
+    // 1) Coordinates: prefer freshest GPS point; else device.location
+    let lat = null, lon = null;
     try {
-      const loc = await fetchDeviceLocationV2(deviceID);
-      if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
-        lat = loc.lat; lon = loc.lon;
+      const gpsLab = await resolveGpsLabel(deviceID);
+      if (gpsLab) {
+        const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
+        const r = rows && rows[0];
+        const g = r && r.context;
+        if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
+          lat = g.lat;
+          lon = (g.lng != null ? g.lng : g.lon);
+        }
       }
     } catch(_) {}
-  }
-
-  // 2) Activity gate: use last_seen as the definitive “recentness” signal
-  const lastSeenSec = info?.last_seen || 0;
-  const lastSeenMs  = lastSeenSec ? (lastSeenSec * 1000) : 0;
-
-  // If we have no coordinates at all, we cannot place a marker
-  const hasCoord = (typeof lat === 'number' && isFinite(lat) &&
-                    typeof lon === 'number' && isFinite(lon));
-  if (!hasCoord) { skippedNoCoord++; continue; }
-
-  // Drop only if last_seen is older than 48 h (keeps LIVE trucks regardless of GPS ts age)
-  if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
-
-  // Online/offline coloring from last_seen
-  const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
-  const color = isOnline ? '#16a34a' : '#9ca3af';
-
-  const disp = getDisplayName(devLabel);
-  const uploadedStr = new Date(lastSeenMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false });
-
-  const mk = L.circleMarker([lat, lon], {
-    radius: 7,
-    color,
-    fillColor: color,
-    weight: 2,
-    opacity: 1,
-    fillOpacity: 0.9
-  })
-  .bindTooltip(`${disp}<br>Uploaded: ${uploadedStr}`, { direction:'top', offset:[0,-10] })
-  .addTo(mapAllLayerGroup);
-
-  mk.on('click', () => {
-    const sel = document.getElementById('deviceSelect');
-    if (sel) {
-      sel.value = devLabel;
-      sel.dispatchEvent(new Event('change', { bubbles:true }));
+    if (lat == null || lon == null) {
+      try {
+        const loc = await fetchDeviceLocationV2(deviceID);
+        if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+          lat = loc.lat; lon = loc.lon;
+        }
+      } catch(_) {}
     }
-    closeMapAll();
-  });
 
-  boundsLatLngs.push([lat, lon]);
-  plotted++;
-}
+    // 2) Activity gate: use last_seen as the definitive “recentness” signal
+    const lastSeenSec = info?.last_seen || 0;
+    const lastSeenMs  = lastSeenSec ? (lastSeenSec * 1000) : 0;
 
+    // If we have no coordinates at all, we cannot place a marker
+    const hasCoord = (typeof lat === 'number' && isFinite(lat) &&
+                      typeof lon === 'number' && isFinite(lon));
+    if (!hasCoord) { skippedNoCoord++; continue; }
+
+    // Drop only if last_seen is older than 48 h (ignore devices with no recent publish)
+    if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
+
+    // Online/offline coloring from last_seen
+    const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
+    const color = isOnline ? '#16a34a' : '#9ca3af';
+
+    const disp = getDisplayName(devLabel);
+    const uploadedStr = new Date(lastSeenMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false });
+
+    const mk = L.circleMarker([lat, lon], {
+      radius: 7,
+      color,
+      fillColor: color,
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.9
+    })
+    .bindTooltip(`${disp}<br>Uploaded: ${uploadedStr}`, { direction:'top', offset:[0,-10] })
+    .addTo(mapAllLayerGroup);
+
+    mk.on('click', () => {
+      const sel = document.getElementById('deviceSelect');
+      if (sel) {
+        sel.value = devLabel;
+        sel.dispatchEvent(new Event('change', { bubbles:true }));
+      }
+      closeMapAll();
+    });
+
+    boundsLatLngs.push([lat, lon]);
+    plotted++;
   }
 
   // Fit bounds if we plotted anything; else show world
@@ -3117,27 +3114,25 @@ let plotted = 0, skippedNoCoord = 0, skippedOld = 0;
     `;
     return div;
   };
-mapAllLegend.addTo(mapAll);
+  mapAllLegend.addTo(mapAll);
 
-// ──────────────────────────────
-// SAFE ASCII-ONLY DIAGNOSTIC LOG
-// ──────────────────────────────
-// This prevents Safari parser errors and logs useful info
-try {
-  const summary = {
-    plotted: plotted,
-    skipped_no_coord: skippedNoCoord,
-    skipped_old: skippedOld,
-    cutoffMs: new Date(cutoffMs).toISOString()
-  };
-
-  console.log('[mapAll] ' + JSON.stringify(summary, null, 2));
-} catch (e) {
-  console.warn('[mapAll] diagnostic log failed:', e);
+  // ──────────────────────────────
+  // SAFE ASCII-ONLY DIAGNOSTIC LOG
+  // ──────────────────────────────
+  try {
+    const summary = {
+      plotted: plotted,
+      skipped_no_coord: skippedNoCoord,
+      skipped_old: skippedOld,
+      cutoffMs: new Date(cutoffMs).toISOString()
+    };
+    console.log('[mapAll] ' + JSON.stringify(summary, null, 2));
+  } catch (e) {
+    console.warn('[mapAll] diagnostic log failed:', e);
+  }
 }
 
-
- /** Close overlay */
+/** Close overlay */
 function closeMapAll(){
   const ov = document.getElementById('mapAllOverlay');
   if (ov) ov.style.display = 'none';
@@ -3146,6 +3141,7 @@ function closeMapAll(){
   document.documentElement.style.overflow = '';
   document.body.style.overflow = '';
 }
+
 
 // --- Final override: ensure alias lookup is case-insensitive everywhere ---
 (function(){
