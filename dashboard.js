@@ -3024,28 +3024,46 @@ async function openMapAll(){
     const deviceID = info?.id;
     if (!deviceID) continue;
 
-    // 1) Coordinates: prefer freshest GPS point; else device.location
-    let lat = null, lon = null;
-    try {
-      const gpsLab = await resolveGpsLabel(deviceID);
-      if (gpsLab) {
-        const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
-        const r = rows && rows[0];
-        const g = r && r.context;
-        if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
-          lat = g.lat;
-          lon = (g.lng != null ? g.lng : g.lon);
-        }
-      }
-    } catch(_) {}
-    if (lat == null || lon == null) {
-      try {
-        const loc = await fetchDeviceLocationV2(deviceID);
-        if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
-          lat = loc.lat; lon = loc.lon;
-        }
-      } catch(_) {}
+   // 1) Coordinates: prefer freshest GPS point; else device.location; else v2 bulk gps/position/location
+let lat = null, lon = null;
+
+// A) Try the device’s GPS variable (v1.6) – may be stale but still carries coords
+try {
+  const gpsLab = await resolveGpsLabel(deviceID);
+  if (gpsLab) {
+    const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
+    const r = rows && rows[0];
+    const g = r && r.context;
+    if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
+      lat = g.lat;
+      lon = (g.lng != null ? g.lng : g.lon);
     }
+  }
+} catch(_) {}
+
+// B) If still missing, try devices.v2 location
+if (lat == null || lon == null) {
+  try {
+    const loc = await fetchDeviceLocationV2(deviceID);
+    if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+      lat = loc.lat; lon = loc.lon;
+    }
+  } catch(_) {}
+}
+
+// C) If still missing, try v2 bulk last-values for gps/position/location
+if (lat == null || lon == null) {
+  try {
+    const bulk = await fetchDeviceLastValuesV2(deviceID);
+    const g = (bulk && (bulk.gps || bulk.position || bulk.location)) || null;
+    const c = g && g.context || null;
+    if (c && typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')) {
+      lat = c.lat;
+      lon = (c.lng != null ? c.lng : c.lon);
+    }
+  } catch(_) {}
+}
+
 
     // 2) Activity gate: v2 last_seen OR v1.6 heartbeat/GPS fallback (48h window)
 let lastSeenSec = info?.last_seen || 0;
