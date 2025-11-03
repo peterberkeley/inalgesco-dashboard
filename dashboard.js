@@ -2003,24 +2003,105 @@ async function renderMaintenanceBox(truckLabel, deviceID){
 
 /* =================== CSV download =================== */
 // Case-insensitive per-device CSV/crumbs fetch by var label (hex)
-async function fetchCsvRows(deviceID, varLabel, start, end, signal){
+async function fetchCsvRows(deviceID, varLabel, start, end, signal) {
   try {
+    // Ensure variable cache is loaded
     await ensureVarCache(deviceID);
-    const id = getVarIdCI(deviceID, varLabel);   // ← IMPORTANT: CI lookup
-    if (!id) return [];
+    
+    // Get variable ID with case-insensitive lookup
+    let id = getVarIdCI(deviceID, varLabel);
+    
+    // If not found in cache, try strict resolver
+    if (!id) {
+      console.log('[fetchCsvRows] Variable not in cache, using strict resolver for:', varLabel);
+      id = await resolveVarIdStrict(deviceID, varLabel);
+    }
+    
+    // No variable ID found - return empty array
+    if (!id) {
+      console.warn('[fetchCsvRows] No variable ID found for label:', varLabel);
+      return [];
+    }
 
-    let url  = `https://industrial.api.ubidots.com/api/v1.6/variables/${id}/values/?page_size=1000`;
-    if (start) url += `&start=${encodeURIComponent(start)}`;
-    if (end)   url += `&end=${encodeURIComponent(end)}`;
+    // Build the URL with proper timestamp parameters
+    let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(id)}/values/?page_size=1000`;
+    
+    // CRITICAL FIX: Ensure timestamps are integers (milliseconds)
+    if (start !== undefined && start !== null) {
+      // Convert to integer milliseconds
+      const startMs = Math.floor(Number(start));
+      if (isFinite(startMs) && startMs > 0) {
+        url += `&start=${startMs}`;
+        console.log('[fetchCsvRows] Start time:', new Date(startMs).toISOString());
+      }
+    }
+    
+    if (end !== undefined && end !== null) {
+      // Convert to integer milliseconds
+      const endMs = Math.floor(Number(end));
+      if (isFinite(endMs) && endMs > 0) {
+        url += `&end=${endMs}`;
+        console.log('[fetchCsvRows] End time:', new Date(endMs).toISOString());
+      }
+    }
+    
+    // Add token
+    url += `&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+    
+    console.log('[fetchCsvRows] Fetching:', { 
+      deviceID, 
+      varLabel, 
+      varId: id,
+      start: start ? new Date(start).toISOString() : 'none',
+      end: end ? new Date(end).toISOString() : 'none'
+    });
 
-    const init = {};
-    if (signal) init.signal = signal;
+    // Setup fetch options with abort signal if provided
+    const fetchOptions = {};
+    if (signal) {
+      fetchOptions.signal = signal;
+    }
 
-    const res = await fetch(`${url}&${'token'}=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`, init);
-    if (!res.ok) return [];
-    const j = await res.json();
-    return j?.results || [];
-  } catch {
+    // Fetch the data
+    const res = await fetch(url, fetchOptions);
+    
+    if (!res.ok) {
+      console.error('[fetchCsvRows] HTTP error:', res.status, res.statusText);
+      return [];
+    }
+    
+    const json = await res.json();
+    const results = json?.results || [];
+    
+    console.log('[fetchCsvRows] Retrieved', results.length, 'rows for', varLabel);
+    
+    // Additional validation: ensure timestamps are within requested range
+    if ((start || end) && results.length > 0) {
+      const filtered = results.filter(r => {
+        const ts = r.timestamp;
+        if (!ts || !isFinite(ts)) return false;
+        if (start && ts < start) return false;
+        if (end && ts > end) return false;
+        return true;
+      });
+      
+      if (filtered.length !== results.length) {
+        console.warn('[fetchCsvRows] Filtered out', results.length - filtered.length, 'out-of-range rows');
+      }
+      
+      return filtered;
+    }
+    
+    return results;
+    
+  } catch (error) {
+    // Handle abort separately (not an error)
+    if (error.name === 'AbortError') {
+      console.log('[fetchCsvRows] Request aborted for:', varLabel);
+      return [];
+    }
+    
+    console.error('[fetchCsvRows] Error fetching data:', error);
     return [];
   }
 }
