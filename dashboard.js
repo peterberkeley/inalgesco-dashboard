@@ -3349,6 +3349,8 @@ async function openMapAll(){
   for (const [devLabel, info] of entries) {
     const deviceID = info?.id;
     if (!deviceID) continue;
+    // Skip warehouse trucks on the map
+  if (devLabel.toLowerCase().includes('warehouse')) continue;
 
    // 1) Coordinates: prefer freshest GPS point; else device.location; else v2 bulk gps/position/location
 let lat = null, lon = null;
