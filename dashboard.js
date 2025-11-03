@@ -3483,7 +3483,7 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
       opacity: 1,
       fillOpacity: 0.9
     })
-  .bindTooltip(`<strong>${disp}</strong><br>Last seen: ${ageStr}<br><small>${uploadedStr}</small>`, { direction:'top', offset:[0,-10] })
+  .bindTooltip('<strong>${disp}</strong><br>Last seen: ${ageStr}<br><small>${uploadedStr}</small>`, { direction:'top', offset:[0,-10] })
     .addTo(mapAllLayerGroup);
 
     mk.on('click', () => {
