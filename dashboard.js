@@ -3354,6 +3354,8 @@ async function openMapAll(){
 let lat = null, lon = null;
 
 // A) Try the device’s GPS variable (v1.6) – may be stale but still carries coords
+    console.log('[mapAll] Checking device:', devLabel, 'ID:', deviceID);
+// A) Try the device's GPS variable (v1.6) – may be stale but still carries coords
 try {
   const gpsLab = await resolveGpsLabel(deviceID);
   if (gpsLab) {
@@ -3363,6 +3365,7 @@ try {
     if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
       lat = g.lat;
       lon = (g.lng != null ? g.lng : g.lon);
+      console.log('[mapAll] GPS coords from v1.6:', {devLabel, lat, lon});
     }
   }
 } catch(_) {}
@@ -3373,6 +3376,7 @@ if (lat == null || lon == null) {
     const loc = await fetchDeviceLocationV2(deviceID);
     if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
       lat = loc.lat; lon = loc.lon;
+      console.log('[mapAll] GPS coords from v2 location:', {devLabel, lat, lon});
     }
   } catch(_) {}
 }
@@ -3437,7 +3441,7 @@ if (!lastSeenMs || lastSeenMs < cutoffMs) {
 const hasCoord = (typeof lat === 'number' && isFinite(lat) &&
                   typeof lon === 'number' && isFinite(lon));
 if (!hasCoord) { skippedNoCoord++; continue; }
-
+    else { console.log('[mapAll] Has coords:', devLabel, lat, lon); }
 // Drop only if unified recency (v2 or fallback) is older than 48 h
 // Show ALL trucks regardless of age
 // if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
