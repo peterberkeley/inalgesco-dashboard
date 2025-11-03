@@ -3547,7 +3547,6 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
   });
 
 
-
 /** Close overlay */
 function closeMapAll(){
   const ov = document.getElementById('mapAllOverlay');
