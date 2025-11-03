@@ -2005,6 +2005,128 @@ async function renderMaintenanceBox(truckLabel, deviceID){
 // Case-insensitive per-device CSV/crumbs fetch by var label (hex)
 async function fetchCsvRows(deviceID, varLabel, start, end, signal) {
   try {
+    // Special handling for GPS/position variables - merge from all sources
+    if (varLabel === 'position' || varLabel === 'gps' || varLabel === 'location') {
+      console.log('[fetchCsvRows] GPS request - merging all position variables');
+      
+      // Get ALL variables for this device
+      const varsUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+      const varsResp = await fetch(varsUrl, signal ? { signal } : {});
+      
+      if (!varsResp.ok) {
+        console.error('[fetchCsvRows] Failed to fetch variables list');
+        return [];
+      }
+      
+      const varsData = await varsResp.json();
+      
+      // Find ALL position/gps/location variables
+      const gpsVars = (varsData.results || []).filter(v => 
+        v.label === 'position' || v.label === 'gps' || v.label === 'location'
+      );
+      
+      console.log(`[fetchCsvRows] Found ${gpsVars.length} GPS variables to check`);
+      
+      if (gpsVars.length === 0) {
+        console.warn('[fetchCsvRows] No GPS variables found for device');
+        return [];
+      }
+      
+      // Fetch data from ALL GPS variables
+      const allResults = [];
+      let varCount = 0;
+      
+      for (const gpsVar of gpsVars) {
+        // Build URL with timestamps
+        let varUrl = `${UBIDOTS_V1}/variables/${gpsVar.id}/values/?page_size=1000`;
+        
+        // Add time parameters if provided
+        if (start !== undefined && start !== null) {
+          const startMs = Math.floor(Number(start));
+          if (isFinite(startMs) && startMs > 0) {
+            varUrl += `&start=${startMs}`;
+          }
+        }
+        
+        if (end !== undefined && end !== null) {
+          const endMs = Math.floor(Number(end));
+          if (isFinite(endMs) && endMs > 0) {
+            varUrl += `&end=${endMs}`;
+          }
+        }
+        
+        varUrl += `&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+        
+        try {
+          const varResp = await fetch(varUrl, signal ? { signal } : {});
+          
+          if (varResp.ok) {
+            const varData = await varResp.json();
+            
+            if (varData.results && varData.results.length > 0) {
+              console.log(`[fetchCsvRows] Variable ${gpsVar.id.substring(0,8)}... (${gpsVar.label}): ${varData.results.length} points`);
+              allResults.push(...varData.results);
+              varCount++;
+            }
+          }
+        } catch (e) {
+          if (e.name === 'AbortError') {
+            console.log('[fetchCsvRows] Request aborted');
+            return [];
+          }
+          console.warn(`[fetchCsvRows] Error fetching ${gpsVar.id}:`, e.message);
+        }
+      }
+      
+      console.log(`[fetchCsvRows] Fetched data from ${varCount} variables, total ${allResults.length} points`);
+      
+      // Sort by timestamp (oldest first)
+      allResults.sort((a, b) => a.timestamp - b.timestamp);
+      
+      // Deduplicate based on timestamp and location
+      const uniqueResults = [];
+      const seen = new Set();
+      
+      allResults.forEach(point => {
+        const lat = point.context?.lat;
+        const lng = point.context?.lng || point.context?.lon;
+        
+        // Only include points with valid coordinates
+        if (lat != null && lng != null) {
+          const key = `${point.timestamp}_${lat}_${lng}`;
+          
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueResults.push(point);
+          }
+        }
+      });
+      
+      console.log(`[fetchCsvRows] After deduplication: ${uniqueResults.length} unique GPS points`);
+      
+      // Apply time range filter if needed
+      if ((start || end) && uniqueResults.length > 0) {
+        const filtered = uniqueResults.filter(r => {
+          const ts = r.timestamp;
+          if (!ts || !isFinite(ts)) return false;
+          if (start && ts < start) return false;
+          if (end && ts > end) return false;
+          return true;
+        });
+        
+        if (filtered.length !== uniqueResults.length) {
+          console.log('[fetchCsvRows] Time filter removed', uniqueResults.length - filtered.length, 'points outside range');
+        }
+        
+        return filtered;
+      }
+      
+      return uniqueResults;
+    }
+    
+    // ========== ORIGINAL LOGIC FOR NON-GPS VARIABLES ==========
+    // For temperature sensors and other non-GPS variables
+    
     // Ensure variable cache is loaded
     await ensureVarCache(deviceID);
     
@@ -2105,7 +2227,6 @@ async function fetchCsvRows(deviceID, varLabel, start, end, signal) {
     return [];
   }
 }
-
 
 // Build and download CSV for the selected device/date range
 async function downloadCsvForCurrentSelection(){
