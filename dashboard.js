@@ -3466,7 +3466,13 @@ if (!hasCoord) { skippedNoCoord++; continue; }
         })()
       : 'Unknown';
 
-    const mk = L.circleMarker([lat, lon], {
+  // Spread markers in a circle if they're at the same location
+const offset = plotted * 0.0002; // Small offset that increases per truck
+const angle = (plotted * 137.5) * (Math.PI / 180); // Golden angle for nice distribution
+const offsetLat = lat + (Math.sin(angle) * offset);
+const offsetLon = lon + (Math.cos(angle) * offset);
+
+const mk = L.circleMarker([offsetLat, offsetLon], {
       radius: 7,
       color,
       fillColor: color,
