@@ -3530,6 +3530,13 @@ if (!hasCoord) { skippedNoCoord++; continue; }
   } catch (e) {
     console.warn('[mapAll] diagnostic log failed:', e);
   }
+  console.log('[mapAll] Final summary:', {
+    plotted,
+    skippedNoCoord,
+    skippedOld,
+    totalDevices: entries.length
+  });
+}  // <-- This is the closing brace of openMapAll()
 }
 
 /** Close overlay */
