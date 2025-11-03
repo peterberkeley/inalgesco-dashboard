@@ -2234,15 +2234,15 @@ async function downloadCsvForCurrentSelection(){
 // part 4
 /* =================== Breadcrumb route drawing =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
-    const myTok = ++__crumbToken; // stamp this run
-// Abort any in-flight breadcrumb work from a previous run
-if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
-__crumbAbort = new AbortController();
-const __crumbSignal = __crumbAbort.signal;
-const __epochAtStart = Number(window.__selEpoch) || 0;
-
+  const myTok = ++__crumbToken; // stamp this run
+  // Abort any in-flight breadcrumb work from a previous run
+  if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
+  __crumbAbort = new AbortController();
+  const __crumbSignal = __crumbAbort.signal;
+  const __epochAtStart = Number(window.__selEpoch) || 0;
+  
   try{
-  initMap(); // idempotent
+    initMap(); // idempotent
     segmentPolylines.forEach(p=>p.remove());
     segmentMarkers.forEach(m=>m.remove());
     segmentPolylines = [];
@@ -2251,17 +2251,16 @@ const __epochAtStart = Number(window.__selEpoch) || 0;
       map.removeControl(legendControl);
       legendControl = null;
     }
-                 // Compute time window for breadcrumbs:
+    
+    // Compute time window for breadcrumbs:
     // - NOW: [now - selectedRangeMinutes, now]
     // - LAST: [t_last - 60min, t_last], where t_last is the most recent GPS timestamp
-       
-
     
     const gpsLabel = await resolveGpsLabel(deviceID);
     let gpsRows = [];
     let startTimeMs = null, endTimeMs = null;
-
-        if (!gpsLabel) {
+    
+    if (!gpsLabel) {
       // No GPS variable at all → show static base pin and stop
       try { initMap(); } catch(_) {}
       if (map && marker) {
@@ -2271,11 +2270,60 @@ const __epochAtStart = Number(window.__selEpoch) || 0;
       }
       return;
     }
-
+    
     if (selectedRangeMode === 'now') {
       endTimeMs   = Date.now();
       startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
       gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTimeMs, endTimeMs, __crumbSignal);
+      
+      // === ADAPTIVE GPS LOGIC STARTS HERE (NEW) ===
+      if ((!gpsRows || gpsRows.length === 0)) {
+        console.log(`[breadcrumbs] No GPS in selected ${rangeMinutes}min, checking for historical data...`);
+        
+        // Get the variable ID for GPS
+        const varId = variableCache[deviceID]?.[gpsLabel];
+        if (varId) {
+          try {
+            // Check for most recent GPS point
+            const lastPointUrl = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+            const lastResp = await fetch(lastPointUrl, { signal: __crumbSignal });
+            const lastData = await lastResp.json();
+            
+            if (lastData.results && lastData.results.length > 0) {
+              const lastTimestamp = lastData.results[0].timestamp;
+              const ageHours = (Date.now() - lastTimestamp) / (1000 * 60 * 60);
+              
+              // Only use adaptive if data is within 24 hours
+              if (ageHours <= 24) {
+                console.log(`[breadcrumbs] Found GPS data from ${ageHours.toFixed(1)}h ago, fetching historical window...`);
+                
+                // Fetch a window around the last known activity
+                const historicalEnd = Math.min(lastTimestamp + (30 * 60 * 1000), Date.now());
+                const historicalStart = historicalEnd - (selectedRangeMinutes * 60 * 1000);
+                
+                gpsRows = await fetchCsvRows(deviceID, gpsLabel, historicalStart, historicalEnd, __crumbSignal);
+                
+                if (gpsRows && gpsRows.length > 0) {
+                  console.log(`[breadcrumbs] Adaptive fetch successful: ${gpsRows.length} historical points`);
+                  showHistoricalBreadcrumbNotice(ageHours);
+                  
+                  // Update time window for temperature data to match GPS window
+                  startTimeMs = historicalStart;
+                  endTimeMs = historicalEnd;
+                }
+              } else {
+                console.log(`[breadcrumbs] Last GPS is ${ageHours.toFixed(1)}h old (>24h), skipping adaptive`);
+              }
+            }
+          } catch (error) {
+            if (error.name !== 'AbortError') {
+              console.error('[breadcrumbs] Adaptive fetch error:', error);
+            }
+          }
+        }
+      }
+      // === ADAPTIVE GPS LOGIC ENDS HERE ===
+      
     } else {
       // 'last' mode: anchor to latest GPS value
       const lastGpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
@@ -2288,32 +2336,29 @@ const __epochAtStart = Number(window.__selEpoch) || 0;
       startTimeMs = tLast - (60 * 60 * 1000);
       gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTimeMs, endTimeMs, __crumbSignal);
     }
+    
     // Abort if selection changed while fetching breadcrumbs
     if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
-
-
-
-
+    
     const gpsPoints = gpsRows
       .filter(r => r.context && r.context.lat != null && r.context.lng != null)
       .sort((a,b) => a.timestamp - b.timestamp);
-       if(!gpsPoints.length){
-  // No points in this window: clear crumbs but DO NOT reposition.
-  // drawLive() will keep the last-known GPS point (or nothing).
-  return;
-}
-
-
-  // If a newer call started while we were fetching, stop now
-  if (myTok !== __crumbToken) return;
-
-
+    
+    if(!gpsPoints.length){
+      // No points in this window: clear crumbs but DO NOT reposition.
+      // drawLive() will keep the last-known GPS point (or nothing).
+      return;
+    }
+    
+    // If a newer call started while we were fetching, stop now
+    if (myTok !== __crumbToken) return;
+    
     const tempData = {};
     const tempAvg  = {};
-        for(const s of SENSORS){
+    
+    for(const s of SENSORS){
       if(!s.address) continue;
       const rows = await fetchCsvRows(deviceID, s.address, startTimeMs, endTimeMs, __crumbSignal);
-
       for(const r of rows){
         const ts = r.timestamp;
         let v = parseFloat(r.value);
@@ -2323,6 +2368,80 @@ const __epochAtStart = Number(window.__selEpoch) || 0;
         tempData[ts].push(v);
       }
     }
+    
+    // ... rest of your existing function continues here unchanged ...
+
+// Add this helper function right after updateBreadcrumbs ends:
+
+function showHistoricalBreadcrumbNotice(hoursAgo) {
+  // Remove any existing notice
+  const existingNotice = document.getElementById('breadcrumb-history-notice');
+  if (existingNotice) existingNotice.remove();
+  
+  const notice = document.createElement('div');
+  notice.id = 'breadcrumb-history-notice';
+  notice.style.cssText = `
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    color: #78350f;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: slideIn 0.3s ease-out;
+  `;
+  
+  notice.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+    </svg>
+    <span>Showing GPS from ${Math.floor(hoursAgo)}h ${Math.round((hoursAgo % 1) * 60)}m ago</span>
+    <button onclick="this.parentElement.remove()" style="
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: #78350f;
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      padding: 0 4px;
+    ">&times;</button>
+  `;
+  
+  document.body.appendChild(notice);
+  
+  // Add animation if not already present
+  if (!document.getElementById('breadcrumb-animation-style')) {
+    const style = document.createElement('style');
+    style.id = 'breadcrumb-animation-style';
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  // Auto-remove after 8 seconds
+  setTimeout(() => {
+    const n = document.getElementById('breadcrumb-history-notice');
+    if (n) {
+      n.style.transition = 'all 0.3s ease-out';
+      n.style.transform = 'translateX(100%)';
+      n.style.opacity = '0';
+      setTimeout(() => n.remove(), 300);
+    }
+  }, 8000);
+}
     Object.keys(tempData).forEach(ts => {
       const vals = tempData[ts];
       if(vals && vals.length){
