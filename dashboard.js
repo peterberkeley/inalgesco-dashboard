@@ -3542,7 +3542,7 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
     skippedOld,
     totalDevices: entries.length
   });
-}  // <-- This is the closing brace of openMapAll()
+
 
 
 /** Close overlay */
