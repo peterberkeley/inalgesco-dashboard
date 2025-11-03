@@ -3482,9 +3482,10 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
       weight: 2,
       opacity: 1,
       fillOpacity: 0.9
-    })
-  .bindTooltip(`<strong>${disp}</strong><br>Last seen: ${ageStr}<br><small>${uploadedStr}</small>`, { direction:'top', offset:[0,-10] })    .addTo(mapAllLayerGroup);
-
+  })
+  .bindTooltip(`<strong>${disp}</strong><br>Last seen: ${ageStr}<br><small>${uploadedStr}</small>`, { direction:'top', offset:[0,-10] })
+  .addTo(mapAllLayerGroup);
+    
     mk.on('click', () => {
       const sel = document.getElementById('deviceSelect');
       if (sel) {
@@ -3493,11 +3494,11 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
       }
       closeMapAll();
     });
-
+    
     boundsLatLngs.push([lat, lon]);
     plotted++;
   }
-
+  
   // Fit bounds if we plotted anything; else show world
   if (boundsLatLngs.length) {
     const b = L.latLngBounds(boundsLatLngs);
@@ -3505,7 +3506,7 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
   } else {
     mapAll.setView([20, 0], 2);
   }
-
+  
   // Legend (Online/Offline)
   mapAllLegend = L.control({ position: 'bottomright' });
   mapAllLegend.onAdd = function(){
@@ -3523,7 +3524,6 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
     return div;
   };
   mapAllLegend.addTo(mapAll);
-
   // ──────────────────────────────
   // SAFE ASCII-ONLY DIAGNOSTIC LOG
   // ──────────────────────────────
