@@ -3546,7 +3546,7 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
     skippedOld,
     totalDevices: entries.length
   });
-
+}
 
 /** Close overlay */
 function closeMapAll(){
