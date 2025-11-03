@@ -1,4 +1,6 @@
 //Part 1
+(function() {
+'use strict';
 let _maintenanceLogged = false;
 
 /* =================== Config =================== */
@@ -3708,7 +3710,7 @@ function closeMapAll(){
   window.drawLive.__shimmedOnceGPS = true;
   console.info('[shim] Anti-Phoenix map guard active: only suppresses LAST with 0 admin + no GPS.');
 })();
-
+})();  
 // EOF
 
 
