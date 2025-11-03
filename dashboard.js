@@ -48,6 +48,7 @@ let __chartsQueued   = false;
 // Prevent overlapping updateAll() runs (timer + device change, etc.)
 let __updateInFlight = false;
 let __updateQueued   = false;
+let __breadcrumbsFixed = false;  // prevents auto-refresh when true
 
 // Unified selection epoch — increment on any user selection that should cancel in-flight work
 let __selEpoch = 0;
@@ -2712,7 +2713,8 @@ function wireRangeButtons(){
         await poll(deviceID, SENSORS);           // KPI (window-aware)
         await updateCharts(deviceID, SENSORS);   // Charts (window-aware)
         const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
-        idle(() => updateBreadcrumbs(deviceID, selectedRangeMinutes)); // Map crumbs
+       __breadcrumbsFixed = true;  // freeze breadcrumbs after user selection
+      idle(() => updateBreadcrumbs(deviceID, selectedRangeMinutes)); // Map crumbs
       }
     };
   });
@@ -2770,6 +2772,7 @@ onReady(() => {
   const sel = document.getElementById("deviceSelect");
   if (sel) sel.addEventListener("change", () => {
     try { window.bumpSelEpoch(); } catch(_) {}
+    __breadcrumbsFixed = false;  // allow new breadcrumbs for new device
     updateAll();
   });
 });
@@ -3211,7 +3214,9 @@ if (deviceID) {
 
 
   const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
-  idle(() => { updateBreadcrumbs(dataDeviceID, selectedRangeMinutes); });
+  if (!__breadcrumbsFixed) {
+    idle(() => { updateBreadcrumbs(dataDeviceID, selectedRangeMinutes); });
+  }
 } else {
   console.error('Device ID not found for', deviceLabel);
 }
