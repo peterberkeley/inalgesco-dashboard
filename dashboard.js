@@ -3316,7 +3316,7 @@ async function openMapAll(){
 
   // Lazily create the Leaflet map instance for the overlay
   if (!(mapAll && typeof mapAll.addLayer === 'function')) {
-    mapAll = L.map('mapAll').setView([20, 0], 2);
+  mapAll = L.map('mapAll').setView([33.4377, -112.0276], 10);  // Center on Phoenix
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(mapAll);
     mapAllLayerGroup = L.layerGroup().addTo(mapAll);
   } else {
@@ -3439,7 +3439,8 @@ const hasCoord = (typeof lat === 'number' && isFinite(lat) &&
 if (!hasCoord) { skippedNoCoord++; continue; }
 
 // Drop only if unified recency (v2 or fallback) is older than 48 h
-if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
+// Show ALL trucks regardless of age
+// if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
 
 
     // Online/offline coloring from last_seen
@@ -3447,7 +3448,19 @@ if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
     const color = isOnline ? '#16a34a' : '#9ca3af';
 
     const disp = getDisplayName(devLabel);
-    const uploadedStr = new Date(lastSeenMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false });
+  const uploadedStr = lastSeenMs 
+      ? new Date(lastSeenMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false })
+      : 'No recent data';
+    
+    // Calculate age for display
+    const ageStr = lastSeenMs 
+      ? (() => {
+          const hours = Math.round((Date.now() - lastSeenMs) / (1000 * 60 * 60));
+          if (hours < 24) return `${hours}h ago`;
+          const days = Math.round(hours / 24);
+          return `${days} day${days === 1 ? '' : 's'} ago`;
+        })()
+      : 'Unknown';
 
     const mk = L.circleMarker([lat, lon], {
       radius: 7,
@@ -3457,7 +3470,7 @@ if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
       opacity: 1,
       fillOpacity: 0.9
     })
-    .bindTooltip(`${disp}<br>Uploaded: ${uploadedStr}`, { direction:'top', offset:[0,-10] })
+  .bindTooltip(`<strong>${disp}</strong><br>Last seen: ${ageStr}<br><small>${uploadedStr}</small>`, { direction:'top', offset:[0,-10] })
     .addTo(mapAllLayerGroup);
 
     mk.on('click', () => {
