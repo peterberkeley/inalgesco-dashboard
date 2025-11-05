@@ -640,23 +640,10 @@ async function fetchDallasAddresses(deviceID) {
       }
     } catch { }
 
-    // ---- B) Auto-discover sensors with APPROPRIATE time filtering ----
-    
-    // Determine freshness window based on mode and selected range
-    let FRESH_MS;
-    if (selectedRangeMode === 'last') {
-      // LAST mode: use last anchor time (allows viewing old data)
-      const anchorMs = computeLastAnchorMs(deviceID);
-      const ageMs = Date.now() - anchorMs;
-      FRESH_MS = Math.max(ageMs + (24 * 60 * 60 * 1000), 7 * 24 * 60 * 60 * 1000); // At least 7 days
-      console.log('[fetchDallasAddresses] LAST mode: using', Math.round(FRESH_MS / (24*60*60*1000)), 'day window');
-    } else {
-      // NOW mode: use selected range + buffer
-      const rangeMs = selectedRangeMinutes * 60 * 1000;
-      const bufferMs = Math.max(rangeMs * 2, 48 * 60 * 60 * 1000); // 2x range or min 48h
-      FRESH_MS = bufferMs;
-      console.log('[fetchDallasAddresses] NOW mode: using', Math.round(FRESH_MS / (60*60*1000)), 'hour window for', selectedRangeMinutes, 'min range');
-    }
+    // ---- B) Auto-discover sensors with a fixed 48h freshness gate ----
+const FRESH_MS = 48 * 60 * 60 * 1000; // 48 hours
+console.log('[fetchDallasAddresses] Using fixed 48h discovery window');
+
 
     // Try v2 bulk first
    if (USE_V2_BULK) {
