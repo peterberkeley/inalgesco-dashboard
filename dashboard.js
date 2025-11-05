@@ -3661,6 +3661,105 @@ function closeMapAll(){
   window.drawLive.__shimmedOnceGPS = true;
   console.info('[shim] Anti-Phoenix map guard active: only suppresses LAST with 0 admin + no GPS.');
 })();
+  // ─────────────────────────────────────────────
+// HOTPATCH: force fixed 48-hour Dallas discovery window
+// Paste exactly here (between the two closing })() blocks near EOF)
+// ─────────────────────────────────────────────
+(() => {
+  const prev = window.fetchDallasAddresses;
+  window.__fetchDallasAddresses_orig = prev;
+
+  window.fetchDallasAddresses = async function(deviceID){
+    try {
+      // A) Admin map first (if present, trust it)
+      try{
+        const entry = Object.entries(window.__deviceMap || {}).find(([,info]) => info && info.id === deviceID);
+        const label = entry ? entry[0] : null;
+        if (label && window.sensorMapConfig){
+          const keyCI = Object.keys(window.sensorMapConfig).find(k => k.toLowerCase() === String(label).toLowerCase());
+          if (keyCI){
+            const devMap = window.sensorMapConfig[keyCI] || {};
+            const adminAddrs = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
+            if (adminAddrs.length){
+              console.log('[fetchDallasAddresses] Using', adminAddrs.length, 'admin addresses');
+              return adminAddrs;
+            }
+          }
+        }
+      }catch{}
+
+      // B) Fixed 48h freshness window
+      const FRESH_MS = 48 * 60 * 60 * 1000;
+      console.log('[fetchDallasAddresses] Using fixed 48h discovery window');
+
+      // C) v2 bulk first
+      try{
+        const base = window.UBIDOTS_BASE || 'https://industrial.api.ubidots.com/api/v2.0';
+        const tok  = window.UBIDOTS_ACCOUNT_TOKEN;
+        const r = await fetch(`${base}/devices/${deviceID}/_/values/last`, { headers: { 'X-Auth-Token': tok } });
+        if (r.ok){
+          const bulk = await r.json();
+          const nowMs = Date.now();
+          const addrs = Object.entries(bulk)
+            .filter(([lab,obj]) =>
+              /^[0-9a-fA-F]{16}$/.test(lab) &&
+              obj && obj.value != null &&
+              (nowMs - (obj.timestamp || 0)) <= FRESH_MS)
+            .sort((a,b)=> (b[1].timestamp||0) - (a[1].timestamp||0))
+            .map(([lab])=>lab);
+          if (addrs.length){
+            console.log('[fetchDallasAddresses] Found', addrs.length, 'sensors with data (v2)');
+            return addrs;
+          }
+        }
+      }catch(e){ console.warn('v2 bulk failed', e); }
+
+      // D) v1.6 fallback (device-scoped)
+      const V1  = window.UBIDOTS_V1 || 'https://industrial.api.ubidots.com/api/v1.6';
+      const tok = encodeURIComponent(window.UBIDOTS_ACCOUNT_TOKEN || '');
+      const listUrl = `${V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${tok}`;
+      const listJs = await fetch(listUrl).then(r=>r.ok?r.json():{results:[]}).catch(()=>({results:[]}));
+
+      const hexVars = [];
+      const seen = new Set();
+      for (const v of (listJs.results||[])){
+        const lab = String(v.label||'');
+        if (!/^[0-9a-fA-F]{16}$/.test(lab)) continue;
+        const k = lab.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        hexVars.push({ label: lab, id: String(v.id) });
+      }
+      if (!hexVars.length) return [];
+
+      const nowMs = Date.now();
+      const withData = [];
+      const CHUNK = 6;
+      for (let i=0;i<hexVars.length;i+=CHUNK){
+        const batch = hexVars.slice(i,i+CHUNK);
+        const rs = await Promise.all(batch.map(async hv=>{
+          try{
+            const u = `${V1}/variables/${hv.id}/values/?page_size=1&token=${tok}`;
+            const j = await fetch(u).then(r=>r.ok?r.json():null);
+            const p = j?.results?.[0];
+            if (!p || p.value == null) return null;
+            if ((nowMs - (p.timestamp||0)) > FRESH_MS) return null;
+            return hv.label;
+          }catch{ return null; }
+        }));
+        rs.forEach(l=>{ if (l) withData.push(l); });
+      }
+      console.log('[fetchDallasAddresses] Found', withData.length, 'sensors with data (v1.6)');
+      return withData;
+
+    } catch (e) {
+      console.error('fetchDallasAddresses error (hotpatch)', e);
+      try { return await prev?.(deviceID); } catch { return []; }
+    }
+  };
+
+  console.log('[hotpatch] fetchDallasAddresses => fixed 48h version active');
+})();
 })();  
 // EOF
 
