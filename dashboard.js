@@ -3375,9 +3375,10 @@ async function openMapAll(){
   if (devLabel.toLowerCase().includes('warehouse')) continue;
     
 
-  // 1) Coordinates: Use v2 bulk ONLY (fast)
+// 1) Coordinates: Try v2 bulk first (fast), fallback to v1.6 if needed
 let lat = null, lon = null, lastSeenMs = info?.last_seen ? (info.last_seen * 1000) : 0;
 
+// Try v2 bulk first (fast - single API call)
 try {
   const bulk = await fetchDeviceLastValuesV2(deviceID);
   if (bulk) {
@@ -3390,75 +3391,21 @@ try {
   }
 } catch(_) {}
 
-// B) If still missing, try devices.v2 location
+// Fallback to v1.6 only if v2 didn't find GPS
 if (lat == null || lon == null) {
   try {
-    const loc = await fetchDeviceLocationV2(deviceID);
-    if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
-      lat = loc.lat; lon = loc.lon;
-      console.log('[mapAll] GPS coords from v2 location:', {devLabel, lat, lon});
+    const gpsLabel = await resolveGpsLabel(deviceID);
+    if (gpsLabel) {
+      const rows = await fetchUbidotsVar(deviceID, gpsLabel, 1);
+      const r = rows?.[0];
+      const c = r?.context;
+      if (c && typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')) {
+        lat = c.lat;
+        lon = (c.lng != null ? c.lng : c.lon);
+      }
     }
   } catch(_) {}
 }
-
-// C) If still missing, try v2 bulk last-values for gps/position/location
-if (lat == null || lon == null) {
-  try {
-    const bulk = await fetchDeviceLastValuesV2(deviceID);
-    const g = (bulk && (bulk.gps || bulk.position || bulk.location)) || null;
-    const c = g && g.context || null;
-    if (c && typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')) {
-      lat = c.lat;
-      lon = (c.lng != null ? c.lng : c.lon);
-    }
-  } catch(_) {}
-}
-
-
-    // 2) Activity gate: v2 last_seen OR v1.6 heartbeat/GPS fallback (48h window)
-let lastSeenSec = info?.last_seen || 0;
-let lastSeenMs  = lastSeenSec ? (lastSeenSec * 1000) : 0;
-
-// If v2 is stale, fall back to heartbeat (signal/volt) and GPS timestamps (v1.6)
-if (!lastSeenMs || lastSeenMs < cutoffMs) {
-  async function __heartbeatFreshMs(devId){
-    let best = 0;
-    try{
-      await ensureVarCache(devId);
-      const caps = variableCache[devId] || {};
-      const hbLabs = ['signal','rssi','csq','volt','vbatt','battery','batt'];
-
-      // Radio/power heartbeats
-      for (const lab of hbLabs){
-        const vid = caps[lab];
-        if (!vid) continue;
-        const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(vid)}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
-        if (!r.ok) continue;
-        const j  = await r.json();
-        const ts = j?.results?.[0]?.timestamp || 0;
-        if (Number.isFinite(ts) && ts > best) best = ts;
-      }
-
-      // GPS (if present)
-      const gpsLab = await resolveGpsLabel(devId);
-      if (gpsLab){
-        const rows = await fetchUbidotsVar(devId, gpsLab, 1);
-        const ts   = rows?.[0]?.timestamp || 0;
-        if (Number.isFinite(ts) && ts > best) best = ts;
-      }
-    }catch(_){}
-    return best; // 0 if none found
-  }
-
-  const hbMs = await __heartbeatFreshMs(deviceID);
-  if (hbMs && hbMs > lastSeenMs) {
-    lastSeenMs  = hbMs;
-    lastSeenSec = Math.floor(hbMs / 1000);
-  }
-}
-
-// If we have no coordinates at all, we cannot place a marker
-const hasCoord = (typeof lat === 'number' && isFinite(lat) &&
                   typeof lon === 'number' && isFinite(lon));
 if (!hasCoord) { skippedNoCoord++; continue; }
     else { console.log('[mapAll] Has coords:', devLabel, lat, lon); }
