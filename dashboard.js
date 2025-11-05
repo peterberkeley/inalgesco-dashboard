@@ -3375,22 +3375,17 @@ async function openMapAll(){
   if (devLabel.toLowerCase().includes('warehouse')) continue;
     
 
-   // 1) Coordinates: prefer freshest GPS point; else device.location; else v2 bulk gps/position/location
-let lat = null, lon = null;
+  // 1) Coordinates: Use v2 bulk ONLY (fast)
+let lat = null, lon = null, lastSeenMs = info?.last_seen ? (info.last_seen * 1000) : 0;
 
-// A) Try the device’s GPS variable (v1.6) – may be stale but still carries coords
-    console.log('[mapAll] Checking device:', devLabel, 'ID:', deviceID);
-// A) Try the device's GPS variable (v1.6) – may be stale but still carries coords
 try {
-  const gpsLab = await resolveGpsLabel(deviceID);
-  if (gpsLab) {
-    const rows = await fetchUbidotsVar(deviceID, gpsLab, 1);
-    const r = rows && rows[0];
-    const g = r && r.context;
-    if (g && typeof g.lat === 'number' && (typeof g.lng === 'number' || typeof g.lon === 'number')) {
-      lat = g.lat;
-      lon = (g.lng != null ? g.lng : g.lon);
-      console.log('[mapAll] GPS coords from v1.6:', {devLabel, lat, lon});
+  const bulk = await fetchDeviceLastValuesV2(deviceID);
+  if (bulk) {
+    const g = (bulk.gps || bulk.position || bulk.location) || null;
+    const c = g && g.context || null;
+    if (c && typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number')) {
+      lat = c.lat;
+      lon = (c.lng != null ? c.lng : c.lon);
     }
   }
 } catch(_) {}
