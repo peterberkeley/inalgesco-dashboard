@@ -629,33 +629,50 @@ async function fetchDallasAddresses(deviceID){
         if (keyCI){
           const devMap = window.sensorMapConfig[keyCI] || {};
           const adminAddrs = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
-          if (adminAddrs.length) return adminAddrs; // keep admin order
+          if (adminAddrs.length) {
+            console.log('[fetchDallasAddresses] Using', adminAddrs.length, 'admin addresses');
+            return adminAddrs;
+          }
         }
       }
     }catch{}
 
-    // ---- B) NO ADMIN MAP → only fresh addresses ----
-    const FRESH_MS = 48 * 60 * 60 * 1000; // 48 h
-    const nowMs = Date.now();
-
-    // B1) v2 bulk last-values (fast path)
+    // ---- B) Get ALL sensors with data (no freshness filter) ----
+    // This allows viewing historical data for any time period
+    
+    // B1) v2 bulk last-values (includes ALL sensors with values)
     if (window.USE_V2_BULK) {
       try{
         const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`,
                               { headers:{ 'X-Auth-Token': UBIDOTS_ACCOUNT_TOKEN } });
         if (r.ok){
           const bulk = await r.json();
-          const fresh = Object.entries(bulk)
-            .filter(([lab,obj]) => /^[0-9a-fA-F]{16}$/.test(lab) &&
-                                   Number.isFinite(obj?.timestamp) &&
-                                   (nowMs - obj.timestamp) <= FRESH_MS)
-            .map(([lab]) => lab);
-          if (fresh.length) return fresh;
+          const sensorsWithData = Object.entries(bulk)
+            .filter(([lab,obj]) => {
+              // Must be a sensor address
+              if (!/^[0-9a-fA-F]{16}$/.test(lab)) return false;
+              // Must have a value (but don't filter by age)
+              if (!obj || obj.value == null) return false;
+              return true;
+            })
+            .map(([lab, obj]) => ({
+              address: lab,
+              timestamp: obj.timestamp
+            }));
+          
+          // Sort by most recent first
+          sensorsWithData.sort((a, b) => b.timestamp - a.timestamp);
+          const addresses = sensorsWithData.map(s => s.address);
+          
+          if (addresses.length) {
+            console.log('[fetchDallasAddresses] Found', addresses.length, 'sensors with data');
+            return addresses;
+          }
         }
       }catch(e){ console.warn('v2 bulk last filter failed', e); }
     }
 
-    // B2) fallback: v1.6 variables list + 48 h freshness check
+    // B2) fallback: v1.6 - get ALL sensors with ANY data
     const listUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
     const listJs  = await fetch(listUrl).then(r=>r.json()).catch(()=>({results:[]}));
     const seen = new Set();
@@ -670,60 +687,29 @@ async function fetchDallasAddresses(deviceID){
     }
     if (!hexVars.length) return [];
 
-    const keepFresh = [];
+    // Check which ones have data (no freshness filter)
+    const withData = [];
     const CHUNK = 6;
     for (let i=0;i<hexVars.length;i+=CHUNK){
       const batch = hexVars.slice(i,i+CHUNK);
       const rs = await Promise.all(batch.map(async hv=>{
         try{
           const j = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
-          const ts = j?.results?.[0]?.timestamp;
-          return (Number.isFinite(ts) && (nowMs - ts) <= FRESH_MS) ? hv.label : null;
+          // Just check if data exists, don't filter by age
+          return (j?.results?.[0]?.value != null) ? hv.label : null;
         }catch{return null;}
       }));
-      rs.forEach(l=>{ if(l) keepFresh.push(l); });
+      rs.forEach(l=>{ if(l) withData.push(l); });
     }
-    return keepFresh;
-  }catch(e){
-    console.error('fetchDallasAddresses (fresh-only)', e);
-    return [];
     
+    console.log('[fetchDallasAddresses] Found', withData.length, 'sensors with data (v1.6)');
+    return withData;
+  }catch(e){
+    console.error('fetchDallasAddresses error', e);
+    return [];
   }
 }
 window.fetchDallasAddresses = fetchDallasAddresses;
-// Unified LAST anchor computation used by both poll() and updateCharts().
-// Strategy: v2 bulk first (single request), then parallel v1.6 fallback.
-async function computeLastAnchorMs(deviceID, SENSORS){
-  let tLast = -Infinity;
-
-  // 1) Try v2 bulk once
-  try {
-    const bulk = await fetchDeviceLastValuesV2(deviceID);
-    if (bulk && typeof bulk === 'object') {
-      for (const s of SENSORS) {
-        if (!s.address) continue;
-        const o = bulk[s.address];
-        const ts = o && o.timestamp;
-        if (Number.isFinite(ts) && ts > tLast) tLast = ts;
-      }
-    }
-  } catch (_) { /* ignore */ }
-
-  // 2) Parallel v1.6 fallback
-  if (!Number.isFinite(tLast) || tLast === -Infinity) {
-    await ensureVarCache(deviceID);
-    const addrs = SENSORS.filter(s => s.address).map(s => s.address);
-    const ids   = await Promise.all(addrs.map(a => resolveVarIdStrict(deviceID, a)));
-    const tsArr = await Promise.all(ids.map(id => id ? fetchLastTsV1(id) : null));
-    for (const ts of tsArr) {
-      if (Number.isFinite(ts) && ts > tLast) tLast = ts;
-    }
-  }
-
-  return Number.isFinite(tLast) ? tLast : null;
-}
-// Expose for console/tests and to ensure global visibility in Safari
-window.computeLastAnchorMs = computeLastAnchorMs;
 
 
 
