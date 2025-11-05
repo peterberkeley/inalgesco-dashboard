@@ -3406,15 +3406,17 @@ if (lat == null || lon == null) {
     }
   } catch(_) {}
 }
-                  typeof lon === 'number' && isFinite(lon));
-if (!hasCoord) { skippedNoCoord++; continue; }
-    else { console.log('[mapAll] Has coords:', devLabel, lat, lon); }
-// Drop only if unified recency (v2 or fallback) is older than 48 h
-// Show ALL trucks regardless of age
-// if (!lastSeenMs || lastSeenMs < cutoffMs) { skippedOld++; continue; }
 
+    // Check if we have valid coordinates
+    const hasCoord = (typeof lat === 'number' && isFinite(lat) && 
+                      typeof lon === 'number' && isFinite(lon));
+    if (!hasCoord) { 
+      skippedNoCoord++; 
+      continue; 
+    }
 
     // Online/offline coloring from last_seen
+    const lastSeenSec = Math.floor(lastSeenMs / 1000);
     const isOnline = (nowSec - lastSeenSec) < ONLINE_WINDOW_SEC;
     const color = isOnline ? '#16a34a' : '#9ca3af';
 
