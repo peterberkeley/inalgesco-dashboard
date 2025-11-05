@@ -659,7 +659,7 @@ async function fetchDallasAddresses(deviceID) {
     }
 
     // Try v2 bulk first
-    if (window.USE_V2_BULK) {
+   if (USE_V2_BULK) {
       try {
         const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`,
           { headers: { 'X-Auth-Token': UBIDOTS_ACCOUNT_TOKEN } });
