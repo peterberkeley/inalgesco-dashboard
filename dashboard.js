@@ -2923,7 +2923,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
       if (!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
     }
     // 2b) Re-evaluate stale dropdown items using gps/signal/volt only (narrow heartbeat)
-   if (USE_V16_HEARTBEAT_FALLBACK && sel) {
+  if (false && USE_V16_HEARTBEAT_FALLBACK && sel) {
       const nowSec = Math.floor(Date.now() / 1000);
 
       const updates = Array.from(sel.options).map(async (opt) => {
