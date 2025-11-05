@@ -629,50 +629,33 @@ async function fetchDallasAddresses(deviceID){
         if (keyCI){
           const devMap = window.sensorMapConfig[keyCI] || {};
           const adminAddrs = Object.keys(devMap).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
-          if (adminAddrs.length) {
-            console.log('[fetchDallasAddresses] Using', adminAddrs.length, 'admin addresses');
-            return adminAddrs;
-          }
+          if (adminAddrs.length) return adminAddrs; // keep admin order
         }
       }
     }catch{}
 
-    // ---- B) Get ALL sensors with data (no freshness filter) ----
-    // This allows viewing historical data for any time period
-    
-    // B1) v2 bulk last-values (includes ALL sensors with values)
+    // ---- B) NO ADMIN MAP → only fresh addresses ----
+    const FRESH_MS = 48 * 60 * 60 * 1000; // 48 h
+    const nowMs = Date.now();
+
+    // B1) v2 bulk last-values (fast path)
     if (window.USE_V2_BULK) {
       try{
         const r = await fetch(`${UBIDOTS_BASE}/devices/${deviceID}/_/values/last`,
                               { headers:{ 'X-Auth-Token': UBIDOTS_ACCOUNT_TOKEN } });
         if (r.ok){
           const bulk = await r.json();
-          const sensorsWithData = Object.entries(bulk)
-            .filter(([lab,obj]) => {
-              // Must be a sensor address
-              if (!/^[0-9a-fA-F]{16}$/.test(lab)) return false;
-              // Must have a value (but don't filter by age)
-              if (!obj || obj.value == null) return false;
-              return true;
-            })
-            .map(([lab, obj]) => ({
-              address: lab,
-              timestamp: obj.timestamp
-            }));
-          
-          // Sort by most recent first
-          sensorsWithData.sort((a, b) => b.timestamp - a.timestamp);
-          const addresses = sensorsWithData.map(s => s.address);
-          
-          if (addresses.length) {
-            console.log('[fetchDallasAddresses] Found', addresses.length, 'sensors with data');
-            return addresses;
-          }
+          const fresh = Object.entries(bulk)
+            .filter(([lab,obj]) => /^[0-9a-fA-F]{16}$/.test(lab) &&
+                                   Number.isFinite(obj?.timestamp) &&
+                                   (nowMs - obj.timestamp) <= FRESH_MS)
+            .map(([lab]) => lab);
+          if (fresh.length) return fresh;
         }
       }catch(e){ console.warn('v2 bulk last filter failed', e); }
     }
 
-    // B2) fallback: v1.6 - get ALL sensors with ANY data
+    // B2) fallback: v1.6 variables list + 48 h freshness check
     const listUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
     const listJs  = await fetch(listUrl).then(r=>r.json()).catch(()=>({results:[]}));
     const seen = new Set();
@@ -687,32 +670,25 @@ async function fetchDallasAddresses(deviceID){
     }
     if (!hexVars.length) return [];
 
-    // Check which ones have data (no freshness filter)
-    const withData = [];
+    const keepFresh = [];
     const CHUNK = 6;
     for (let i=0;i<hexVars.length;i+=CHUNK){
       const batch = hexVars.slice(i,i+CHUNK);
       const rs = await Promise.all(batch.map(async hv=>{
         try{
           const j = await fetch(`${UBIDOTS_V1}/variables/${hv.id}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`).then(r=>r.json());
-          // Just check if data exists, don't filter by age
-          return (j?.results?.[0]?.value != null) ? hv.label : null;
+          const ts = j?.results?.[0]?.timestamp;
+          return (Number.isFinite(ts) && (nowMs - ts) <= FRESH_MS) ? hv.label : null;
         }catch{return null;}
       }));
-      rs.forEach(l=>{ if(l) withData.push(l); });
+      rs.forEach(l=>{ if(l) keepFresh.push(l); });
     }
-    
-    console.log('[fetchDallasAddresses] Found', withData.length, 'sensors with data (v1.6)');
-    return withData;
+    return keepFresh;
   }catch(e){
-    console.error('fetchDallasAddresses error', e);
+    console.error('fetchDallasAddresses (fresh-only)', e);
     return [];
   }
 }
-window.fetchDallasAddresses = fetchDallasAddresses;
-
-
-
 /* =================== Heartbeat labels resolver =================== */
 function pickHeartbeatLabels(deviceId, deviceLabel){
   const labels = Object.keys(variableCache[deviceId] || {});
