@@ -317,26 +317,36 @@
     }
 
     // ===== RENDER SENSOR TABLE =====
-    function renderSensorTable(slots) {
-      const tbl = document.getElementById("sensorTable").querySelector("tbody");
-      tbl.innerHTML = '';
-      slots.forEach((s, idx) => {
-        const isLocked = !s.isLive && s.isMapped && s.address;
-        tbl.innerHTML += `
-              <tr class="${isLocked ? 'locked-row' : ''}">
-                <td>Sensor ${idx + 1}</td>
-                <td>
-                  <input type="text" value="${s.address || ''}" class="sensorAddr" readonly style="width:200px;" ${isLocked ? 'tabindex="-1"' : ''}/>
-                </td>
-                <td>
-                  <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:130px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
-                </td>
-                <td>
-                  <input type="number" value="${typeof s.calibration === 'number' ? s.calibration : 0}" step="0.1" class="sensorCal" style="width:65px;" ${isLocked ? 'readonly tabindex="-1"' : ''}/>
-                </td>
-              </tr>`;
-      });
-    }
+  function renderSensorTable(slots) {
+  const tbl = document.getElementById("sensorTable").querySelector("tbody");
+  tbl.innerHTML = '';
+
+  slots.forEach((s, idx) => {
+    // Address is editable only when the slot is empty (lets you add an offline sensor by typing its 16-hex address)
+    const addrReadonly = !!s.address && (s.isMapped || s.isLive); // discovered or already mapped => keep address immutable
+    // Labels and calibration are ALWAYS editable (even if offline)
+    const labelReadonly = false;
+    const calReadonly   = false;
+
+    tbl.innerHTML += `
+      <tr${(!s.isLive && s.isMapped && s.address) ? ' class="locked-row"' : ''}>
+        <td>Sensor ${idx + 1}</td>
+        <td>
+          <input type="text" value="${s.address || ''}" class="sensorAddr" style="width:200px;"
+                 ${addrReadonly ? 'readonly tabindex="-1"' : ''}/>
+        </td>
+        <td>
+          <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:130px;"
+                 ${labelReadonly ? 'readonly tabindex="-1"' : ''}/>
+        </td>
+        <td>
+          <input type="number" value="${Number.isFinite(s.calibration) ? s.calibration : 0}" step="0.1"
+                 class="sensorCal" style="width:65px;" ${calReadonly ? 'readonly tabindex="-1"' : ''}/>
+        </td>
+      </tr>`;
+  });
+}
+
 
     // ===== HANDLE SENSOR TABLE EDITS =====
     document.getElementById("sensorTable").addEventListener("input", function(e) {
