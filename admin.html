@@ -349,20 +349,39 @@
 
 
     // ===== HANDLE SENSOR TABLE EDITS =====
-    document.getElementById("sensorTable").addEventListener("input", function(e) {
-      const tbl = document.getElementById("sensorTable").querySelector("tbody");
-      const sensors = {};
-      Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-        const addr = tr.querySelector(".sensorAddr").value.trim();
-        const isLocked = tr.classList.contains("locked-row");
-        if (!/^[0-9a-fA-F]{16}$/.test(addr) || isLocked) return;
-        let label = tr.querySelector(".sensorLabel").value.trim();
-        let offset = parseFloat(tr.querySelector(".sensorCal").value) || 0;
-        if (label || offset) sensors[addr] = { label, offset };
-      });
-      if (!fullMapData) fullMapData = {};
-      fullMapData[selectedDeviceLabel] = sensors;
-    });
+    document.getElementById("sensorTable").addEventListener("input", function () {
+  const tbl = document.getElementById("sensorTable").querySelector("tbody");
+
+  // Start from previous mapping to avoid wiping offline entries
+  const prev = (fullMapData && fullMapData[selectedDeviceLabel])
+    ? { ...fullMapData[selectedDeviceLabel] }
+    : {};
+
+  const updated = { ...prev };
+  const isHex16 = s => /^[0-9a-fA-F]{16}$/.test(s);
+
+  Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
+    const addrEl = tr.querySelector(".sensorAddr");
+    const lblEl  = tr.querySelector(".sensorLabel");
+    const calEl  = tr.querySelector(".sensorCal");
+
+    const addr = (addrEl?.value || '').trim();
+    if (!isHex16(addr)) return; // only persist valid 16-hex addresses
+
+    const label  = (lblEl?.value || '').trim();
+    let offset   = parseFloat(calEl?.value);
+    if (!Number.isFinite(offset)) offset = 0;
+
+    // Keep if there is any content OR it already existed (prevents accidental data loss)
+    if (label || offset || prev[addr]) {
+      updated[addr] = { label, offset };
+    }
+  });
+
+  if (!fullMapData) fullMapData = {};
+  fullMapData[selectedDeviceLabel] = updated;
+});
+
 
   // ===== SAVE BUTTON =====
 document.getElementById("saveBtn").onclick = async function() {
