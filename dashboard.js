@@ -3408,8 +3408,8 @@ if (lat == null || lon == null) {
     const color = isOnline ? '#16a34a' : '#9ca3af';
 
     const disp = getDisplayName(devLabel);
-  const uploadedStr = lastSeenMs 
-      ? new Date(lastSeenMs).toLocaleString(undefined, { hour12: false })
+    const uploadedStr = lastSeenMs 
+      ? new Date(lastSeenMs).toLocaleString('en-US', { timeZone: 'America/Phoenix', hour12: false })
       : 'No recent data';
     
     // Calculate age for display
