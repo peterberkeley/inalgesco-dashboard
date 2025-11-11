@@ -70,7 +70,42 @@ function onReady(fn){
   if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(fn,1);
   else document.addEventListener("DOMContentLoaded", fn);
 }
-const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
+// --- Global timezone override patch (replaces all Europe/London defaults) ---
+(function() {
+  const LOCAL_TZ = 'America/Phoenix'; // <-- change if you need another default
+  const _dtf = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // 1) Override Date.prototype.toLocaleString / toLocaleTimeString / toLocaleDateString
+  const origLocaleString = Date.prototype.toLocaleString;
+  const origTimeString   = Date.prototype.toLocaleTimeString;
+  const origDateString   = Date.prototype.toLocaleDateString;
+
+  Date.prototype.toLocaleString = function(locale, opts = {}) {
+    if (!opts.timeZone) opts.timeZone = _dtf || LOCAL_TZ;
+    return origLocaleString.call(this, locale, opts);
+  };
+  Date.prototype.toLocaleTimeString = function(locale, opts = {}) {
+    if (!opts.timeZone) opts.timeZone = _dtf || LOCAL_TZ;
+    return origTimeString.call(this, locale, opts);
+  };
+  Date.prototype.toLocaleDateString = function(locale, opts = {}) {
+    if (!opts.timeZone) opts.timeZone = _dtf || LOCAL_TZ;
+    return origDateString.call(this, locale, opts);
+  };
+
+  // 2) Patch Intl.DateTimeFormat to default to LOCAL_TZ if none provided
+  const OrigDTF = Intl.DateTimeFormat;
+  Intl.DateTimeFormat = function(locale, opts = {}) {
+    if (!opts.timeZone) opts.timeZone = _dtf || LOCAL_TZ;
+    return new OrigDTF(locale, opts);
+  };
+  Intl.DateTimeFormat.prototype = OrigDTF.prototype;
+
+  console.log(`[timezone patch] Default timeZone = ${_dtf || LOCAL_TZ}`);
+})();
+
+  
+  const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
 // Fast HH:MM formatter with per-timezone Intl cache
 const __dtfCache = {};
 const __tzCache = {};  // deviceLabel -> IANA tz
