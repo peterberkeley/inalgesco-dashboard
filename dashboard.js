@@ -3724,7 +3724,8 @@ function closeMapAll(){
   };
 
   console.log('[hotpatch] fetchDallasAddresses => fixed 48h version active');
-})(); 
+})();
+  })();
 // EOF
 
 
