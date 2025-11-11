@@ -3409,7 +3409,7 @@ if (lat == null || lon == null) {
 
     const disp = getDisplayName(devLabel);
   const uploadedStr = lastSeenMs 
-      ? new Date(lastSeenMs).toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false })
+      ? new Date(lastSeenMs).toLocaleString(undefined, { hour12: false })
       : 'No recent data';
     
     // Calculate age for display
