@@ -3026,20 +3026,28 @@ console.log('[lastSeen]', {
       const opt = dd.options[dd.selectedIndex];
       opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
     }
-    // Update KPI “last updated” using lastSeenSec (v2 Devices or heartbeat fallback)
-    {
-      const el = document.getElementById("kpiSeen");
-      if (el) {
-        if (lastSeenSec) {
-          const dt = new Date(lastSeenSec * 1000);
-          const dStr = dt.toLocaleDateString('en-GB', { timeZone:'Europe/London' });
-          const tStr = dt.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
-        el.innerHTML = `<div>${dStr}</div><div class="text-gray-500">${tStr} (London)</div>`;
-        } else {
-          el.textContent = "—";
-        }
-      }
+   // Update KPI “last updated” using lastSeenSec (localized to Phoenix)
+{
+  const el = document.getElementById("kpiSeen");
+  if (el) {
+    if (lastSeenSec) {
+      const dt = new Date(lastSeenSec * 1000);
+      const dStr = dt.toLocaleDateString('en-GB', { timeZone: UI_TZ });
+      const tStr = dt.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZone: UI_TZ
+      });
+      const zoneLabel = UI_TZ.split('/')[1] || UI_TZ; // shows "Phoenix"
+      el.innerHTML = `<div>${dStr}</div><div class="text-gray-500">${tStr} (${zoneLabel})</div>`;
+    } else {
+      el.textContent = "—";
     }
+  }
+}
+
 window.__lastSeenMs = lastSeenSec ? (lastSeenSec * 1000) : null;
 
       // --- Choose the actual device to fetch data from ---
