@@ -1962,6 +1962,7 @@ if (shouldMove) {
     }
   } catch(_) {}
 }
+}
 
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
@@ -3566,10 +3567,10 @@ function closeMapAll(){
 })();
 
 /* ────────────────────────────────────────────────
-  /* ────────────────────────────────────────────────
    Anti-Phoenix Map Shim (safe install)
    Only installs if drawLive already exists; otherwise skips silently.
    ──────────────────────────────────────────────── */
+
 (function installNoMapLastShimSafe() {
   const L = window.L;
   if (!L || !L.Map || !L.Marker) return;       // Leaflet not ready
@@ -3723,8 +3724,7 @@ function closeMapAll(){
   };
 
   console.log('[hotpatch] fetchDallasAddresses => fixed 48h version active');
-})();
-})();  
+})(); 
 // EOF
 
 
