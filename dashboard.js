@@ -2400,289 +2400,210 @@ async function downloadCsvForCurrentSelection(){
 // part 4
 /* =================== Breadcrumb route drawing =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
-  const myTok = ++__crumbToken; // stamp this run
-  // Abort any in-flight breadcrumb work from a previous run
+  // ── hard-coded thresholds (per spec) ─────────────────────────────
+  const MIN_DIST_M       = 5;                // drop points closer than this
+  const MIN_DT_MS        = 60 * 1000;        // minimum cadence 60 s
+  const MAX_SPEED_KMH    = 120;              // drop teleports
+  const GAP_SPLIT_MS     = 15 * 60 * 1000;   // split on data gaps > 15 min
+  const DWELL_RADIUS_M   = 5;                // within 5 m counts toward dwell
+  const DWELL_TIME_MS    = 10 * 60 * 1000;   // new journey after ≥10 min dwell
+  // ────────────────────────────────────────────────────────────────
+
+  const myTok = ++__crumbToken;
   if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
   __crumbAbort = new AbortController();
-  const __crumbSignal = __crumbAbort.signal;
+  const signal = __crumbAbort.signal;
   const __epochAtStart = Number(window.__selEpoch) || 0;
-  
+
   try{
     initMap(); // idempotent
-    segmentPolylines.forEach(p=>p.remove());
-    segmentMarkers.forEach(m=>m.remove());
+    // Clear previous overlays only; keep base pin/state stable
+    segmentPolylines.forEach(p => p.remove());
+    segmentMarkers.forEach(m => m.remove());
     segmentPolylines = [];
     segmentMarkers = [];
-    if (legendControl){
-      map.removeControl(legendControl);
-      legendControl = null;
-    }
-    
-    // Compute time window for breadcrumbs:
-    // - NOW: [now - selectedRangeMinutes, now]
-    // - LAST: [t_last - 60min, t_last], where t_last is the most recent GPS timestamp
-    
-    const gpsLabel = await resolveGpsLabel(deviceID);
-    let gpsRows = [];
-    let startTimeMs = null, endTimeMs = null;
-    
-    if (!gpsLabel) {
-      // No GPS variable at all → show static base pin and stop
-      try { initMap(); } catch(_) {}
-      if (map && marker) {
-        marker.setLatLng([STATIC_BASE.lat, STATIC_BASE.lon]);
-        marker.bindTooltip('(SkyCafè PHX)', { direction:'top', offset:[0,-8] }).openTooltip();
-        map.setView([STATIC_BASE.lat, STATIC_BASE.lon], Math.max(map.getZoom(), 12));
-      }
-      return;
-    }
-    
-    if (selectedRangeMode === 'now') {
+    if (legendControl){ map.removeControl(legendControl); legendControl = null; }
+
+    // ── 1) Compute time window (no adaptive look-back) ─────────────
+    let startTimeMs, endTimeMs;
+    if (selectedRangeMode === 'now'){
       endTimeMs   = Date.now();
+      endTimeMs  -= (endTimeMs % 1000);        // ms hygiene
       startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
-      gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTimeMs, endTimeMs, __crumbSignal);
-      
-      // === ADAPTIVE GPS LOGIC STARTS HERE (NEW) ===
-      if ((!gpsRows || gpsRows.length === 0)) {
-        console.log(`[breadcrumbs] No GPS in selected ${rangeMinutes}min, checking for historical data...`);
-        
-        // Get the variable ID for GPS
-        const varId = variableCache[deviceID]?.[gpsLabel];
-        if (varId) {
-          try {
-            // Check for most recent GPS point
-            const lastPointUrl = `https://industrial.api.ubidots.com/api/v1.6/variables/${varId}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`;
-            const lastResp = await fetch(lastPointUrl, { signal: __crumbSignal });
-            const lastData = await lastResp.json();
-            
-            if (lastData.results && lastData.results.length > 0) {
-              const lastTimestamp = lastData.results[0].timestamp;
-              const ageHours = (Date.now() - lastTimestamp) / (1000 * 60 * 60);
-              
-              // Only use adaptive if data is within 24 hours
-              if (ageHours <= 24) {
-                console.log(`[breadcrumbs] Found GPS data from ${ageHours.toFixed(1)}h ago, fetching historical window...`);
-                
-                // Fetch a window around the last known activity
-                const historicalEnd = Math.min(lastTimestamp + (30 * 60 * 1000), Date.now());
-                const historicalStart = historicalEnd - (selectedRangeMinutes * 60 * 1000);
-                
-                gpsRows = await fetchCsvRows(deviceID, gpsLabel, historicalStart, historicalEnd, __crumbSignal);
-                
-                if (gpsRows && gpsRows.length > 0) {
-                  console.log(`[breadcrumbs] Adaptive fetch successful: ${gpsRows.length} historical points`);
-                  showHistoricalBreadcrumbNotice(ageHours);
-                  
-                  // Update time window for temperature data to match GPS window
-                  startTimeMs = historicalStart;
-                  endTimeMs = historicalEnd;
-                }
-              } else {
-                console.log(`[breadcrumbs] Last GPS is ${ageHours.toFixed(1)}h old (>24h), skipping adaptive`);
-              }
-            }
-          } catch (error) {
-            if (error.name !== 'AbortError') {
-              console.error('[breadcrumbs] Adaptive fetch error:', error);
-            }
-          }
-        }
-      }
-      // === ADAPTIVE GPS LOGIC ENDS HERE ===
-      
     } else {
-      // 'last' mode: anchor to latest GPS value
-      const lastGpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
-      const tLast = lastGpsArr?.[0]?.timestamp || null;
-      if (!tLast || !isFinite(tLast)) {
-        // No GPS data at all → nothing to draw
-        return;
-      }
-      endTimeMs   = tLast;
-      startTimeMs = tLast - (60 * 60 * 1000);
-      gpsRows = await fetchCsvRows(deviceID, gpsLabel, startTimeMs, endTimeMs, __crumbSignal);
+      // LAST: use the SAME anchor used by charts (Dallas-based tLast)
+      const tLast = await computeLastAnchorMs(deviceID, SENSORS);
+      endTimeMs   = tLast ?? Date.now();
+      startTimeMs = endTimeMs - (60 * 60 * 1000);
     }
-    
-    // Abort if selection changed while fetching breadcrumbs
+
+    // ── stale-selection guard ──────────────────────────────────────
     if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
-    
-    const gpsPoints = gpsRows
-      .filter(r => r.context && r.context.lat != null && r.context.lng != null)
-      .sort((a,b) => a.timestamp - b.timestamp);
-    
-    if(!gpsPoints.length){
-      // No points in this window: clear crumbs but DO NOT reposition.
-      // drawLive() will keep the last-known GPS point (or nothing).
+
+    // ── 2) Fetch merged GPS rows strictly within [start,end] ──────
+    // fetchCsvRows merges gps|position|location automatically
+    const gpsRows = await fetchCsvRows(deviceID, 'gps', startTimeMs, endTimeMs, signal);
+
+    if (myTok !== __crumbToken) return;
+    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
+
+    // Keep only rows with valid coordinates; sort by time asc
+    const rawPts = (gpsRows || [])
+      .filter(r => r && r.context && isFinite(r.context.lat) &&
+                   (isFinite(r.context.lng) || isFinite(r.context.lon)))
+      .map(r => ({
+        ts: Number(r.timestamp),
+        lat: Number(r.context.lat),
+        lon: Number(r.context.lng ?? r.context.lon),
+        speed: (r.context && typeof r.context.speed === 'number') ? Number(r.context.speed) : null
+      }))
+      .filter(p => isFinite(p.ts) && isFinite(p.lat) && isFinite(p.lon))
+      .sort((a,b) => a.ts - b.ts);
+
+    if (!rawPts.length){
+      // Nothing in-window → keep map as-is; no flash to Phoenix
       return;
     }
-    
-    // If a newer call started while we were fetching, stop now
+
+    // ── helpers ────────────────────────────────────────────────────
+    const toRad = d => d * Math.PI / 180;
+    const haversineM = (a, b) => {
+      const R = 6371000; // m
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lon - a.lon);
+      const sa = Math.sin(dLat/2), sb = Math.sin(dLon/2);
+      const A = sa*sa + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*sb*sb;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(A)));
+    };
+    const kmh = (meters, ms) => (ms > 0 ? (meters/1000) / (ms/3600000) : Infinity);
+
+    // ── 3) Spatial–temporal decimation with speed guard ───────────
+    const kept = [];
+    for (let i = 0; i < rawPts.length; i++){
+      const p = rawPts[i];
+      if (!kept.length){ kept.push(p); continue; }
+      const prev = kept[kept.length - 1];
+      const dt   = p.ts - prev.ts;
+      const dist = haversineM(prev, p);
+      const v    = kmh(dist, dt);
+
+      if (dt < MIN_DT_MS) continue;
+      if (dist < MIN_DIST_M) continue;
+      if (v > MAX_SPEED_KMH) continue; // teleport/noisy hop
+      kept.push(p);
+    }
+
+    if (!kept.length) return;
     if (myTok !== __crumbToken) return;
-    
-    const tempData = {};
-    const tempAvg  = {};
-    
-    for(const s of SENSORS){
-      if(!s.address) continue;
-      const rows = await fetchCsvRows(deviceID, s.address, startTimeMs, endTimeMs, __crumbSignal);
-      for(const r of rows){
-        const ts = r.timestamp;
-        let v = parseFloat(r.value);
-        if(isNaN(v)) continue;
-        if(typeof s.calibration === 'number') v += s.calibration;
-        if(!tempData[ts]) tempData[ts] = [];
-        tempData[ts].push(v);
-      }
-    }
-    
-    // ... rest of your existing function continues here unchanged ...
 
-// Add this helper function right after updateBreadcrumbs ends:
-
-function showHistoricalBreadcrumbNotice(hoursAgo) {
-  // Remove any existing notice
-  const existingNotice = document.getElementById('breadcrumb-history-notice');
-  if (existingNotice) existingNotice.remove();
-  
-  const notice = document.createElement('div');
-  notice.id = 'breadcrumb-history-notice';
-  notice.style.cssText = `
-    position: fixed;
-    top: 100px;
-    right: 20px;
-    background: #fef3c7;
-    border: 1px solid #f59e0b;
-    color: #78350f;
-    padding: 12px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    z-index: 1000;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    animation: slideIn 0.3s ease-out;
-  `;
-  
-  notice.innerHTML = `
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-    </svg>
-    <span>Showing GPS from ${Math.floor(hoursAgo)}h ${Math.round((hoursAgo % 1) * 60)}m ago</span>
-    <button onclick="this.parentElement.remove()" style="
-      margin-left: auto;
-      background: none;
-      border: none;
-      color: #78350f;
-      cursor: pointer;
-      font-size: 20px;
-      line-height: 1;
-      padding: 0 4px;
-    ">&times;</button>
-  `;
-  
-  document.body.appendChild(notice);
-  
-  // Add animation if not already present
-  if (!document.getElementById('breadcrumb-animation-style')) {
-    const style = document.createElement('style');
-    style.id = 'breadcrumb-animation-style';
-    style.textContent = `
-      @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-  
-  // Auto-remove after 8 seconds
-  setTimeout(() => {
-    const n = document.getElementById('breadcrumb-history-notice');
-    if (n) {
-      n.style.transition = 'all 0.3s ease-out';
-      n.style.transform = 'translateX(100%)';
-      n.style.opacity = '0';
-      setTimeout(() => n.remove(), 300);
-    }
-  }, 8000);
-}
-    Object.keys(tempData).forEach(ts => {
-      const vals = tempData[ts];
-      if(vals && vals.length){
-        const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
-        tempAvg[ts] = avg;
-      }
-    });
-    const tempTimestamps = Object.keys(tempAvg).map(t=>+t).sort((a,b)=>a-b);
+    // ── 4) Segmentization by gaps and dwell detection ─────────────
     const segments = [];
-    let currentSeg = [];
-    for(let i=0;i<gpsPoints.length;i++){
-      const pt = gpsPoints[i];
-      if(currentSeg.length === 0){
-        currentSeg.push(pt);
-      } else {
-        const prev = gpsPoints[i-1];
-        if((pt.timestamp - prev.timestamp) > (15 * 60 * 1000)){
-          segments.push(currentSeg);
-          currentSeg = [pt];
-        } else {
-          currentSeg.push(pt);
+    let seg = [ kept[0] ];
+
+    // dwell tracker (cluster of near-static points)
+    let dwellStartIdx = 0;      // index in seg where a near-static cluster began
+    let dwellStartTs  = seg[0].ts;
+
+    const inDwell = (a, b) => haversineM(a, b) <= DWELL_RADIUS_M;
+
+    const pushSeg = () => { if (seg.length) segments.push(seg); seg = []; };
+
+    for (let i = 1; i < kept.length; i++){
+      const a = kept[i-1], b = kept[i];
+      const gap = b.ts - a.ts;
+
+      // Gap-based split
+      if (gap > GAP_SPLIT_MS){
+        pushSeg();
+        seg = [ b ];
+        dwellStartIdx = 0;
+        dwellStartTs  = b.ts;
+        continue;
+      }
+
+      // Append point
+      seg.push(b);
+
+      // Dwell tracking inside current segment
+      const lastDwellRef = seg[dwellStartIdx] || seg[0];
+      if (inDwell(lastDwellRef, b)){
+        // still dwelling; check if dwell reached threshold
+        if ((b.ts - dwellStartTs) >= DWELL_TIME_MS){
+          // We are in dwell; when we EXIT dwell (move > radius), split
+          // (Handled in the else-branch below when we detect movement)
         }
+      } else {
+        // movement relative to dwell origin
+        const dwellDur = seg[i - dwellStartIdx]?.ts - dwellStartTs;
+        if (dwellDur >= DWELL_TIME_MS){
+          // End previous journey at the point BEFORE movement (a)
+          // Current b starts a new journey
+          seg.pop();            // remove b from current seg
+          pushSeg();            // commit dwelling segment
+          seg = [ b ];          // new segment starts at movement point
+        }
+        // reset dwell origin to current point
+        dwellStartIdx = seg.length - 1;
+        dwellStartTs  = b.ts;
       }
     }
-    if(currentSeg.length) segments.push(currentSeg);
+    pushSeg();
+
+    // Drop tiny segments (e.g., single points after filtering)
+    const usable = segments.filter(s => s.length >= 2);
+    if (!usable.length) return;
+
+    // ── stale-selection guard again ────────────────────────────────
+    if (myTok !== __crumbToken) return;
+    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
+
+    // ── 5) Render polylines + points + legend ─────────────────────
     const legendEntries = [];
-    segments.forEach((seg, idx) => {
+    const allLatLngs = [];
+
+    usable.forEach((segArr, idx) => {
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
-      const latlngs = seg.map(r => [r.context.lat, r.context.lng]);
-      const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
+      const latlngs = segArr.map(p => {
+        allLatLngs.push([p.lat, p.lon]);
+        return [p.lat, p.lon];
+      });
+
+      // polyline
+      const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.9 }).addTo(map);
       segmentPolylines.push(poly);
-      const startDate = new Date(seg[0].timestamp);
-      const endDate   = new Date(seg[seg.length-1].timestamp);
-      legendEntries.push({ color, start: startDate, end: endDate });
-      seg.forEach(pt => {
-        const latlng = [pt.context.lat, pt.context.lng];
-        let nearestAvg = null;
-        let closestDiff = Infinity;
-        const ts = pt.timestamp;
-        for(const t of tempTimestamps){
-          const diff = Math.abs(ts - t);
-          if(diff < closestDiff && diff <= 5 * 60 * 1000){
-            closestDiff = diff;
-            nearestAvg = tempAvg[t];
-          }
-        }
-        const speed = pt.context.speed;
-        const timeStr = new Date(pt.timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
-        let tooltipHtml = `<div>Time: ${timeStr}</div>`;
-        if(speed != null && !isNaN(speed)){
-          tooltipHtml += `<div>Speed: ${speed.toFixed(1)} km/h</div>`;
-        }
-        if(nearestAvg != null && !isNaN(nearestAvg)){
-          tooltipHtml += `<div>Avg Temp: ${nearestAvg.toFixed(1)}°</div>`;
-        }
-        const markerObj = L.circleMarker(latlng, {
-          radius: 4,
-          fillColor: color,
-          color: color,
-          weight: 1,
-          opacity: 0.9,
-          fillOpacity: 0.8
-        }).bindTooltip(tooltipHtml, { className: 'tooltip', direction: 'top', offset: [0,-6] });
-        markerObj.addTo(map);
-        segmentMarkers.push(markerObj);
+
+      // points (small circle markers)
+      segArr.forEach(p => {
+        const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
+          hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
+        });
+        let tip = `<div>Time: ${tStr}</div>`;
+        if (p.speed != null && isFinite(p.speed)) tip += `<div>Speed: ${p.speed.toFixed(1)} km/h</div>`;
+        const m = L.circleMarker([p.lat, p.lon], {
+          radius: 4, fillColor: color, color, weight: 1, opacity: 0.9, fillOpacity: 0.85
+        }).bindTooltip(tip, { className:'tooltip', direction:'top', offset:[0,-6] });
+        m.addTo(map);
+        segmentMarkers.push(m);
+      });
+
+      // Legend entry
+      const t0 = segArr[0].ts, t1 = segArr[segArr.length-1].ts;
+      legendEntries.push({
+        color,
+        startISO: new Date(t0).toISOString(),
+        endISO:   new Date(t1).toISOString()
       });
     });
-    if(segments.length > 0){
-      const allLatLngs = [];
-      segments.forEach(seg => { seg.forEach(pt => { allLatLngs.push([pt.context.lat, pt.context.lng]); }); });
-      const bounds = L.latLngBounds(allLatLngs);
-      map.fitBounds(bounds, { padding: [20,20] });
+
+    // Fit bounds once
+    if (allLatLngs.length){
+      const b = L.latLngBounds(allLatLngs);
+      map.fitBounds(b, { padding:[20,20] });
     }
-    if(legendEntries.length > 0){
-      legendControl = L.control({ position: 'bottomright' });
+
+    // Legend control
+    if (legendEntries.length){
+      legendControl = L.control({ position:'bottomright' });
       legendControl.onAdd = function(){
         const div = L.DomUtil.create('div', 'breadcrumb-legend');
         div.style.background = 'rgba(255,255,255,0.85)';
@@ -2691,19 +2612,21 @@ function showHistoricalBreadcrumbNotice(hoursAgo) {
         div.style.fontSize = '0.75rem';
         div.style.lineHeight = '1.2';
         div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+
         let html = '<strong>Segments</strong><br>';
-        legendEntries.forEach(entry => {
-          const startT = entry.start.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-          const endT   = entry.end.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-          html += `<span style="display:inline-block;width:12px;height:12px;margin-right:4px;background:${entry.color}"></span>${startT}–${endT}<br>`;
-        });
+        for (const e of legendEntries){
+          const s = new Date(e.startISO).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+          const t = new Date(e.endISO  ).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+          html += `<span style="display:inline-block;width:12px;height:12px;margin-right:4px;background:${e.color}"></span>${s}–${t}<br>`;
+        }
         div.innerHTML = html;
         return div;
       };
       legendControl.addTo(map);
     }
-  }catch(err){
-    console.error('updateBreadcrumbs error', err);
+  } catch (err){
+    if (err && err.name === 'AbortError') return;
+    console.error('updateBreadcrumbs error (unified-window + decimator):', err);
   }
 }
 
