@@ -2403,7 +2403,7 @@ async function downloadCsvForCurrentSelection(){
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   // ── hard-coded thresholds ───────────────────────────────────────
   const MIN_DIST_M       = 5;                // decimator: keep if ≥ 5 m since last-kept
-  const MIN_DT_MS        = 60 * 1000;        // decimator: keep if ≥ 60 s since last-kept
+  const MIN_DT_MS        = 55 * 1000;   // accept 50–60s jitter as “new point”
   const MAX_SPEED_KMH    = 120;              // drop teleports
   const GAP_SPLIT_MS     = 15 * 60 * 1000;   // new segment if gap > 15 min
   const DWELL_RADIUS_M   = 5;                // dwell cluster radius
@@ -2530,15 +2530,17 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
 
         const last = kept[kept.length-1];
         const dt   = p.ts - last.ts;
-        const dist = haversineM(last, p);
-        const v    = kmh(dist, dt);
+const dist = haversineM(last, p);
+const v    = kmh(dist, dt);
 
-        const keep =
-          (dt >= MIN_DT_MS) ||
-          (dist >= MIN_DIST_M) ||
-          (i === segArr.length-1);  // always keep last point
+// keep if: (A) near-60s cadence (≥55s), OR (B) moved ≥5 m, OR (C) this is the final point
+const cadenceOk = dt >= 55 * 1000;   // accept slight 50–60s jitter
+const movedOk   = dist >= MIN_DIST_M;
+const isLast    = (i === segArr.length - 1);
 
-        if (keep && v <= MAX_SPEED_KMH) kept.push(p);
+const keep = (cadenceOk || movedOk || isLast) && (v <= MAX_SPEED_KMH);
+if (keep) kept.push(p);
+
       }
       // ensure at least 2 kept points
       return kept.length >= 2 ? kept : [];
