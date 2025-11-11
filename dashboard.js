@@ -2434,28 +2434,22 @@ async function downloadCsvForCurrentSelection(){
   }
 }
 // part 4
-/* =================== Breadcrumb route drawing (MANUAL-REFRESH-ONLY) =================== */
+/* =================== Breadcrumb route drawing (freeze-after-draw) =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
-  // ── hard-coded thresholds ───────────────────────────────────────
-  const MIN_DIST_M       = 5;                // decimator: keep if ≥ 5 m since last-kept
-  const MIN_DT_MS        = 55 * 1000;        // decimator: accept ~60 s cadence jitter
-  const MAX_SPEED_KMH    = 120;              // drop teleports
-  const GAP_SPLIT_MS     = 15 * 60 * 1000;   // new segment if gap > 15 min
-  const DWELL_RADIUS_M   = 5;                // dwell cluster radius
-  const DWELL_TIME_MS    = 10 * 60 * 1000;   // new journey after ≥10 min dwell
-  // ────────────────────────────────────────────────────────────────
+  // ── thresholds ──
+  const MIN_DIST_M       = 5;
+  const MIN_DT_MS        = 55 * 1000;
+  const MAX_SPEED_KMH    = 120;
+  const GAP_SPLIT_MS     = 15 * 60 * 1000;
+  const DWELL_RADIUS_M   = 5;
+  const DWELL_TIME_MS    = 10 * 60 * 1000;
 
-  // ── MANUAL-ONLY redraw guard: draw once per (device,mode,minutes) change ──
-  const sig = `${deviceID}|${selectedRangeMode}|${selectedRangeMinutes}`;
-  if (window.__crumbLastSig === sig) {
-    // Same selection → refuse redraw (prevents 15 s poll flicker)
-    return;
-  }
-  window.__crumbLastSig = sig;
+  // Prevent overlaps
+  if (window.__breadcrumbLock) return;
+  window.__breadcrumbLock = true;
 
-  // Prevent overlap
   const myTok = ++__crumbToken;
-  if (__crumbAbort) { try{ __crumbAbort.abort(); }catch(_){} }
+  if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
   __crumbAbort = new AbortController();
   const signal = __crumbAbort.signal;
   const __epochAtStart = Number(window.__selEpoch) || 0;
@@ -2463,14 +2457,14 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   try{
     initMap(); // idempotent
 
-    // Clear only after we know we'll redraw (manual-only guard passed)
+    // Clear overlays only once we’ve decided to redraw
     segmentPolylines.forEach(p=>p.remove());
     segmentMarkers.forEach(m=>m.remove());
     segmentPolylines = [];
     segmentMarkers = [];
     if (legendControl){ map.removeControl(legendControl); legendControl = null; }
 
-    // 1) Fixed time window (no adaptive look-back)
+    // 1) Fixed window (no adaptive look-back)
     let startTimeMs, endTimeMs;
     if (selectedRangeMode === 'now'){
       endTimeMs   = Date.now();
@@ -2482,27 +2476,26 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     }
     if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // 2) Fetch merged GPS strictly within window (gps|position|location)
+    // 2) Merge GPS strictly within window (gps|position|location)
     const gpsRows = await fetchCsvRows(deviceID, 'gps', startTimeMs, endTimeMs, signal);
     if (myTok !== __crumbToken) return;
     if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // Normalize + sort
-    const rawPts = (gpsRows||[])
+    const rows = (gpsRows||[])
       .filter(r => r && r.context && isFinite(r.context.lat) &&
                    (isFinite(r.context.lng) || isFinite(r.context.lon)))
       .map(r => ({
         ts: Number(r.timestamp),
         lat: Number(r.context.lat),
         lon: Number(r.context.lng ?? r.context.lon),
-        speed: (r.context && typeof r.context.speed === 'number') ? Number(r.context.speed) : null
+        speed: (typeof r.context?.speed === 'number') ? Number(r.context.speed) : null
       }))
       .filter(p => isFinite(p.ts) && isFinite(p.lat) && isFinite(p.lon))
       .sort((a,b) => a.ts - b.ts);
 
-    if (!rawPts.length) return;
+    if (!rows.length) { __breadcrumbsFixed = true; return; }
 
-    // Helpers
+    // helpers
     const toRad = d => d * Math.PI / 180;
     const haversineM = (a,b) => {
       const R=6371000; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
@@ -2512,22 +2505,19 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     };
     const kmh = (meters, ms) => (ms>0 ? (meters/1000)/(ms/3600000) : Infinity);
 
-    // 3) SEGMENT FIRST: gaps + dwell≥10 min within 5 m
+    // 3) SEGMENT first (gaps + dwell≥10 min within 5 m)
     const segments = [];
-    let seg = [ rawPts[0] ];
-
-    // dwell tracking inside current segment
+    let seg = [ rows[0] ];
     let dwellOriginIdx = 0;
     let dwellOriginTs  = seg[0].ts;
 
     const pushSeg = () => { if (seg.length) segments.push(seg); seg=[]; dwellOriginIdx=0; };
     const withinDwell = (a,b) => haversineM(a,b) <= DWELL_RADIUS_M;
 
-    for (let i=1; i<rawPts.length; i++){
+    for (let i=1; i<rows.length; i++){
       const prev = seg[seg.length-1];
-      const cur  = rawPts[i];
+      const cur  = rows[i];
 
-      // split on large temporal gap
       if ((cur.ts - prev.ts) > GAP_SPLIT_MS){
         pushSeg();
         seg = [cur];
@@ -2538,25 +2528,21 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
 
       seg.push(cur);
 
-      // Dwell state machine
       const origin = seg[dwellOriginIdx] || seg[0];
       if (withinDwell(origin, cur)){
-        // still dwelling; boundary will be applied on movement
+        // stay in dwell; boundary will be applied on movement
       } else {
-        // we moved relative to dwell origin
-        const lastIdx    = seg.length - 2;                  // point before movement
-        const lastBefore = lastIdx >= 0 ? seg[lastIdx] : origin;
-        const dwellDuration = (lastBefore?.ts ?? origin.ts) - dwellOriginTs;
+        const lastIdx      = seg.length - 2;
+        const lastBefore   = lastIdx >= 0 ? seg[lastIdx] : origin;
+        const dwellDurMs   = (lastBefore?.ts ?? origin.ts) - dwellOriginTs;
 
-        if (dwellDuration >= DWELL_TIME_MS){
-          // finish previous journey at the point before movement
-          const mover = seg.pop();     // remove current moving point
-          pushSeg();                   // finalize dwell segment
-          seg = [ mover ];             // start new segment at movement point
+        if (dwellDurMs >= DWELL_TIME_MS){
+          const mover = seg.pop();
+          pushSeg();
+          seg = [ mover ];
           dwellOriginIdx = 0;
           dwellOriginTs  = mover.ts;
         } else {
-          // movement but dwell not long enough → reset dwell origin to current point
           dwellOriginIdx = seg.length - 1;
           dwellOriginTs  = cur.ts;
         }
@@ -2564,11 +2550,10 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     }
     pushSeg();
 
-    // Remove tiny segments (<2 points)
     let usable = segments.filter(s => s.length >= 2);
-    if (!usable.length) return;
+    if (!usable.length) { __breadcrumbsFixed = true; return; }
 
-    // 4) DECIMATE inside each segment (keep first/last; cadence or distance; speed guard)
+    // 4) DECIMATE inside segments (keep first/last; cadence or distance; speed guard)
     const decimated = usable.map(segArr => {
       const kept = [];
       for (let i=0; i<segArr.length; i++){
@@ -2590,30 +2575,23 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       return kept.length >= 2 ? kept : [];
     }).filter(s => s.length >= 2);
 
-    if (!decimated.length) return;
+    if (!decimated.length) { __breadcrumbsFixed = true; return; }
     if (myTok !== __crumbToken) return;
     if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // 5) Render
+    // 5) Render once
     const legendEntries = [];
     const allLatLngs = [];
 
     decimated.forEach((segArr, idx) => {
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
-      const latlngs = segArr.map(p => {
-        allLatLngs.push([p.lat, p.lon]);
-        return [p.lat, p.lon];
-      });
+      const latlngs = segArr.map(p => { allLatLngs.push([p.lat, p.lon]); return [p.lat, p.lon]; });
 
-      // polyline
       const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
       segmentPolylines.push(poly);
 
-      // breadcrumb markers
       segArr.forEach(p => {
-        const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
-          hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
-        });
+        const tStr = new Date(p.ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
         let tip = `<div>Time: ${tStr}</div>`;
         if (p.speed != null && isFinite(p.speed)) tip += `<div>Speed: ${p.speed.toFixed(1)} km/h</div>`;
         const m = L.circleMarker([p.lat, p.lon], {
@@ -2624,16 +2602,14 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       });
 
       const t0 = segArr[0].ts, t1 = segArr[segArr.length-1].ts;
-      legendEntries.push({ color, startISO:new Date(t0).toISOString(), endISO:new Date(t1).toISOString() });
+      legendEntries.push({ color, startISO: new Date(t0).toISOString(), endISO: new Date(t1).toISOString() });
     });
 
-    // Fit bounds once
     if (allLatLngs.length){
       const b = L.latLngBounds(allLatLngs);
       map.fitBounds(b, { padding:[20,20] });
     }
 
-    // Legend
     if (legendEntries.length){
       legendControl = L.control({ position: 'bottomright' });
       legendControl.onAdd = function(){
@@ -2655,9 +2631,15 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       };
       legendControl.addTo(map);
     }
+
+    // 🚦 Freeze breadcrumbs until user acts (prevents poll-triggered redraw)
+    __breadcrumbsFixed = true;
+
   } catch (err){
     if (err && err.name === 'AbortError') return;
-    console.error('updateBreadcrumbs error (manual-only):', err);
+    console.error('updateBreadcrumbs error (freeze-after-draw):', err);
+  } finally {
+    window.__breadcrumbLock = false;
   }
 }
 
@@ -3584,32 +3566,30 @@ function closeMapAll(){
 })();
 
 /* ────────────────────────────────────────────────
-   Anti-Phoenix Map Shim
-   Suppresses static Phoenix map jump when a non-warehouse
-   device (e.g., 5999 / skycafe-1) is in LAST mode, has no
-   admin Dallas sensors, and no GPS coordinates in this draw.
-   Map still updates normally once GPS data appears.
+  /* ────────────────────────────────────────────────
+   Anti-Phoenix Map Shim (safe install)
+   Only installs if drawLive already exists; otherwise skips silently.
    ──────────────────────────────────────────────── */
-
-(function installNoMapLastShim() {
+(function installNoMapLastShimSafe() {
   const L = window.L;
-  if (!L || !L.Map || !L.Marker) return console.error('[shim] Leaflet not found');
-  if (window.drawLive?.__shimmedOnceGPS) return;
+  if (!L || !L.Map || !L.Marker) return;       // Leaflet not ready
 
   const orig = window.drawLive;
-  if (typeof orig !== 'function') return console.error('[shim] drawLive not found');
+  if (typeof orig !== 'function') {
+    // drawLive not defined yet; do not log an error, just skip
+    return;
+  }
+  if (window.drawLive?.__shimmedOnceGPS) return;
 
   function hasAdminDallas() {
     const label = document.getElementById('deviceSelect')?.value || '';
     const a = (window.getAdminAddresses?.(label) || []).filter(h => /^[0-9a-fA-F]{16}$/.test(h));
     return a.length > 0;
   }
-
   function isWarehouse() {
     const label = (document.getElementById('deviceSelect')?.value || '').toLowerCase();
     return /warehouse/.test(label);
   }
-
   function hasGPS(d) {
     const lat = d?.lat, lon = d?.lon, lastLat = d?.lastLat, lastLon = d?.lastLon;
     return (typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon)) ||
@@ -3637,19 +3617,14 @@ function closeMapAll(){
     try {
       return orig.call(this, data, SENSORS);
     } finally {
-      MP.setView = sV;
-      MP.panTo = pT;
-      MP.flyTo = fT;
-      MP.fitBounds = fB;
-      if (mV) MP._move = mV;
-      if (rV) MP._resetView = rV;
-      MkP.setLatLng = sLL;
+      MP.setView = sV; MP.panTo = pT; MP.flyTo = fT; MP.fitBounds = fB;
+      if (mV) MP._move = mV; if (rV) MP._resetView = rV; MkP.setLatLng = sLL;
     }
   };
 
   window.drawLive.__shimmedOnceGPS = true;
-  console.info('[shim] Anti-Phoenix map guard active: only suppresses LAST with 0 admin + no GPS.');
 })();
+
   // ─────────────────────────────────────────────
 // HOTPATCH: force fixed 48-hour Dallas discovery window
 // Paste exactly here (between the two closing })() blocks near EOF)
