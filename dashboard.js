@@ -2434,18 +2434,26 @@ async function downloadCsvForCurrentSelection(){
   }
 }
 // part 4
-/* =================== Breadcrumb route drawing =================== */
-/* =================== Breadcrumb route drawing =================== */
+/* =================== Breadcrumb route drawing (MANUAL-REFRESH-ONLY) =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   // ── hard-coded thresholds ───────────────────────────────────────
   const MIN_DIST_M       = 5;                // decimator: keep if ≥ 5 m since last-kept
-  const MIN_DT_MS        = 55 * 1000;   // accept 50–60s jitter as “new point”
+  const MIN_DT_MS        = 55 * 1000;        // decimator: accept ~60 s cadence jitter
   const MAX_SPEED_KMH    = 120;              // drop teleports
   const GAP_SPLIT_MS     = 15 * 60 * 1000;   // new segment if gap > 15 min
   const DWELL_RADIUS_M   = 5;                // dwell cluster radius
   const DWELL_TIME_MS    = 10 * 60 * 1000;   // new journey after ≥10 min dwell
   // ────────────────────────────────────────────────────────────────
 
+  // ── MANUAL-ONLY redraw guard: draw once per (device,mode,minutes) change ──
+  const sig = `${deviceID}|${selectedRangeMode}|${selectedRangeMinutes}`;
+  if (window.__crumbLastSig === sig) {
+    // Same selection → refuse redraw (prevents 15 s poll flicker)
+    return;
+  }
+  window.__crumbLastSig = sig;
+
+  // Prevent overlap
   const myTok = ++__crumbToken;
   if (__crumbAbort) { try{ __crumbAbort.abort(); }catch(_){} }
   __crumbAbort = new AbortController();
@@ -2454,7 +2462,8 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
 
   try{
     initMap(); // idempotent
-    // Clear overlays only; keep base map stable
+
+    // Clear only after we know we'll redraw (manual-only guard passed)
     segmentPolylines.forEach(p=>p.remove());
     segmentMarkers.forEach(m=>m.remove());
     segmentPolylines = [];
@@ -2473,7 +2482,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     }
     if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // 2) Fetch merged GPS strictly within window
+    // 2) Fetch merged GPS strictly within window (gps|position|location)
     const gpsRows = await fetchCsvRows(deviceID, 'gps', startTimeMs, endTimeMs, signal);
     if (myTok !== __crumbToken) return;
     if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
@@ -2508,7 +2517,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     let seg = [ rawPts[0] ];
 
     // dwell tracking inside current segment
-    let dwellOriginIdx = 0;            // index within seg where dwell started
+    let dwellOriginIdx = 0;
     let dwellOriginTs  = seg[0].ts;
 
     const pushSeg = () => { if (seg.length) segments.push(seg); seg=[]; dwellOriginIdx=0; };
@@ -2532,11 +2541,13 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       // Dwell state machine
       const origin = seg[dwellOriginIdx] || seg[0];
       if (withinDwell(origin, cur)){
-        // still dwelling; check if dwell has reached threshold (segment boundary will be applied on movement)
-        // no action now
+        // still dwelling; boundary will be applied on movement
       } else {
         // we moved relative to dwell origin
-        const dwellDuration = (seg[seg.length-2]?.ts ?? origin.ts) - dwellOriginTs;
+        const lastIdx    = seg.length - 2;                  // point before movement
+        const lastBefore = lastIdx >= 0 ? seg[lastIdx] : origin;
+        const dwellDuration = (lastBefore?.ts ?? origin.ts) - dwellOriginTs;
+
         if (dwellDuration >= DWELL_TIME_MS){
           // finish previous journey at the point before movement
           const mover = seg.pop();     // remove current moving point
@@ -2557,7 +2568,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     let usable = segments.filter(s => s.length >= 2);
     if (!usable.length) return;
 
-    // 4) DECIMATE inside each segment (keep first/last; 5 m or 60 s; speed guard)
+    // 4) DECIMATE inside each segment (keep first/last; cadence or distance; speed guard)
     const decimated = usable.map(segArr => {
       const kept = [];
       for (let i=0; i<segArr.length; i++){
@@ -2566,19 +2577,16 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
 
         const last = kept[kept.length-1];
         const dt   = p.ts - last.ts;
-const dist = haversineM(last, p);
-const v    = kmh(dist, dt);
+        const dist = haversineM(last, p);
+        const v    = kmh(dist, dt);
 
-// keep if: (A) near-60s cadence (≥55s), OR (B) moved ≥5 m, OR (C) this is the final point
-const cadenceOk = dt >= 55 * 1000;   // accept slight 50–60s jitter
-const movedOk   = dist >= MIN_DIST_M;
-const isLast    = (i === segArr.length - 1);
+        const cadenceOk = dt >= MIN_DT_MS;
+        const movedOk   = dist >= MIN_DIST_M;
+        const isLast    = (i === segArr.length - 1);
 
-const keep = (cadenceOk || movedOk || isLast) && (v <= MAX_SPEED_KMH);
-if (keep) kept.push(p);
-
+        const keep = (cadenceOk || movedOk || isLast) && (v <= MAX_SPEED_KMH);
+        if (keep) kept.push(p);
       }
-      // ensure at least 2 kept points
       return kept.length >= 2 ? kept : [];
     }).filter(s => s.length >= 2);
 
@@ -2649,7 +2657,7 @@ if (keep) kept.push(p);
     }
   } catch (err){
     if (err && err.name === 'AbortError') return;
-    console.error('updateBreadcrumbs error (segment-first):', err);
+    console.error('updateBreadcrumbs error (manual-only):', err);
   }
 }
 
