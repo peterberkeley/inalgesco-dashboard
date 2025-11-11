@@ -1889,44 +1889,80 @@ function drawLive(data, SENSORS){
       return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
     }).join("");
 
-   // --- Place map pin with full fallback logic ---
-  try { initMap(); } catch (_) {}
-  if (!map || typeof map.addLayer !== 'function' || !marker) return;
+  // --- Place map pin with full fallback logic (debounced) ---
+try { initMap(); } catch (_) {}
+if (!map || typeof map.addLayer !== 'function' || !marker) return;
 
-  const isValid = (v) => (v != null && isFinite(v) && Math.abs(v) > 0.0001);
+// helpers
+const isValid = v => (v != null && isFinite(v) && Math.abs(v) > 0.0001);
+const toRad = d => d * Math.PI / 180;
+const haversineM = (a, b) => {
+  const R = 6371000;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const sa = Math.sin(dLat/2), sb = Math.sin(dLon/2);
+  const A = sa*sa + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * sb*sb;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(A)));
+};
 
-  const haveFresh = isValid(lat) && isValid(lon);
-  const haveLast  = isValid(lastLat) && isValid(lastLon);
+// pick target with fallbacks
+const haveFresh = isValid(lat) && isValid(lon);
+const haveLast  = isValid(lastLat) && isValid(lastLon);
 
-  let target = null;
-  let zoom   = 13;
-  let tooltipNote = '';
+let target = null;
+let tooltipNote = '';
+if (haveFresh) {
+  target = [Number(lat), Number(lon)];
+  tooltipNote = '';
+} else if (haveLast) {
+  target = [Number(lastLat), Number(lastLon)];
+  tooltipNote = '(last known)';
+} else {
+  target = [STATIC_BASE.lat, STATIC_BASE.lon];
+  tooltipNote = '(SkyCafè PHX)';
+  console.info('[map] Using static base location (Phoenix) for non-GPS truck');
+}
 
-  if (haveFresh) {
-    target = [lat, lon];
-    zoom   = Math.max(map.getZoom(), 13);
-  } else if (haveLast) {
-    target = [lastLat, lastLon];
-    zoom   = Math.max(map.getZoom(), 12);
-    tooltipNote = '(last known)';
-  } else {
-    // No GPS data ever for this truck → show Phoenix static base
-       target = [STATIC_BASE.lat, STATIC_BASE.lon];
-    zoom   = Math.max(map.getZoom(), 12);
-    tooltipNote = '(SkyCafè PHX)';
-    console.info('[map] Using static base location (Phoenix) for non-GPS truck');
+// cached last target/zoom to prevent flicker
+const MOVE_THRESH_M = 30;   // only pan if moved > 30 m
+const ZOOM_MIN = 12;        // ensure a reasonable zoom when first placing
+
+const prev = window.__lastMapTarget;        // [lat, lon] or undefined
+const prevZoom = window.__lastMapZoom;
+
+const firstPlacement = !prev || !Array.isArray(prev) || prev.length !== 2;
+const distFromPrev = (!firstPlacement) ? haversineM(prev, target) : Infinity;
+const shouldMove = firstPlacement || distFromPrev > MOVE_THRESH_M;
+
+// ensure marker visible and positioned (only if moved enough or first time)
+if (!map.hasLayer(marker)) marker.addTo(map);
+marker.setOpacity(1);
+
+// Always update marker position when we accept a move
+if (shouldMove) {
+  marker.setLatLng(target);
+  marker.bindTooltip(tooltipNote, { direction:'top', offset:[0,-8] }).openTooltip();
+
+  // Only adjust view if we’re far enough or we’ve never set a zoom
+  const wantZoom = Math.max(map.getZoom() || 0, ZOOM_MIN);
+  if (firstPlacement || distFromPrev > MOVE_THRESH_M) {
+    map.setView(target, wantZoom);
   }
 
-  // Ensure marker visible and positioned
-  if (target) {
-    if (!map.hasLayer(marker)) marker.addTo(map);
-    marker.setOpacity(1);
-    marker.setLatLng(target);
-    marker.bindTooltip(tooltipNote, { direction:'top', offset:[0,-8] }).openTooltip();
-    map.setView(target, zoom);
-  }
+  // cache
+  window.__lastMapTarget = target;
+  window.__lastMapZoom = map.getZoom();
+} else {
+  // No meaningful move → just keep marker where it was (no setView)
+  // (Minor tooltip refresh if state changed)
+  try {
+    const tt = marker.getTooltip();
+    if (tt && tt._content !== tooltipNote) {
+      marker.bindTooltip(tooltipNote, { direction:'top', offset:[0,-8] }).openTooltip();
+    }
+  } catch(_) {}
+}
 
-  }
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
 
