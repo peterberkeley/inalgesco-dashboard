@@ -2399,56 +2399,51 @@ async function downloadCsvForCurrentSelection(){
 }
 // part 4
 /* =================== Breadcrumb route drawing =================== */
+/* =================== Breadcrumb route drawing =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
-  // ── hard-coded thresholds (per spec) ─────────────────────────────
-  const MIN_DIST_M       = 5;                // drop points closer than this
-  const MIN_DT_MS        = 60 * 1000;        // minimum cadence 60 s
+  // ── hard-coded thresholds ───────────────────────────────────────
+  const MIN_DIST_M       = 5;                // decimator: keep if ≥ 5 m since last-kept
+  const MIN_DT_MS        = 60 * 1000;        // decimator: keep if ≥ 60 s since last-kept
   const MAX_SPEED_KMH    = 120;              // drop teleports
-  const GAP_SPLIT_MS     = 15 * 60 * 1000;   // split on data gaps > 15 min
-  const DWELL_RADIUS_M   = 5;                // within 5 m counts toward dwell
+  const GAP_SPLIT_MS     = 15 * 60 * 1000;   // new segment if gap > 15 min
+  const DWELL_RADIUS_M   = 5;                // dwell cluster radius
   const DWELL_TIME_MS    = 10 * 60 * 1000;   // new journey after ≥10 min dwell
   // ────────────────────────────────────────────────────────────────
 
   const myTok = ++__crumbToken;
-  if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
+  if (__crumbAbort) { try{ __crumbAbort.abort(); }catch(_){} }
   __crumbAbort = new AbortController();
   const signal = __crumbAbort.signal;
   const __epochAtStart = Number(window.__selEpoch) || 0;
 
   try{
     initMap(); // idempotent
-    // Clear previous overlays only; keep base pin/state stable
-    segmentPolylines.forEach(p => p.remove());
-    segmentMarkers.forEach(m => m.remove());
+    // Clear overlays only; keep base map stable
+    segmentPolylines.forEach(p=>p.remove());
+    segmentMarkers.forEach(m=>m.remove());
     segmentPolylines = [];
     segmentMarkers = [];
     if (legendControl){ map.removeControl(legendControl); legendControl = null; }
 
-    // ── 1) Compute time window (no adaptive look-back) ─────────────
+    // 1) Fixed time window (no adaptive look-back)
     let startTimeMs, endTimeMs;
     if (selectedRangeMode === 'now'){
       endTimeMs   = Date.now();
-      endTimeMs  -= (endTimeMs % 1000);        // ms hygiene
       startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
     } else {
-      // LAST: use the SAME anchor used by charts (Dallas-based tLast)
       const tLast = await computeLastAnchorMs(deviceID, SENSORS);
       endTimeMs   = tLast ?? Date.now();
       startTimeMs = endTimeMs - (60 * 60 * 1000);
     }
+    if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // ── stale-selection guard ──────────────────────────────────────
-    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
-
-    // ── 2) Fetch merged GPS rows strictly within [start,end] ──────
-    // fetchCsvRows merges gps|position|location automatically
+    // 2) Fetch merged GPS strictly within window
     const gpsRows = await fetchCsvRows(deviceID, 'gps', startTimeMs, endTimeMs, signal);
-
     if (myTok !== __crumbToken) return;
-    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
+    if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // Keep only rows with valid coordinates; sort by time asc
-    const rawPts = (gpsRows || [])
+    // Normalize + sort
+    const rawPts = (gpsRows||[])
       .filter(r => r && r.context && isFinite(r.context.lat) &&
                    (isFinite(r.context.lng) || isFinite(r.context.lon)))
       .map(r => ({
@@ -2460,108 +2455,104 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       .filter(p => isFinite(p.ts) && isFinite(p.lat) && isFinite(p.lon))
       .sort((a,b) => a.ts - b.ts);
 
-    if (!rawPts.length){
-      // Nothing in-window → keep map as-is; no flash to Phoenix
-      return;
-    }
+    if (!rawPts.length) return;
 
-    // ── helpers ────────────────────────────────────────────────────
+    // Helpers
     const toRad = d => d * Math.PI / 180;
-    const haversineM = (a, b) => {
-      const R = 6371000; // m
-      const dLat = toRad(b.lat - a.lat);
-      const dLon = toRad(b.lon - a.lon);
-      const sa = Math.sin(dLat/2), sb = Math.sin(dLon/2);
-      const A = sa*sa + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*sb*sb;
-      return 2 * R * Math.asin(Math.min(1, Math.sqrt(A)));
+    const haversineM = (a,b) => {
+      const R=6371000; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+      const sa=Math.sin(dLat/2), sb=Math.sin(dLon/2);
+      const A=sa*sa + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*sb*sb;
+      return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
     };
-    const kmh = (meters, ms) => (ms > 0 ? (meters/1000) / (ms/3600000) : Infinity);
+    const kmh = (meters, ms) => (ms>0 ? (meters/1000)/(ms/3600000) : Infinity);
 
-    // ── 3) Spatial–temporal decimation with speed guard ───────────
-    const kept = [];
-    for (let i = 0; i < rawPts.length; i++){
-      const p = rawPts[i];
-      if (!kept.length){ kept.push(p); continue; }
-      const prev = kept[kept.length - 1];
-      const dt   = p.ts - prev.ts;
-      const dist = haversineM(prev, p);
-      const v    = kmh(dist, dt);
-
-      if (dt < MIN_DT_MS) continue;
-      if (dist < MIN_DIST_M) continue;
-      if (v > MAX_SPEED_KMH) continue; // teleport/noisy hop
-      kept.push(p);
-    }
-
-    if (!kept.length) return;
-    if (myTok !== __crumbToken) return;
-
-    // ── 4) Segmentization by gaps and dwell detection ─────────────
+    // 3) SEGMENT FIRST: gaps + dwell≥10 min within 5 m
     const segments = [];
-    let seg = [ kept[0] ];
+    let seg = [ rawPts[0] ];
 
-    // dwell tracker (cluster of near-static points)
-    let dwellStartIdx = 0;      // index in seg where a near-static cluster began
-    let dwellStartTs  = seg[0].ts;
+    // dwell tracking inside current segment
+    let dwellOriginIdx = 0;            // index within seg where dwell started
+    let dwellOriginTs  = seg[0].ts;
 
-    const inDwell = (a, b) => haversineM(a, b) <= DWELL_RADIUS_M;
+    const pushSeg = () => { if (seg.length) segments.push(seg); seg=[]; dwellOriginIdx=0; };
+    const withinDwell = (a,b) => haversineM(a,b) <= DWELL_RADIUS_M;
 
-    const pushSeg = () => { if (seg.length) segments.push(seg); seg = []; };
+    for (let i=1; i<rawPts.length; i++){
+      const prev = seg[seg.length-1];
+      const cur  = rawPts[i];
 
-    for (let i = 1; i < kept.length; i++){
-      const a = kept[i-1], b = kept[i];
-      const gap = b.ts - a.ts;
-
-      // Gap-based split
-      if (gap > GAP_SPLIT_MS){
+      // split on large temporal gap
+      if ((cur.ts - prev.ts) > GAP_SPLIT_MS){
         pushSeg();
-        seg = [ b ];
-        dwellStartIdx = 0;
-        dwellStartTs  = b.ts;
+        seg = [cur];
+        dwellOriginIdx = 0;
+        dwellOriginTs  = cur.ts;
         continue;
       }
 
-      // Append point
-      seg.push(b);
+      seg.push(cur);
 
-      // Dwell tracking inside current segment
-      const lastDwellRef = seg[dwellStartIdx] || seg[0];
-      if (inDwell(lastDwellRef, b)){
-        // still dwelling; check if dwell reached threshold
-        if ((b.ts - dwellStartTs) >= DWELL_TIME_MS){
-          // We are in dwell; when we EXIT dwell (move > radius), split
-          // (Handled in the else-branch below when we detect movement)
-        }
+      // Dwell state machine
+      const origin = seg[dwellOriginIdx] || seg[0];
+      if (withinDwell(origin, cur)){
+        // still dwelling; check if dwell has reached threshold (segment boundary will be applied on movement)
+        // no action now
       } else {
-        // movement relative to dwell origin
-        const dwellDur = seg[i - dwellStartIdx]?.ts - dwellStartTs;
-        if (dwellDur >= DWELL_TIME_MS){
-          // End previous journey at the point BEFORE movement (a)
-          // Current b starts a new journey
-          seg.pop();            // remove b from current seg
-          pushSeg();            // commit dwelling segment
-          seg = [ b ];          // new segment starts at movement point
+        // we moved relative to dwell origin
+        const dwellDuration = (seg[seg.length-2]?.ts ?? origin.ts) - dwellOriginTs;
+        if (dwellDuration >= DWELL_TIME_MS){
+          // finish previous journey at the point before movement
+          const mover = seg.pop();     // remove current moving point
+          pushSeg();                   // finalize dwell segment
+          seg = [ mover ];             // start new segment at movement point
+          dwellOriginIdx = 0;
+          dwellOriginTs  = mover.ts;
+        } else {
+          // movement but dwell not long enough → reset dwell origin to current point
+          dwellOriginIdx = seg.length - 1;
+          dwellOriginTs  = cur.ts;
         }
-        // reset dwell origin to current point
-        dwellStartIdx = seg.length - 1;
-        dwellStartTs  = b.ts;
       }
     }
     pushSeg();
 
-    // Drop tiny segments (e.g., single points after filtering)
-    const usable = segments.filter(s => s.length >= 2);
+    // Remove tiny segments (<2 points)
+    let usable = segments.filter(s => s.length >= 2);
     if (!usable.length) return;
 
-    // ── stale-selection guard again ────────────────────────────────
-    if (myTok !== __crumbToken) return;
-    if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
+    // 4) DECIMATE inside each segment (keep first/last; 5 m or 60 s; speed guard)
+    const decimated = usable.map(segArr => {
+      const kept = [];
+      for (let i=0; i<segArr.length; i++){
+        const p = segArr[i];
+        if (!kept.length){ kept.push(p); continue; }
 
-    // ── 5) Render polylines + points + legend ─────────────────────
+        const last = kept[kept.length-1];
+        const dt   = p.ts - last.ts;
+        const dist = haversineM(last, p);
+        const v    = kmh(dist, dt);
+
+        const keep =
+          (dt >= MIN_DT_MS) ||
+          (dist >= MIN_DIST_M) ||
+          (i === segArr.length-1);  // always keep last point
+
+        if (keep && v <= MAX_SPEED_KMH) kept.push(p);
+      }
+      // ensure at least 2 kept points
+      return kept.length >= 2 ? kept : [];
+    }).filter(s => s.length >= 2);
+
+    if (!decimated.length) return;
+    if (myTok !== __crumbToken) return;
+    if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
+
+    // 5) Render
     const legendEntries = [];
     const allLatLngs = [];
 
-    usable.forEach((segArr, idx) => {
+    decimated.forEach((segArr, idx) => {
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
       const latlngs = segArr.map(p => {
         allLatLngs.push([p.lat, p.lon]);
@@ -2569,10 +2560,10 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       });
 
       // polyline
-      const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.9 }).addTo(map);
+      const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
       segmentPolylines.push(poly);
 
-      // points (small circle markers)
+      // breadcrumb markers
       segArr.forEach(p => {
         const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
           hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London'
@@ -2586,13 +2577,8 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
         segmentMarkers.push(m);
       });
 
-      // Legend entry
       const t0 = segArr[0].ts, t1 = segArr[segArr.length-1].ts;
-      legendEntries.push({
-        color,
-        startISO: new Date(t0).toISOString(),
-        endISO:   new Date(t1).toISOString()
-      });
+      legendEntries.push({ color, startISO:new Date(t0).toISOString(), endISO:new Date(t1).toISOString() });
     });
 
     // Fit bounds once
@@ -2601,9 +2587,9 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       map.fitBounds(b, { padding:[20,20] });
     }
 
-    // Legend control
+    // Legend
     if (legendEntries.length){
-      legendControl = L.control({ position:'bottomright' });
+      legendControl = L.control({ position: 'bottomright' });
       legendControl.onAdd = function(){
         const div = L.DomUtil.create('div', 'breadcrumb-legend');
         div.style.background = 'rgba(255,255,255,0.85)';
@@ -2612,7 +2598,6 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
         div.style.fontSize = '0.75rem';
         div.style.lineHeight = '1.2';
         div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-
         let html = '<strong>Segments</strong><br>';
         for (const e of legendEntries){
           const s = new Date(e.startISO).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
@@ -2626,7 +2611,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     }
   } catch (err){
     if (err && err.name === 'AbortError') return;
-    console.error('updateBreadcrumbs error (unified-window + decimator):', err);
+    console.error('updateBreadcrumbs error (segment-first):', err);
   }
 }
 
