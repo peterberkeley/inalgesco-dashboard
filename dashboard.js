@@ -2444,6 +2444,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   const GAP_SPLIT_MS     = 15 * 60 * 1000;
   const DWELL_RADIUS_M   = 5;
   const DWELL_TIME_MS    = 10 * 60 * 1000;
+  const PIN_KEEP_DIST_M  = 15;     // jitter filter: require ≥15 m to keep a new pin when Δt < cadence gate
 
   // Prevent overlaps
   if (window.__breadcrumbLock) return;
@@ -2567,7 +2568,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
         const v    = kmh(dist, dt);
 
         const cadenceOk = dt >= MIN_DT_MS;
-        const movedOk   = dist >= MIN_DIST_M;
+        const movedOk   = dist >= PIN_KEEP_DIST_M;
         const isLast    = (i === segArr.length - 1);
 
         const keep = (cadenceOk || movedOk || isLast) && (v <= MAX_SPEED_KMH);
