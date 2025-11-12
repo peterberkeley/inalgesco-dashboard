@@ -2767,10 +2767,28 @@ function wireDateInputsCommit(){
 }
 
 /* =================== Main update loop =================== */
+/* =================== Main update loop =================== */
 onReady(() => {
-  wireRangeButtons();
+  // Safely invoke wireRangeButtons after it is defined (handles odd load orders)
+  const callWire = () => {
+    try {
+      if (typeof wireRangeButtons === 'function') {
+        wireRangeButtons();
+      } else {
+        // try once more on the next macrotask without blocking init
+        setTimeout(() => {
+          if (typeof wireRangeButtons === 'function') wireRangeButtons();
+          else console.warn('[init] wireRangeButtons not yet defined (deferred)');
+        }, 0);
+      }
+    } catch (e) {
+      console.error('[init] wireRangeButtons failed:', e);
+    }
+  };
+
+  callWire();
   wireDateInputsCommit();   // commit date instantly
-    installAllTrucksMapUI();
+  installAllTrucksMapUI();
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
 
@@ -2781,6 +2799,7 @@ onReady(() => {
     updateAll();
   });
 });
+
 // === INSERT ↓ (helpers used by LAST-mode selection) =========================
 async function __countRowsFast(deviceID, varLabel, maxPages = 3){
   try{
