@@ -2749,30 +2749,29 @@ const allLatLngs = [];
       const latlngs = segArr.map(p => [p.lat, p.lon]);
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
 
-  // base polyline
-const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
-segmentPolylines.push(poly);
-
-// Hover markers on the original (unsmoothed) fixes
-//   - use the raw decimated segment for tooltips, not the densified/smoothed points
-const rawSeg = usable[idx]; // parallel to this drawn segment
+ // Visible breadcrumb dots on the ORIGINAL (raw, decimated) fixes for hover & gap inspection
+const rawSeg = usable[idx]; // not smoothed/ densified
 if (Array.isArray(rawSeg)) {
-  rawSeg.forEach(p => {
+  rawSeg.forEach((p, j) => {
     const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
-      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: UI_TZ
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: UI_TZ
     });
-    const m = L.circleMarker([p.lat, p.lon], {
-      radius: 3,
-      color: color,
-      weight: 0,       // no stroke
-      opacity: 0,      // invisible stroke
-      fillOpacity: 0,  // invisible fill
+    const dot = L.circleMarker([p.lat, p.lon], {
+      radius: 3,                 // small but visible “crumb”
+      color: '#ffffff',          // white rim for contrast
+      weight: 1,
+      fillColor: color,          // same hue as segment
+      fillOpacity: 0.65,         // semi-transparent
+      opacity: 0.9,
       interactive: true
-    }).bindTooltip(tStr, { direction:'top', offset:[0,-6] });
-    m.addTo(map);
-    segmentMarkers.push(m);
+    }).bindTooltip(tStr, { direction: 'top', offset: [0, -6] });
+
+    // Bring above polyline so the dot is hoverable
+    dot.addTo(map).bringToFront();
+    segmentMarkers.push(dot);
   });
 }
+
       // arrowheads along the line (direction cues)
       if (L.polylineDecorator && L.Symbol && L.Symbol.arrowHead){
         const deco = L.polylineDecorator(poly, {
