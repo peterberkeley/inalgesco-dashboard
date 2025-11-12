@@ -2440,7 +2440,6 @@ async function downloadCsvForCurrentSelection(){
 }
 // part 4
 /* =================== Breadcrumb route drawing (manual refresh, arrows + dwell markers) =================== */
-/* =================== Breadcrumb route drawing (manual refresh, arrows + dwell markers) =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   // ── thresholds & styles ──
   const MIN_DIST_M       = 5;                // decimator: keep if ≥5 m since last-kept
@@ -2459,11 +2458,14 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
 
   const myTok = ++__crumbToken;
   if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
-  __crumbAbort = new TheAbortController();
+  __crumbAbort = (function(){
+    try { return new AbortController(); }
+    catch(_) { return { abort(){}, get signal(){ return undefined; } }; }
+  })();
   const signal = __crumbAbort.signal;
   const __epochAtStart = Number(window.__selEpoch) || 0;
 
-  // ── helpers (local to this routine) ──
+  // ── helpers ──
   const toRad = d => d * Math.PI / 180;
   const haversineM = (a,b) => {
     const R=6371000; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
@@ -2472,7 +2474,9 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
   };
   const kmh = (meters, ms) => (ms>0 ? (meters/1000)/(ms/3600000) : Infinity);
-  const fmtClock = ts => new Date(ts).toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',hour12:false,timeZone: (typeof UI_SHORT_TZ==='string'?UI_SHORT_TZ:undefined) || UI_TZ});
+  const fmtClock = ts => new Date(ts).toLocaleTimeString('en-GB', {
+    hour:'2-digit', minute:'2-digit', hour12:false, timeZone: UI_TZ
+  });
 
   function ensureDwellStyles(){
     if (document.getElementById('dwell-label-style')) return;
@@ -2480,7 +2484,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     st.id = 'dwell-label-style';
     st.textContent = `
       .leaflet-div-icon.dwell-label{background:transparent;border:none;}
-      .dwell-badge{background:rgba(255,255,255,0.90);border:1px solid #999;border-radius:3px;padding:2px 3px;
+      .dwell-badge{background:rgba(255,255,255,0.90);border:1px solid #999;border-radius:3px;padding:2px 4px;
                    font: 11px/1.1 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; white-space:nowrap;}
     `;
     document.head.appendChild(st);
@@ -2491,12 +2495,17 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       if (document.getElementById('leaflet-polyline-decorator')) return resolve();
       const s = document.createElement('script');
       s.id = 'leaflet-polyline-decorator';
-      s.src = 'https://unpkg.com/leaflet-polyline-decorator@1.9.3/dist/leaflet.polylineDecorator.min.js';
+      s.src = 'https://unpkg.com/leaflet-polyline-decorator@1.9.3/dist/leaflet.polyline-decorator.min.js';
       s.async = true;
       s.onload = ()=> resolve();
       s.onerror = e => reject(e);
       document.head.appendChild(s);
     });
+  }
+  function resetDecorators(){
+    if (!Array.isArray(window.segmentDecorators)) { window.segmentDecorators = []; return; }
+    for (const d of window.segmentDecorators){ try{ d.remove(); }catch(_){} }
+    window.segmentDecorators = [];
   }
 
   try{
@@ -2507,7 +2516,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     // Clear previous overlays only; keep base view stable
     segmentPolylines.forEach(l => { try{ l.remove(); }catch(_){} });
     segmentMarkers.forEach (m => { try{ m.remove(); }catch(_){} });
-    segmentDecorationsReset();
+    resetDecorators();
     if (legendControl){ try{ map.removeControl(legendControl); }catch(_){}; legendControl = null; }
     segmentPolylines = [];
     segmentMarkers   = [];
@@ -2536,7 +2545,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
         ts:   Number(r.timestamp),
         lat:  Number(r.context.lat),
         lon:  Number(r.context.lng ?? r.context.lon),
-        speed:(typeof r.context?.["speed"] === 'number') ? Number(r.context.speed) : null
+        speed:(typeof r.context?.speed === 'number') ? Number(r.context.speed) : null
       }))
       .filter(p => isFinite(p.ts) && isFinite(p.lat) && isFinite(p.lon))
       .sort((a,b) => a.ts - b.ts);
@@ -2544,13 +2553,13 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     if (!rows.length) { __breadcrumbsFixed = true; return; }
 
     // 3) SEGMENT first (gaps + dwell≥10 min within 5 m)
-    const segments = [];             // array<array<Point>>
-    const dwellEvents = [];          // array<{start,end,center,prevIdx,nextIdx}>
+    const segments = [];      // array<array<Point>>
+    const dwellEvents = [];   // array<{start,end,center,prevSegIdx,nextSegIdx}>
     let seg = [ rows[0] ];
     let dwellOriginIdx = 0;
     let dwellOriginTs  = rows[0].ts;
 
-    const pushSeg = () => { if (seg.length) { segments.push(seg); } seg = []; dwellOriginIdx = 0; };
+    const pushSeg = () => { if (seg.length) segments.push(seg); seg = []; dwellOriginIdx = 0; };
     const withinDwell = (a,b) => haversineM(a,b) <= DWELL_RADIUS_M;
 
     for (let i=1; i<rows.length; i++){
@@ -2574,31 +2583,26 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       if (withinDwell(origin, cur)){
         // still dwelling; boundary applied when movement resumes
       } else {
-        const lastIdx      = Math.max(0, seg.length - 2);          // point just before movement
-        const lastBefore   = seg[lastIdx];
-        const dwellDurMs   = (lastBefore?.ts ?? origin.ts) - dwellOriginTs;
+        const lastIdx    = Math.max(0, seg.length - 2);  // point just before movement
+        const lastBefore = seg[lastIdx];
+        const dwellDurMs = (lastBefore?.ts ?? origin.ts) - dwellOriginTs;
 
         if (dwellDurMs >= DWELL_TIME_MS){
-          // We were dwelling and just started moving (cur). Close the dwell segment at lastBefore.
-          // Compute dwell centroid over [dwellOriginIdx .. lastIdx]
+          // Close the dwell; compute dwell centroid over [dwellOriginIdx .. lastIdx]
           let sumLat=0, sumLon=0, cnt=0;
-          for (let k = dwellOriginIdx; k <= lastIdx; k++){ sumLat += seg[k].l at; sumLon += seg[k].lon; cnt++; }
-          const center = { lat: sumLat / cnt, lon: sumLon / cnt };
+          for (let k = dwellOriginIdx; k <= lastIdx; k++){ sumLat += seg[k].lat; sumLon += seg[k].lon; cnt++; }
+          const center  = { lat: sumLat / cnt, lon: sumLon / cnt };
           const startPt = seg[dwellOriginIdx];
           const endPt   = lastBefore;
 
-          // Record which segment index will carry the *following* movement colour
-          const prevIdx = Math.max(0, segments.length);     // segment about to be pushed (dwell-ended)
-          const nextIdx = prevIdx + 1;                      // next segment will start with 'cur'
-
-          // Commit current (dwell-ended) segment without the first moving point
-          const mover = seg.pop();          // remove 'cur'
-          pushSeg();                        // pushes the dwell-ended segment
-          seg = [ mover ];                  // start next segment with first moving point
+          const mover = seg.pop();   // remove 'cur' (first moving point)
+          const prevSegIdx = Math.max(0, segments.length);
+          pushSeg();                 // commits the just-finished (dwell-ended) segment
+          seg = [ mover ];           // start next segment with the first moving point
           dwellOriginIdx = 0;
           dwellOriginTs  = mover.ts;
 
-          dwellEvents.push({ start: startPt, end: endPt, center, prevIdx, nextIdx });
+          dwellEvents.push({ start: startPt, end: endPt, center, prevSegIdx, nextSegIdx: prevSegIdx + 1 });
         } else {
           // movement but dwell not long enough → reset dwell origin to current point
           dwellOriginIdx = seg.length - 1;
@@ -2606,66 +2610,61 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
         }
       }
     }
-    // flush tail segment
-    pushSeg();
+    pushSeg(); // flush tail segment
 
-    // 4) Build *usable* moving segments and decimate inside each (no per-fix dots)
+    // 4) Build usable moving segments and decimate inside each (no per-fix dots)
     const usable = [];
-    const originalIndexOfUsable = []; // map from usable[idx] to original segments index
+    const origIndexOfUsable = [];
     segments.forEach((s, idx) => {
-      // derive a movement-only view by trimming leading/trailing stationary runs
-      // (we already split on dwell; here we tolerate short jitters)
       if (s.length < 2) return;
-
       const kept = [];
       for (let i=0; i<s.length; i++){
         const p = s[i];
         if (!kept.length){ kept.push(p); continue; }
         const last = kept[kept.length-1];
-        const dt   = p.links= p.ts - last.ts;
+        const dt   = p.ts - last.ts;
         const dist = haversineM(last, p);
         const v    = kmh(dist, dt);
         const keep = (dt >= MIN_DT_MS) || (dist >= MIN_DIST_M) || (i === s.length - 1);
         if (keep && v <= MAX_SPEED_KMH) kept.push(p);
       }
-      if (kept.length >= 2) {
-        originalIndexOfKe pt && deltaHold: usable
-        usable.push(kept);
-        originalIndexOfUsable.push(idx);
-      }
+      if (kept.length >= 2) { usable.push(kept); origIndexOfUsable.push(idx); }
     });
+
     if (!usable.length) { __breadcrumbsFixed = true; return; }
     if (myTok !== __crumbToken) return;
     if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // build mapping from original segment index -> drawn index (for colouring dwell markers)
-    const oldToNewIdx = new Map();
-    originalIndexOfUsable.forEach((orig, i)=> { oldToNewIdx.set(orig, i); });
+    // map original segment index -> drawn index (for dwell colouring)
+    const segIdxMap = new Map();
+    origIndexOfUsable.forEach((orig, i)=> segIdxMap.set(orig, i));
 
     // 5) Draw: polylines + arrow decorators + dwell markers + legend
     const legendEntries = [];
     const allLatLngs = [];
 
     for (let idx = 0; idx < usable.length; idx++){
-      const segArr = u sable[idx];
+      const segArr = usable[idx];
       const latlngs = segArr.map(p => [p.lat, p.lon]);
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
 
-      // base polyline (direction shown via decorator)
-      const poly = L.p olyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
-      segmentPolylines.push( poly );
+      // base polyline
+      const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
+      segmentPolylines.push(poly);
 
       // arrowheads along the line (direction cues)
       if (L.polylineDecorator && L.Symbol && L.Symbol.arrowHead){
-        const deco = L.polylineDecorator(latlngs, {
-          patterns: [
-            { offset: '10%', repeat: `${ARROW_REPEAT+ 'px'}`,
-              symbol: L.Symbol.arrowHead({ pixelSize: ARROW_SIZE_PX, polygon:false,
-                                            pathOptions: { color, weight:2, opacity:0.9 } })
-            }
-          ]
+        const deco = L.polylineDecorator(poly, {
+          patterns: [{
+            offset: '10%',
+            repeat: `${ARROW_REPEAT_PX}px`,
+            symbol: L.Symbol.arrowHead({
+              pixelSize: ARROW_SIZE_PX, polygon:false,
+              pathOptions: { color, weight:2, opacity:0.9 }
+            })
+          }]
         }).addTo(map);
-        segment D ecorators.push(deco);
+        segmentDecorators.push(deco);
       }
 
       // accumulate for fitBounds
@@ -2676,43 +2675,38 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       let distSum = 0;
       for (let i=1;i<segArr.length;i++){ distSum += haversineM(segArr[i-1], segArr[i]); }
       const durMin = Math.round((t1 - t0)/60000);
-      const startStr = fmt C lock(t0), endStr = fmt C lock(t1);
+      const startStr = fmtClock(t0), endStr = fmtClock(t1);
       legendEntries.push({
         color,
         line: `${startStr}→${endStr} • ${durMin} min • ${(distSum/1000).toFixed(2)} km`
       });
     }
 
-    // draw dwell markers (arrival/departure labels + faint halo)
+    // dwell markers: arrival ⟶ and departure ⟵ (with faint halo)
     for (const ev of dwellEvents){
-      const newIdx = (oldToNewIdx.has(ev.nextIdx) ? oldToNewIdx.get(ev.nextIdx)
-                     : (oldToNewIdx.has(ev.prevIdx) ? oldToNewIdx.get(ev.prevIdx) : 0));
-      const color = SEGMENT_COLORS[newIdx % SEGMENT_COLORS.length];
+      const drawIdx = segIdxMap.has(ev.nextSegIdx) ? segIdxMap.get(ev.nextSegIdx)
+                    : segIdxMap.has(ev.prevSegIdx) ? segIdxMap.get(ev.prevSegIdx) : 0;
+      const color = SEGMENT_COLORS[drawIdx % SEGMENT_COLORS.length];
 
       // halo at dwell center
       const halo = L.circle([ev.center.lat, ev.center.lon], {
-        radius: HALO_RATE ? :   HALO_RADIUS_M,
-        color:  color, weight: 1, opacity: 0.6,
+        radius: HALO_RADIUS_M, color, weight: 1, opacity: 0.6,
         fill: true, fillOpacity: 0.15
       }).addTo(map);
       segmentMarkers.push(halo);
 
-      const startLL = [ev.start.lat, ev.start.lon];
-      const endLL   = [ev.end  .lat, ev.end  .lon];
-
+      // labels
       const startIcon = L.divIcon({
-        className: 'dwell-label',
-        iconSize: [1,1], iconAnchor: [0,0],
+        className: 'dwell-label', iconSize: [1,1], iconAnchor: [0,0],
         html: `<div class="dwell-badge" style="border-color:${color};color:${color}">⟶ ${fmtClock(ev.start.ts)}</div>`
       });
       const endIcon = L.divIcon({
-        className: 'dwell-label',
-        iconSize: [1,1], iconAnchor: [0,0],
-        html: `<div class="dw ell-badge" style="border-color:${color};color:${color}">${fmtClock(ev.end.ts)} ⟵</div>`
+        className: 'dwell-label', iconSize: [1,1], iconAnchor: [0,0],
+        html: `<div class="dwell-badge" style="border-color:${color};color:${color}">${fmtClock(ev.end.ts)} ⟵</div>`
       });
 
-      const mStart = L.marker(startLL, { icon: startIcon, interactive:false, zIndexOffset: 1000 }).addTo(map);
-      const mEnd   = L.marker(endLL,   { icon: endIcon,   interactive:false, zIndexOffset: 1000 }).addTo(map);
+      const mStart = L.marker([ev.start.lat, ev.start.lon], { icon: startIcon, interactive:false, zIndexOffset: 1000 }).addTo(map);
+      const mEnd   = L.marker([ev.end  .lat, ev.end  .lon],   { icon: endIcon,   interactive:false, zIndexOffset: 1000 }).addTo(map);
       segmentMarkers.push(mStart, mEnd);
     }
 
@@ -2747,92 +2741,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   } finally {
     window.__breadcrumbLock = false;
   }
-
-  // remove any existing arrow decorators
-  function segmentDecorationsReset(){
-    if (!Array.isArray(segmentDecorators)) { segmentDecorators = []; return; }
-    for (const d of segmentDecorators){ try{ d.remove(); }catch(_){} }
-    segmentDec orators = [];
-  }
-
-  // Safari 12 workaround: missing global AbortController in old WKWebView
-  function TheAbortController(){ try{ return new AbortController(); } catch(_) { return { abort(){}, get signal(){ return undefined; } }; } }
 }
-
-/* =================== Range buttons =================== */
-function wireRangeButtons(){
-  const buttons = document.querySelectorAll(".rangeBtn");
-
-  buttons.forEach(btn => {
-    btn.onclick = async function(){
-      // Visual selection
-      buttons.forEach(b => { b.style.backgroundColor=''; b.style.color=''; });
-      this.style.backgroundColor = '#10b981';
-      this.style.color = '#ffffff';
-
-      // Mode
-      const modeAttr = (this.getAttribute('data-mode') || '').toLowerCase();
-      const newMode  = (modeAttr === 'last') ? 'last' : 'now';
-
-      // Range parsing (supports "1/3/12/24" as hours, "60/180" as minutes, "1h/90m")
-      let newMinutes;
-      if (newMode === 'now') {
-        const raw = String(this.getAttribute('data-range') || '').trim();
-        newMinutes = parseRangeToMinutes(raw);
-      } else {
-        newMinutes = 60; // fixed 60-min window for "last"
-      }
-      if (!Number.isFinite(newMinutes) || newMinutes <= 0) newMinutes = 60;
-
-      // No-op guard
-      if (selectedRangeMode === newMode && selectedRangeMinutes === newMinutes) return;
-
-      // Commit selection
-      selectedRangeMode    = newMode;
-      selectedRangeMinutes = newMinutes;
-      HIST_POINTS = selectedRangeMinutes; // harmless cap used elsewhere
-
-      // Resolve device
-      const devSel      = document.getElementById('deviceSelect');
-      const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
-      const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
-
-      // Debug (fixes previous ReferenceError on "hours")
-      console.debug('[range select]', {
-        mode: selectedRangeMode,
-        minutes: selectedRangeMinutes,
-        hours: +(selectedRangeMinutes/60).toFixed(2)
-      });
-
-      // Refresh UI
-      if (deviceID) {
-        await poll(deviceID, SENSORS);           // KPI (window-aware)
-        await updateCharts(deviceID, SENSORS);   // Charts (window-aware)
-        const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
-       __breadcrumbsFixed = true;  // freeze breadcrumbs after user selection
-      idle(() => updateBreadcrumbs(deviceID, selectedRangeMinutes)); // Map crumbs
-      }
-    };
-  });
-
-  function parseRangeToMinutes(raw){
-    if (!raw) return 60;
-    const m = raw.match(/^\s*(\d+(?:\.\d+)?)\s*([hm]?)\s*$/i);
-    if (m) {
-      const val  = parseFloat(m[1]);
-      const unit = m[2].toLowerCase();
-      if (unit === 'h') return Math.round(val * 60);
-      if (unit === 'm') return Math.round(val);
-      // No unit: treat small numbers (≤48) as hours, larger as minutes
-      return (val <= 48) ? Math.round(val * 60) : Math.round(val);
-    }
-    const n = Number(raw);
-    if (Number.isFinite(n)) return (n <= 48) ? Math.round(n * 60) : Math.round(n);
-    return 60;
-  }
-}
-
-
 
 /* =================== Date inputs: instant commit =================== */
 function wireDateInputsCommit(){
