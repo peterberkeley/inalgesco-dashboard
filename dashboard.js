@@ -2742,7 +2742,74 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     window.__breadcrumbLock = false;
   }
 }
+/* =================== Range buttons =================== */
+function wireRangeButtons(){
+  const buttons = document.querySelectorAll(".rangeBtn");
+
+  buttons.forEach(btn => {
+    btn.onclick = async function(){
+      // Visual selection
+      buttons.forEach(b => { b.style.backgroundColor=''; b.style.color=''; });
+      this.style.backgroundColor = '#10b981';
+      this.style.color = '#ffffff';
+
+      // Mode
+      const modeAttr = (this.getAttribute('data-mode') || '').toLowerCase();
+      const newMode  = (modeAttr === 'last') ? 'last' : 'now';
+
+      // Range parsing (supports "1/3/12/24" as hours, "60/180" as minutes, "1h/90m")
+      let newMinutes;
+      if (newMode === 'now') {
+        const raw = String(this.getAttribute('data-range') || '').trim();
+        newMinutes = parseRangeToMinutes(raw);
+      } else {
+        newMinutes = 60; // fixed 60-min window for "last"
+      }
+      if (!Number.isFinite(newMinutes) || newMinutes <= 0) newMinutes = 60;
+
+      // No-op guard
+      if (selectedRangeMode === newMode && selectedRangeMinutes === newMinutes) return;
+
+      // Commit selection
+      selectedRangeMode    = newMode;
+      selectedRangeMinutes = newMinutes;
+      HIST_POINTS = selectedRangeMinutes; // harmless cap used elsewhere
+
+      // Resolve device
+      const devSel      = document.getElementById('deviceSelect');
+      const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
+      const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
+
+      // Refresh UI (manual-refresh-only: run once, then freeze)
+      if (deviceID) {
+        try { window.bumpSelEpoch?.(); } catch(_){}
+        await poll(deviceID, SENSORS);           // KPI (window-aware)
+        await updateCharts(deviceID, SENSORS);   // Charts (window-aware)
+        __breadcrumbsFixed = false;              // allow a breadcrumb draw for this click
+        const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
+        idle(() => updateBreadcrumbs(deviceID, selectedRangeMinutes)); // Map crumbs once
+      }
+    };
+  });
+
+  function parseRangeToMinutes(raw){
+    if (!raw) return 60;
+    const m = raw.match(/^\s*(\d+(?:\.\d+)?)\s*([hm]?)\s*$/i);
+    if (m) {
+      const val  = parseFloat(m[1]);
+      const unit = m[2].toLowerCase();
+      if (unit === 'h') return Math.round(val * 60);
+      if (unit === 'm') return Math.round(val);
+      // No unit: treat small numbers (≤48) as hours, larger as minutes
+      return (val <= 48) ? Math.round(val * 60) : Math.round(val);
+    }
+    const n = Number(raw);
+    if (Number.isFinite(n)) return (n <= 48) ? Math.round(n * 60) : Math.round(n);
+    return 60;
+  }
+}
 window.wireRangeButtons = wireRangeButtons;
+
 
 /* =================== Date inputs: instant commit =================== */
 function wireDateInputsCommit(){
