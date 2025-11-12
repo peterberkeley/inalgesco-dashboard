@@ -101,15 +101,17 @@ function onReady(fn){
   };
   Intl.DateTimeFormat.prototype = OrigDTF.prototype;
 
-  console.log(`[timezone patch] Default timeZone = ${_dtf || LOCAL_TZ}`);
+ console.log(`[timezone patch] Default timeZone = ${_dtf || LOCAL_TZ}`);
 })();
 
-  
+// --- UI timezone used across labels, banners, tooltips (default Phoenix) ---
+const UI_TZ = (typeof window !== 'undefined' && window.UI_TZ) ? window.UI_TZ : 'America/Phoenix';
+
   const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
 // Fast HH:MM formatter with per-timezone Intl cache
 const __dtfCache = {};
 const __tzCache = {};  // deviceLabel -> IANA tz
-function fmtTimeHHMM(ts, tz='Europe/London'){
+function fmtTimeHHMM(ts, tz = UI_TZ){
   let fmt = __dtfCache[tz];
   if (!fmt){
     fmt = __dtfCache[tz] = new Intl.DateTimeFormat('en-GB', {
@@ -1222,7 +1224,7 @@ async function updateCharts(deviceID, SENSORS){
     SENSORS.forEach(s => {
       if (!s.address || !s.chart) return;
       const ordered = seriesByAddr.get(s.address) || [];
-      const labels = ordered.map(r => fmtTimeHHMM(r.timestamp, 'Europe/London'));
+ const labels = ordered.map(r => fmtTimeHHMM(r.timestamp, UI_TZ));
       const data   = ordered.map(r => {
         let v = parseFloat(r.value);
         if (typeof s.calibration === 'number') v += s.calibration;
@@ -1265,7 +1267,7 @@ async function updateCharts(deviceID, SENSORS){
       const maps = series.map(arr => {
         const m = new Map(); arr.forEach(o => m.set(o.ts, o.v)); return m;
       });
-      const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, 'Europe/London'));
+    const avgLabels = buckets.map(ts => fmtTimeHHMM(ts, UI_TZ));
       const avgData = buckets.map(ts => {
         const vals = maps.map(m=>m.get(ts)).filter(v=>v!=null && isFinite(v));
         return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : null;
@@ -1306,8 +1308,8 @@ async function updateCharts(deviceID, SENSORS){
     if (rng && isFinite(minTs) && isFinite(maxTs) && minTs <= maxTs) {
       const a=new Date(minTs), b=new Date(maxTs);
       const same = a.toDateString()===b.toDateString();
-      const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone:'Europe/London' });
-      const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+   const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone: UI_TZ });
+const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone: UI_TZ });
       rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
     } else if (rng) {
       rng.textContent = '';
@@ -1837,7 +1839,7 @@ function drawLive(data, SENSORS){
 
   // Build 2-line Local Time derived **only** from the data window.
   // If no in-window data, show "—" (prevents showing today's date for offline devices).
-  const tz = data.tz || 'Europe/London';
+const tz = data.tz || UI_TZ;
   if (ts && isFinite(ts)) {
     const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: tz });
     const localTime = new Date(ts).toLocaleTimeString('en-GB', {
@@ -2593,7 +2595,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
       segmentPolylines.push(poly);
 
       segArr.forEach(p => {
-        const tStr = new Date(p.ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Europe/London' });
+       const tStr = new Date(p.ts).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: UI_TZ });
         let tip = `<div>Time: ${tStr}</div>`;
         if (p.speed != null && isFinite(p.speed)) tip += `<div>Speed: ${p.speed.toFixed(1)} km/h</div>`;
         const m = L.circleMarker([p.lat, p.lon], {
@@ -2624,8 +2626,9 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
         div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
         let html = '<strong>Segments</strong><br>';
         for (const e of legendEntries){
-          const s = new Date(e.startISO).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
-          const t = new Date(e.endISO  ).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/London' });
+         const s = new Date(e.startISO).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone: UI_TZ });
+const t = new Date(e.endISO  ).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone: UI_TZ });
+
           html += `<span style="display:inline-block;width:12px;height:12px;margin-right:4px;background:${e.color}"></span>${s}–${t}<br>`;
         }
         div.innerHTML = html;
@@ -3016,8 +3019,7 @@ console.log('[lastSeen]', {
     if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
     const pill = document.getElementById("deviceStatusPill");
     if (pill) {
-      const seen = lastSeenSec ? new Date(lastSeenSec * 1000) : null;
-      pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: 'Europe/London' })}` : "";
+      const seen = lastSeenSec ? new Date(lastSeenSec * 1000) : null;pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: UI_TZ })}` : "";
     }
 
     // Update the SELECTED dropdown option text to match the pill
