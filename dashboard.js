@@ -2490,7 +2490,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   const MIN_DIST_M       = 15;                // decimator: keep if ≥5 m since last-kept
   const MIN_DT_MS        = 55 * 1000;        // decimator: accept ~60 s cadence jitter
   const MAX_SPEED_KMH    = 120;              // drop teleports
-  const GAP_SPLIT_MS     = 15 * 60 * 1000;   // new segment if gap > 15 min
+ const GAP_SPLIT_MS     = 2 * 60 * 1000;    // new segment if gap > 2 min
   const DWELL_RADIUS_M   = 5;                // dwell cluster radius
   const DWELL_TIME_MS    = 10 * 60 * 1000;   // new journey after ≥10 min dwell
   const ARROW_REPEAT_PX  = 25;               // arrow spacing along line
@@ -2749,10 +2749,30 @@ const allLatLngs = [];
       const latlngs = segArr.map(p => [p.lat, p.lon]);
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
 
-      // base polyline
-      const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
-      segmentPolylines.push(poly);
+  // base polyline
+const poly = L.polyline(latlngs, { color, weight:4, opacity:0.9 }).addTo(map);
+segmentPolylines.push(poly);
 
+// Hover markers on the original (unsmoothed) fixes
+//   - use the raw decimated segment for tooltips, not the densified/smoothed points
+const rawSeg = usable[idx]; // parallel to this drawn segment
+if (Array.isArray(rawSeg)) {
+  rawSeg.forEach(p => {
+    const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
+      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone: UI_TZ
+    });
+    const m = L.circleMarker([p.lat, p.lon], {
+      radius: 3,
+      color: color,
+      weight: 0,       // no stroke
+      opacity: 0,      // invisible stroke
+      fillOpacity: 0,  // invisible fill
+      interactive: true
+    }).bindTooltip(tStr, { direction:'top', offset:[0,-6] });
+    m.addTo(map);
+    segmentMarkers.push(m);
+  });
+}
       // arrowheads along the line (direction cues)
       if (L.polylineDecorator && L.Symbol && L.Symbol.arrowHead){
         const deco = L.polylineDecorator(poly, {
