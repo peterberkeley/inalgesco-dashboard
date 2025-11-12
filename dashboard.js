@@ -2487,7 +2487,7 @@ async function downloadCsvForCurrentSelection(){
 /* =================== Breadcrumb route drawing (manual refresh, arrows + dwell markers) =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   // ── thresholds & styles ──
-  const MIN_DIST_M       = 5;                // decimator: keep if ≥5 m since last-kept
+  const MIN_DIST_M       = 15;                // decimator: keep if ≥5 m since last-kept
   const MIN_DT_MS        = 55 * 1000;        // decimator: accept ~60 s cadence jitter
   const MAX_SPEED_KMH    = 120;              // drop teleports
   const GAP_SPLIT_MS     = 15 * 60 * 1000;   // new segment if gap > 15 min
