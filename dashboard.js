@@ -2742,6 +2742,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     window.__breadcrumbLock = false;
   }
 }
+window.wireRangeButtons = wireRangeButtons;
 
 /* =================== Date inputs: instant commit =================== */
 function wireDateInputsCommit(){
@@ -2769,25 +2770,10 @@ function wireDateInputsCommit(){
 /* =================== Main update loop =================== */
 /* =================== Main update loop =================== */
 onReady(() => {
-  // Safely invoke wireRangeButtons after it is defined (handles odd load orders)
-  const callWire = () => {
-    try {
-      if (typeof wireRangeButtons === 'function') {
-        wireRangeButtons();
-      } else {
-        // try once more on the next macrotask without blocking init
-        setTimeout(() => {
-          if (typeof wireRangeButtons === 'function') wireRangeButtons();
-          else console.warn('[init] wireRangeButtons not yet defined (deferred)');
-        }, 0);
-      }
-    } catch (e) {
-      console.error('[init] wireRangeButtons failed:', e);
-    }
-  };
+  // Wire buttons immediately; if it throws, don’t block the rest of init
+  try { wireRangeButtons(); } catch (e) { console.warn('[init] wireRangeButtons failed:', e); }
 
-  callWire();
-  wireDateInputsCommit();   // commit date instantly
+  wireDateInputsCommit();          // commit date instantly
   installAllTrucksMapUI();
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
@@ -2795,10 +2781,11 @@ onReady(() => {
   const sel = document.getElementById("deviceSelect");
   if (sel) sel.addEventListener("change", () => {
     try { window.bumpSelEpoch(); } catch(_) {}
-    __breadcrumbsFixed = false;  // allow new breadcrumbs for new device
+    __breadcrumbsFixed = false;    // allow new breadcrumbs for new device
     updateAll();
   });
 });
+
 
 // === INSERT ↓ (helpers used by LAST-mode selection) =========================
 async function __countRowsFast(deviceID, varLabel, maxPages = 3){
