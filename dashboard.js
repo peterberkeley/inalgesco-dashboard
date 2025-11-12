@@ -109,7 +109,14 @@ function onReady(fn){
 // --- UI timezone used across labels, banners, tooltips (default Phoenix) ---
 const UI_TZ = (typeof window !== 'undefined' && window.UI_TZ) ? window.UI_TZ : 'America/Phoenix';
 
+// --- Smoothed path (optional) defaults ---
+const SMOOTH_DEFAULT_ENABLED = true;
+const INTERP_STEP_MS  = 10 * 1000;  // densify step
+const SPEED_CAP_KMH   = 60;         // max plausible on apron
+const EMA_ALPHA       = 0.25;       // smoothing strength
+
   const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
+
 // Fast HH:MM formatter with per-timezone Intl cache
 const __dtfCache = {};
 const __tzCache = {};  // deviceLabel -> IANA tz
@@ -1764,6 +1771,44 @@ async function drawKpiLast(deviceID, SENSORS){
     console.warn('drawKpiLast failed', e);
   }
 }
+// Small UI to toggle smoothed path; persists in localStorage
+function installSmoothToggleUI(){
+  try{
+    const host = document.getElementById('map')?.parentElement;
+    if (!host || document.getElementById('smoothToggleWrap')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'smoothToggleWrap';
+    wrap.style.cssText = 'position:absolute;right:14px;top:10px;z-index:5000;background:rgba(255,255,255,.9);border:1px solid #CBD5E1;border-radius:8px;padding:6px 8px;font:12px -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;gap:6px;align-items:center;box-shadow:0 2px 6px rgba(0,0,0,.08)';
+    const chk = document.createElement('input'); chk.type='checkbox'; chk.id='smoothToggle';
+    const lbl = document.createElement('label'); lbl.htmlFor='smoothToggle'; lbl.textContent='Smoothed path';
+    lbl.style.cursor = 'pointer';
+    wrap.appendChild(chk); wrap.appendChild(lbl);
+    // Position wrapper inside map container
+    host.style.position = host.style.position || 'relative';
+    host.appendChild(wrap);
+
+    const saved = localStorage.getItem('smoothPath');
+    const enabled = saved != null ? (saved === '1') : SMOOTH_DEFAULT_ENABLED;
+    window.__smoothPathEnabled = enabled;
+    chk.checked = enabled;
+
+    chk.addEventListener('change', ()=>{
+      window.__smoothPathEnabled = !!chk.checked;
+      localStorage.setItem('smoothPath', chk.checked ? '1' : '0');
+      // force a one-shot redraw with the new mode
+      try { window.bumpSelEpoch?.(); } catch(_){}
+      const devSel = document.getElementById('deviceSelect');
+      const deviceLabel = devSel?.value || Object.keys(window.__deviceMap || {})[0];
+      const deviceID    = window.__deviceMap?.[deviceLabel]?.id;
+      if (deviceID) {
+        __breadcrumbsFixed = false;
+        const idle = window.requestIdleCallback || (fn => setTimeout(fn, 50));
+        idle(()=> updateBreadcrumbs(deviceID, window.selectedRangeMinutes || 60));
+      }
+    });
+  }catch(e){ console.warn('installSmoothToggleUI failed', e); }
+}
 
 /* =================== Live panel + map =================== */
 // Ensure we use a lexical Leaflet map/marker (not window.map DOM element)
@@ -2477,6 +2522,59 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   const fmtClock = ts => new Date(ts).toLocaleTimeString('en-GB', {
     hour:'2-digit', minute:'2-digit', hour12:false, timeZone: UI_TZ
   });
+// Insert intermediate points every INTERP_STEP_MS if implied speed ≤ SPEED_CAP_KMH
+function densifySegment(arr){
+  if (!Array.isArray(arr) || arr.length < 2) return arr;
+  const out = [arr[0]];
+  for (let i=1; i<arr.length; i++){
+    const a = out[out.length-1];
+    const b = arr[i];
+    const dt = b.ts - a.ts;
+    const dM = haversineM(a, b);
+    const vKmh = (dt>0) ? (dM/1000)/(dt/3600000) : Infinity;
+
+    // Teleports or tiny gap: keep the original, do not interpolate
+    if (!isFinite(vKmh) || vKmh > SPEED_CAP_KMH || dt <= INTERP_STEP_MS){
+      out.push(b);
+      continue;
+    }
+
+    // Number of evenly spaced 10s points we can fit
+    const steps = Math.floor(dt / INTERP_STEP_MS);
+    for (let s=1; s<=steps; s++){
+      const t = (INTERP_STEP_MS * s) / dt;           // 0..1 along segment
+      out.push({
+        ts: Math.round(a.ts + INTERP_STEP_MS*s),
+        lat: a.lat + (b.lat - a.lat) * t,
+        lon: a.lon + (b.lon - a.lon) * t,
+        speed: null
+      });
+    }
+    // Ensure original end sample exists
+    if (out[out.length-1].ts !== b.ts) out.push(b);
+  }
+  return out;
+}
+
+// Exponential moving average smoother for lat/lon (preserves last point)
+function smoothSegment(arr){
+  if (!Array.isArray(arr) || arr.length < 3) return arr;
+  const α = EMA_ALPHA;
+  const out = [arr[0]];
+  for (let i=1; i<arr.length; i++){
+    const prev = out[out.length-1];
+    const p = arr[i];
+    out.push({
+      ts:   p.ts,
+      lat:  prev.lat + α*(p.lat - prev.lat),
+      lon:  prev.lon + α*(p.lon - prev.lon),
+      speed:p.speed
+    });
+  }
+  // Preserve exact endpoint from the raw segment
+  out[out.length-1] = arr[arr.length-1];
+  return out;
+}
 
   function ensureDwellStyles(){
     if (document.getElementById('dwell-label-style')) return;
@@ -2632,19 +2730,22 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
     });
 
     if (!usable.length) { __breadcrumbsFixed = true; return; }
-    if (myTok !== __crumbToken) return;
-    if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
+if (myTok !== __crumbToken) return;
+if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
-    // map original segment index -> drawn index (for dwell colouring)
-    const segIdxMap = new Map();
-    origIndexOfUsable.forEach((orig, i)=> segIdxMap.set(orig, i));
+// Optional densify + smoothing per segment
+const segmentsToDraw = (window.__smoothPathEnabled ? usable.map(s => smoothSegment(densifySegment(s))) : usable);
 
-    // 5) Draw: polylines + arrow decorators + dwell markers + legend
-    const legendEntries = [];
-    const allLatLngs = [];
+// map original segment index -> drawn index (for dwell colouring)
+const segIdxMap = new Map();
+origIndexOfUsable.forEach((orig, i)=> segIdxMap.set(orig, i));
 
-    for (let idx = 0; idx < usable.length; idx++){
-      const segArr = usable[idx];
+// 5) Draw: polylines + arrow decorators + dwell markers + legend
+const legendEntries = [];
+const allLatLngs = [];
+
+    for (let idx = 0; idx < segmentsToDraw.length; idx++){
+  const segArr = segmentsToDraw[idx];
       const latlngs = segArr.map(p => [p.lat, p.lon]);
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
 
@@ -2835,11 +2936,10 @@ function wireDateInputsCommit(){
 }
 
 /* =================== Main update loop =================== */
-/* =================== Main update loop =================== */
 onReady(() => {
   // Wire buttons immediately; if it throws, don’t block the rest of init
   try { wireRangeButtons(); } catch (e) { console.warn('[init] wireRangeButtons failed:', e); }
-
+installSmoothToggleUI();   
   wireDateInputsCommit();          // commit date instantly
   installAllTrucksMapUI();
   updateAll();
