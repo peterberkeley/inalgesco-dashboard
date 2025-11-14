@@ -165,35 +165,56 @@
       }
     }
 
-    // ===== POPULATE DEVICE DROPDOWN =====
+        // ===== POPULATE DEVICE DROPDOWN =====
     function buildDeviceDropdownFromConfig(sensorMap) {
       const deviceSelect = document.getElementById("deviceSelect");
+      if (!deviceSelect) return;
+
       const now = Math.floor(Date.now() / 1000);
       deviceSelect.innerHTML = "";
-      const sortedEntries = Object.entries(sensorMap).sort(([a], [b]) => {
-        const numA = parseInt(a.replace("skycafe-", ""), 10);
-        const numB = parseInt(b.replace("skycafe-", ""), 10);
-        return numA - numB;
+
+      // Sort: by numeric part if present (skycafe-7, 6000, 6003...), else by key
+      const sortedEntries = Object.entries(sensorMap).sort(([aKey], [bKey]) => {
+        const numFromKey = k => {
+          const m = String(k).match(/\d+/);
+          return m ? parseInt(m[0], 10) : NaN;
+        };
+        const na = numFromKey(aKey);
+        const nb = numFromKey(bKey);
+
+        const aHas = Number.isFinite(na);
+        const bHas = Number.isFinite(nb);
+        if (aHas && bHas) return na - nb;
+        if (aHas) return -1;
+        if (bHas) return 1;
+        return String(aKey).localeCompare(String(bKey));
       });
-      sortedEntries.forEach(([dev, obj]) => {
-        const label = obj.label || dev.replace("skycafe-", "SkyCafé ");
-        const lastSeen = obj.last_seen || 0;
-        const isOnline = (now - lastSeen < 60);
-        const dot = isOnline ? "" : "⚪️";
+
+      sortedEntries.forEach(([devKey, info]) => {
+        const lastSeen = info.last_seen || 0;
+        const isOnline = (now - lastSeen) < 60;
+
+        const label = info.label || devKey;
+        const dot   = isOnline ? "" : "⚪️";
+
         const opt = document.createElement("option");
-        opt.value = dev;
-        opt.text = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
+        opt.value = devKey;
+        opt.text  = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
         deviceSelect.appendChild(opt);
       });
-      let foundOnline = false;
+
+      // Prefer first Online, else first in list
+      let selected = false;
       for (let i = 0; i < deviceSelect.options.length; i++) {
         if (deviceSelect.options[i].text.includes("Online")) {
           deviceSelect.selectedIndex = i;
-          foundOnline = true;
+          selected = true;
           break;
         }
       }
-      if (!foundOnline) deviceSelect.selectedIndex = 0;
+      if (!selected && deviceSelect.options.length > 0) {
+        deviceSelect.selectedIndex = 0;
+      }
     }
 
     // ===== FETCH DALLAS ADDRESSES =====
