@@ -354,31 +354,57 @@ async function fetchSensorMapConfig(){
     const context = {};
 
     (js.results || []).forEach(dev => {
+
       const label = (dev.label || "").trim();
       const name  = (dev.name  || "").trim();
       const key   = label || name;
       if (!key) return;
 
-      const isSkyCafe = (label && label.startsWith("skycafe-")) ||
-                        (name  && name.toLowerCase().includes("skycafe"));
-      if (!isSkyCafe) return;
+      // ─────────────────────────────────────────────
+      // DEVICE INCLUSION RULES (UPDATED)
+      // Include if:
+      //   • label starts with  "skycafe-"
+      //   • OR name contains   "skycafe"
+      //   • OR label is exactly 4 digits (e.g., 6000, 5702, 8011)
+      // Exclude the special "config" device
+      // ─────────────────────────────────────────────
 
-      // robust last_seen parser (number or string; seconds or ms)
+      const isNumeric4 = /^\d{4}$/.test(label);
+      const isLegacySkyCafe =
+        (label && label.toLowerCase().startsWith("skycafe-")) ||
+        (name  && name.toLowerCase().includes("skycafe"));
+
+      const isConfigDevice = (label.toLowerCase() === "config");
+
+      // FINAL rule
+      const isTruck = (isLegacySkyCafe || isNumeric4) && !isConfigDevice;
+
+      if (!isTruck) return;
+
+      // ─────────────────────────────────────────────
+      // Robust LAST SEEN parser
+      // ─────────────────────────────────────────────
       let raw = dev.lastActivity ?? dev.last_activity ?? dev.last_seen ?? dev.lastSeen ?? null;
       let lastMs = 0;
+
       if (typeof raw === "number") {
         lastMs = raw > 1e12 ? raw : raw * 1000;
       } else if (typeof raw === "string" && raw) {
         const n = Number(raw);
-        if (!Number.isNaN(n)) lastMs = n > 1e12 ? n : n * 1000;
-        else {
+        if (!Number.isNaN(n)) {
+          lastMs = n > 1e12 ? n : n * 1000;
+        } else {
           const p = Date.parse(raw);
           if (!Number.isNaN(p)) lastMs = p;
         }
       }
 
       const id = dev.id || dev._id || dev["$id"];
-      const display = name || (label ? label.replace(/^skycafe-/i, "SkyCafé ") : key);
+
+      // For display: keep skycafe naming pretty but don't alter numeric labels
+      const display =
+        name ||
+        (label.startsWith("skycafe-") ? label.replace(/^skycafe-/i, "SkyCafé ") : label);
 
       context[key] = {
         label: display,
@@ -388,6 +414,7 @@ async function fetchSensorMapConfig(){
     });
 
     return context;
+
   }catch(err){
     console.error("Failed to fetch device list:", err);
     return {};
