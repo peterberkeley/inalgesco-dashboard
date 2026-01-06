@@ -13,7 +13,7 @@ const STATIC_BASE = { lat: 33.4377, lon: -112.0276 };
 let REFRESH_INTERVAL = 15_000;      // poll live every 15s
 let HIST_POINTS      = 60;          // default points on charts (newest on the right, corresponds to 1h)
 const ONLINE_WINDOW_SEC = 300;      // online if seen within last 5 minutes
-const USE_V16_HEARTBEAT_FALLBACK = false;  // TEMP: dropdown uses devices v2 only
+const USE_V16_HEARTBEAT_FALLBACK = true;  // TEMP: dropdown uses devices v2 only
 const USE_V2_BULK = true;                  // enable fast per-device v2 bulk fetch
 
 const FORCE_VARCACHE_REFRESH = false;      // set true only if debugging var-id mismatches
