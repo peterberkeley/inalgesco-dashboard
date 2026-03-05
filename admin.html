@@ -135,29 +135,44 @@
       }
     };
 
-    // ===== FETCH DEVICE LIST =====
+       // ===== FETCH DEVICE LIST =====
     async function fetchSensorMapConfig() {
       try {
+        deviceIdMap = {};
+
         const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
           headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
         });
         if (!res.ok) throw new Error("Failed to fetch devices");
+
         const js = await res.json();
         const context = {};
+
         js.results
           .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
           .forEach(dev => {
-            const name = dev.name;
-            const label = dev.label || name.replace("skycafe-", "SkyCafé ");
+            const rawName  = (dev.name || "").trim();
+            const rawLabel = (dev.label || "").trim();
+
+            // Canonical key must match the dashboard logic.
+            const key = rawLabel || rawName;
+            if (!key) return;
+
+            const displayLabel = rawLabel || rawName.replace(/^skycafe-/i, "SkyCafé ");
             const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
             const id = dev.id || dev._id || dev["$id"];
-            context[name] = {
-              label,
+
+            context[key] = {
+              label: displayLabel,
               last_seen: Math.floor(lastSeen / 1000),
-              id
+              id,
+              raw_name: rawName,
+              raw_label: rawLabel
             };
-            deviceIdMap[name] = id;
+
+            deviceIdMap[key] = id;
           });
+
         return context;
       } catch (err) {
         console.error("Failed to fetch device list:", err);
@@ -165,7 +180,7 @@
       }
     }
 
-        // ===== POPULATE DEVICE DROPDOWN =====
+    // ===== POPULATE DEVICE DROPDOWN =====
     function buildDeviceDropdownFromConfig(sensorMap) {
       const deviceSelect = document.getElementById("deviceSelect");
       if (!deviceSelect) return;
@@ -215,6 +230,63 @@
       if (!selected && deviceSelect.options.length > 0) {
         deviceSelect.selectedIndex = 0;
       }
+    }
+
+    function mergeTruckConfig(legacyCfg, canonicalCfg) {
+      const out = {};
+
+      const copyIntoOut = (src) => {
+        if (!src || typeof src !== "object") return;
+
+        Object.entries(src).forEach(([k, v]) => {
+          if (/^[0-9a-fA-F]{16}$/.test(k)) {
+            out[k] = { ...(out[k] || {}), ...(v || {}) };
+          } else {
+            out[k] = v;
+          }
+        });
+      };
+
+      copyIntoOut(legacyCfg);
+      copyIntoOut(canonicalCfg);
+      return out;
+    }
+
+    function normalizeConfigKeys(sensorMap, config) {
+      const normalized = { ...(config || {}) };
+
+      if (!normalized.__aliases || typeof normalized.__aliases !== "object") {
+        normalized.__aliases = {};
+      }
+
+      Object.entries(sensorMap || {}).forEach(([canonicalKey, info]) => {
+        const legacyKey = (info && info.raw_name) ? String(info.raw_name).trim() : "";
+
+        if (!legacyKey || legacyKey === canonicalKey) return;
+
+        const legacyCfg = normalized[legacyKey];
+        const canonicalCfg = normalized[canonicalKey];
+
+        if (legacyCfg && canonicalCfg) {
+          normalized[canonicalKey] = mergeTruckConfig(legacyCfg, canonicalCfg);
+        } else if (legacyCfg && !canonicalCfg) {
+          normalized[canonicalKey] = mergeTruckConfig(legacyCfg, {});
+        }
+
+        if (legacyKey in normalized && legacyKey !== canonicalKey) {
+          delete normalized[legacyKey];
+        }
+
+        if (normalized.__aliases[legacyKey] && !normalized.__aliases[canonicalKey]) {
+          normalized.__aliases[canonicalKey] = normalized.__aliases[legacyKey];
+        }
+
+        if (legacyKey in normalized.__aliases && legacyKey !== canonicalKey) {
+          delete normalized.__aliases[legacyKey];
+        }
+      });
+
+      return normalized;
     }
 
     // ===== FETCH DALLAS ADDRESSES =====
@@ -279,7 +351,7 @@
       });
     }
 
-    // ===== LOAD INITIAL DATA =====
+       // ===== LOAD INITIAL DATA =====
     async function loadInitialData() {
       document.getElementById("statusMsg").textContent = "Loading devices...";
       sensorMap = await fetchSensorMapConfig();
@@ -288,31 +360,38 @@
       // Load config mapping (sensor labels and aliases)
       let config = {};
       try {
-        let res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_ACCOUNT_TOKEN}`);
+        const res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_ACCOUNT_TOKEN}`);
         if (res.ok) {
-          let js = await res.json();
-          let context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
+          const js = await res.json();
+          const context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
           config = context;
         }
       } catch {}
-      fullMapData = config;
 
-      // ensure alias map exists in context
-      if (!fullMapData.__aliases) fullMapData.__aliases = {};
+      // Convert old admin keys (raw device name) to the dashboard's canonical key.
+      fullMapData = normalizeConfigKeys(sensorMap, config);
+
+      if (!fullMapData.__aliases || typeof fullMapData.__aliases !== "object") {
+        fullMapData.__aliases = {};
+      }
 
       const deviceSelect = document.getElementById("deviceSelect");
       deviceSelect.onchange = handleDeviceChange;
 
-      // attach alias input handler once
-      document.getElementById("aliasInput").addEventListener('input', function(){
+      const aliasInput = document.getElementById("aliasInput");
+      aliasInput.oninput = function() {
         const alias = this.value.trim();
-        if (!fullMapData.__aliases) fullMapData.__aliases = {};
-        if (alias) {
+
+        if (!fullMapData.__aliases || typeof fullMapData.__aliases !== "object") {
+          fullMapData.__aliases = {};
+        }
+
+        if (alias && selectedDeviceLabel) {
           fullMapData.__aliases[selectedDeviceLabel] = alias;
-        } else {
+        } else if (selectedDeviceLabel) {
           delete fullMapData.__aliases[selectedDeviceLabel];
         }
-      });
+      };
 
       handleDeviceChange();
       document.getElementById("statusMsg").textContent = "";
