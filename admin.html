@@ -389,46 +389,71 @@
       });
     }
 
-       // ===== LOAD INITIAL DATA =====
+           function mergeTruckConfig(legacyCfg, canonicalCfg) {
+      const out = {};
+      const copy = (src) => {
+        if (!src || typeof src !== "object") return;
+        for (const [k, v] of Object.entries(src)) {
+          if (/^[0-9a-fA-F]{16}$/.test(k)) out[k] = { ...(out[k] || {}), ...(v || {}) };
+          else out[k] = v;
+        }
+      };
+      copy(legacyCfg);
+      copy(canonicalCfg);
+      return out;
+    }
+
+    function normalizeConfigKeys(sensorMap, config) {
+      const normalized = { ...(config || {}) };
+      if (!normalized.__aliases || typeof normalized.__aliases !== "object") normalized.__aliases = {};
+
+      for (const [canonicalKey, info] of Object.entries(sensorMap || {})) {
+        const legacyKey = (info && info.raw_name) ? String(info.raw_name).trim() : "";
+        if (!legacyKey || legacyKey === canonicalKey) continue;
+
+        const legacyCfg = normalized[legacyKey];
+        const canonCfg  = normalized[canonicalKey];
+
+        if (legacyCfg && canonCfg) normalized[canonicalKey] = mergeTruckConfig(legacyCfg, canonCfg);
+        else if (legacyCfg && !canonCfg) normalized[canonicalKey] = mergeTruckConfig(legacyCfg, {});
+
+        if (legacyKey in normalized && legacyKey !== canonicalKey) delete normalized[legacyKey];
+
+        if (normalized.__aliases[legacyKey] && !normalized.__aliases[canonicalKey]) {
+          normalized.__aliases[canonicalKey] = normalized.__aliases[legacyKey];
+        }
+        if (legacyKey in normalized.__aliases && legacyKey !== canonicalKey) delete normalized.__aliases[legacyKey];
+      }
+      return normalized;
+    }
+
+    // ===== LOAD INITIAL DATA =====
     async function loadInitialData() {
       document.getElementById("statusMsg").textContent = "Loading devices...";
       sensorMap = await fetchSensorMapConfig();
       buildDeviceDropdownFromConfig(sensorMap);
 
-      // Load config mapping (sensor labels and aliases)
       let config = {};
       try {
         const res = await fetch(RAW_GET_URL + `&token=${UBIDOTS_ACCOUNT_TOKEN}`);
         if (res.ok) {
           const js = await res.json();
-          const context = js.results && js.results.length && js.results[0].context ? js.results[0].context : {};
-          config = context;
+          config = (js.results && js.results.length && js.results[0].context) ? js.results[0].context : {};
         }
       } catch {}
 
-      // Convert old admin keys (raw device name) to the dashboard's canonical key.
+      // Normalize old keys (raw device name) → canonical keys (label||name)
       fullMapData = normalizeConfigKeys(sensorMap, config);
-
-      if (!fullMapData.__aliases || typeof fullMapData.__aliases !== "object") {
-        fullMapData.__aliases = {};
-      }
 
       const deviceSelect = document.getElementById("deviceSelect");
       deviceSelect.onchange = handleDeviceChange;
 
       const aliasInput = document.getElementById("aliasInput");
-      aliasInput.oninput = function() {
+      aliasInput.oninput = function(){
         const alias = this.value.trim();
-
-        if (!fullMapData.__aliases || typeof fullMapData.__aliases !== "object") {
-          fullMapData.__aliases = {};
-        }
-
-        if (alias && selectedDeviceLabel) {
-          fullMapData.__aliases[selectedDeviceLabel] = alias;
-        } else if (selectedDeviceLabel) {
-          delete fullMapData.__aliases[selectedDeviceLabel];
-        }
+        if (!fullMapData.__aliases || typeof fullMapData.__aliases !== "object") fullMapData.__aliases = {};
+        if (alias && selectedDeviceLabel) fullMapData.__aliases[selectedDeviceLabel] = alias;
+        else if (selectedDeviceLabel) delete fullMapData.__aliases[selectedDeviceLabel];
       };
 
       handleDeviceChange();
