@@ -135,36 +135,70 @@
       }
     };
 
-        // ===== FETCH DEVICE LIST =====
+           // ===== FETCH DEVICE LIST =====
     async function fetchSensorMapConfig() {
       try {
         deviceIdMap = {};
 
-        const res = await fetch(`${UBIDOTS_BASE}/devices/`, {
-          headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-        });
-        if (!res.ok) throw new Error("Failed to fetch devices");
+        const looksLikeTruckKey = (s) => {
+          const t = String(s || "").trim().toLowerCase();
+          return t.startsWith("skycafe-") || /^\d{3,6}$/.test(t); // e.g. 5999, 6001, 8011
+        };
 
-        const js = await res.json();
+        // --- paginate through ALL devices ---
+        let url = `${UBIDOTS_BASE}/devices/?page_size=200`;
+        const allDevices = [];
+        let guard = 0;
+
+        while (url && guard < 50) {
+          guard++;
+
+          const res = await fetch(url, {
+            headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+          });
+          if (!res.ok) throw new Error(`Failed to fetch devices (HTTP ${res.status})`);
+
+          const js = await res.json();
+          if (Array.isArray(js.results)) allDevices.push(...js.results);
+
+          url = js.next || null;
+        }
+
+        if (guard >= 50) {
+          console.warn("[fetchSensorMapConfig] Pagination guard hit; device list may be incomplete.");
+        }
+
         const context = {};
 
-        js.results
-          .filter(dev => dev.name && dev.name.startsWith("skycafe-"))
+        allDevices
+          .filter(dev => looksLikeTruckKey(dev.name) || looksLikeTruckKey(dev.label))
           .forEach(dev => {
             const rawName  = (dev.name || "").trim();
             const rawLabel = (dev.label || "").trim();
 
-            // Canonical key must match the dashboard logic.
+            // Canonical key must match dashboard logic: label || name
             const key = rawLabel || rawName;
             if (!key) return;
 
-            const displayLabel = rawLabel || rawName.replace(/^skycafe-/i, "SkyCafé ");
-            const lastSeen = dev.lastActivity ? new Date(dev.lastActivity).getTime() : 0;
+            // robust last activity parse
+            const la = dev.lastActivity || dev.last_activity || null;
+            let lastSeenMs = 0;
+            if (typeof la === "string") {
+              const t = Date.parse(la);
+              lastSeenMs = Number.isFinite(t) ? t : 0;
+            } else if (typeof la === "number") {
+              lastSeenMs = la > 1e12 ? la : la * 1000; // ms vs seconds
+            }
+
             const id = dev.id || dev._id || dev["$id"];
+
+            const displayLabel =
+              rawLabel ||
+              rawName.replace(/^skycafe-/i, "SkyCafé ");
 
             context[key] = {
               label: displayLabel,
-              last_seen: Math.floor(lastSeen / 1000),
+              last_seen: Math.floor(lastSeenMs / 1000),
               id,
               raw_name: rawName,
               raw_label: rawLabel
@@ -172,6 +206,10 @@
 
             deviceIdMap[key] = id;
           });
+
+        console.log(
+          `[fetchSensorMapConfig] fetched ${allDevices.length} devices; kept ${Object.keys(context).length} trucks`
+        );
 
         return context;
       } catch (err) {
