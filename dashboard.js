@@ -3402,10 +3402,10 @@ if (deviceID) {
   let discovered = [];
   try {
     const suppress = await shouldSuppressAutoDallas(deviceLabel, dataDeviceID, isOnline);
-    if (!suppress) {
+        if (!suppress) {
       discovered = await fetchDallasAddresses(dataDeviceID);
     } else {
-      console.warn('[gating] Suppressing auto-discovered Dallas for', deviceLabel, '(Offline + no admin mapping, NOW view)');
+      console.warn('[gating] Suppressing auto-discovered Dallas for', deviceLabel, '(Admin ICCID mismatch or unknown ICCID in NOW view)');
     }
   } catch (e) {
     console.warn('Dallas discovery failed for', deviceLabel, e);
@@ -3451,11 +3451,12 @@ if (deviceID) {
       console.warn('[LAST select]', { adminAddrs, tsList, stale, liveDallas });
 
     }
-  } else {
-    // NOW: keep identity/online safety
+   } else {
+    // NOW: use admin-mapped sensors when allowed; otherwise use device-scoped discovery.
+    // Only an Admin ICCID mismatch should block Dallas charts here.
     if (adminOK) {
       liveDallas = adminAddrs;
-    } else if (isOnline && Array.isArray(discovered) && discovered.length > 0) {
+    } else if (Array.isArray(discovered) && discovered.length > 0) {
       liveDallas = discovered;
     } else {
       console.warn('[Dallas gating] No trusted sensors for', deviceLabel, '→ skip charts');
