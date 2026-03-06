@@ -1862,7 +1862,10 @@ function signalBarsFrom(value){
 function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
 
-  ts = ts || Date.now();
+  // IMPORTANT: keep `ts === null` as null (caller uses null to mean “no in-window data”)
+  // Only default to "now" when ts is truly missing/undefined.
+  if (ts === undefined) ts = Date.now();
+
   const temps = SENSORS
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
     .filter(v=>v!=null && isFinite(v));
