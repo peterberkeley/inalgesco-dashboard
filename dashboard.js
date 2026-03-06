@@ -363,20 +363,10 @@ async function fetchSensorMapConfig(){
     const context = {};
 
     (js.results || []).forEach(dev => {
-
       const label = (dev.label || "").trim();
       const name  = (dev.name  || "").trim();
       const key   = label || name;
       if (!key) return;
-
-      // ─────────────────────────────────────────────
-      // DEVICE INCLUSION RULES (UPDATED)
-      // Include if:
-      //   • label starts with  "skycafe-"
-      //   • OR name contains   "skycafe"
-      //   • OR label is exactly 4 digits (e.g., 6000, 5702, 8011)
-      // Exclude the special "config" device
-      // ─────────────────────────────────────────────
 
       const isNumeric4 = /^\d{4}$/.test(label);
       const isLegacySkyCafe =
@@ -384,15 +374,9 @@ async function fetchSensorMapConfig(){
         (name  && name.toLowerCase().includes("skycafe"));
 
       const isConfigDevice = (label.toLowerCase() === "config");
-
-      // FINAL rule
       const isTruck = (isLegacySkyCafe || isNumeric4) && !isConfigDevice;
-
       if (!isTruck) return;
 
-      // ─────────────────────────────────────────────
-      // Robust LAST SEEN parser
-      // ─────────────────────────────────────────────
       let raw = dev.lastActivity ?? dev.last_activity ?? dev.last_seen ?? dev.lastSeen ?? null;
       let lastMs = 0;
 
@@ -409,8 +393,8 @@ async function fetchSensorMapConfig(){
       }
 
       const id = dev.id || dev._id || dev["$id"];
+      if (!id) return;
 
-      // For display: keep skycafe naming pretty but don't alter numeric labels
       const display =
         name ||
         (label.startsWith("skycafe-") ? label.replace(/^skycafe-/i, "SkyCafé ") : label);
@@ -418,7 +402,11 @@ async function fetchSensorMapConfig(){
       context[key] = {
         label: display,
         last_seen: Math.floor((lastMs || 0) / 1000),
-        id
+        id,
+        variables_url: (typeof dev.variables === "string" && dev.variables)
+          ? dev.variables
+          : `${UBIDOTS_BASE}/devices/${encodeURIComponent(id)}/variables`,
+        variables_count: Number.isFinite(dev.variablesCount) ? dev.variablesCount : null
       };
     });
 
@@ -466,84 +454,81 @@ function buildDeviceDropdownFromConfig(sensorMap){
 // ensure global visibility in Safari/strict modes
 window.buildDeviceDropdownFromConfig = buildDeviceDropdownFromConfig;
 
-/* =================== Variables & values (v1.6) =================== */
-// Deduplicate concurrent builds per device
-const __varCachePromises = (window.__varCachePromises = window.__varCachePromises || {});
+/* =================== Variables & values (authoritative v2 inventory + v1 dots) =================== */
+async function fetchDeviceVariablesV2(deviceID){
+  const info = Object.values(window.__deviceMap || {}).find(x => x && x.id === deviceID) || null;
+
+  let url = info?.variables_url
+    ? `${info.variables_url}${info.variables_url.includes('?') ? '&' : '?'}page_size=1000`
+    : `${UBIDOTS_BASE}/devices/${encodeURIComponent(deviceID)}/variables?page_size=1000`;
+
+  const out = [];
+  let guard = 0;
+
+  while (url && guard < 25) {
+    guard++;
+    const r = await fetch(url, {
+      headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
+    });
+    if (!r.ok) throw new Error(`Failed to fetch device variables (${r.status})`);
+
+    const j = await r.json();
+    out.push(...(j.results || []));
+    url = j.next || null;
+  }
+
+  return out;
+}
 
 async function ensureVarCache(deviceID){
-  // Only early-return if we actually have entries for this device
   if (variableCache[deviceID] && Object.keys(variableCache[deviceID]).length > 0) return;
 
-  const url = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
   try{
-    const rs = await fetch(url);
-    if(!rs.ok){ variableCache[deviceID] = {}; return; }
-    const jl = await rs.json();
-
+    const vars = await fetchDeviceVariablesV2(deviceID);
     const map = {};
-    (jl.results || []).forEach(v => {
-      const lab = String(v.label || "");
-      if (!map[lab]) map[lab] = String(v.id); // first-seen id per label
+
+    (vars || []).forEach(v => {
+      const lab = String(v.label || v.name || "").trim();
+      const id  = String(v.id || v._id || "");
+      if (lab && id && !map[lab]) map[lab] = id;
     });
 
     variableCache[deviceID] = map;
   }catch(e){
     console.error("ensureVarCache", e);
-    // allow a retry next time instead of “empty forever”
     delete variableCache[deviceID];
   }
 }
 
-
-// Case-insensitive per-device variable ID resolver for hex labels
+// Case-insensitive per-device variable ID resolver
 function getVarIdCI(deviceID, label){
   const map = variableCache[deviceID] || {};
-  if (map[label]) return map[label]; // exact hit
+  if (map[label]) return map[label];
 
   const want = String(label).toLowerCase();
   for (const [k,v] of Object.entries(map)){
     if (String(k).toLowerCase() === want){
-      // Cache under the requested label spelling for faster future hits
       variableCache[deviceID][label] = v;
       return v;
     }
   }
   return null;
 }
-// ---------------------------------------------------------------------
-// Strict per-device resolver (does NOT rely on the global cache)
-// Confirms the variable's owning device matches `deviceID`.
-// ---------------------------------------------------------------------
+
+// Strict per-device resolver now uses the authoritative v2-built cache only
 async function resolveVarIdStrict(deviceID, varLabel){
+  await ensureVarCache(deviceID);
+  const map = variableCache[deviceID] || {};
+  if (map[varLabel]) return String(map[varLabel]);
+
   const want = String(varLabel).toLowerCase();
-  const url  = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-  try {
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    const j = await r.json();
-
-    const match = (j.results || []).find(v => {
-      const lbl = String(v.label || '').toLowerCase();
-      if (lbl !== want) return false;
-
-      // v.device is typically like "/api/v1.6/devices/<id>/" – prefer to double-check
-      const devUrl = v && typeof v.device === 'string' ? v.device : null;
-      if (!devUrl) return true; // accept if API didn’t include device link (already filtered by ?device=)
-      const m = devUrl.match(/\/devices\/([^/]+)\//);
-      const ownerId = m ? m[1] : null;
-      return ownerId === String(deviceID);
-    });
-
-    return match ? String(match.id) : null;
-  } catch (e) {
-    console.warn('resolveVarIdStrict: device-filtered lookup failed', e);
-    return null;
+  for (const [k, v] of Object.entries(map)) {
+    if (String(k).toLowerCase() === want) return String(v);
   }
+  return null;
 }
 
-// ---------------------------------------------------------------------
 // Fetch the newest timestamp (ms) for a variable ID (v1.6 endpoint)
-// ---------------------------------------------------------------------
 async function fetchLastTsV1(varId){
   const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(varId)}/values/?page_size=1&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
   if (!r.ok) return null;
@@ -555,41 +540,15 @@ async function fetchUbidotsVar(deviceID, varLabel, limit = 1) {
   try {
     await ensureVarCache(deviceID);
 
-    // 1) Try case-insensitive mapping first (fast path)
     let varId = getVarIdCI(deviceID, varLabel);
-    if (varId) {
-      const fast = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=${limit}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
-      if (fast.ok) {
-        const data = await (await fast).json();
-        const rows = data?.[ 'results' ] || [];
-        if (rows.length) return rows;
-      }
-    }
+    if (!varId) varId = await resolveVarIdStrict(deviceID, varLabel);
+    if (!varId) return [];
 
-    // 2) Fallback: scan THIS device’s variables for a case-insensitive label match
-    const list = await fetch(`${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
-    if (!list.ok) return [];
-    const jl   = await list.json();
-    const want = String(varLabel).toLowerCase();
+    const r = await fetch(`${UBIDOTS_V1}/variables/${encodeURIComponent(varId)}/values/?page_size=${limit}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
+    if (!r.ok) return [];
 
-    const ids = (jl.results || [])
-      .filter(v => String(v.label || '').toLowerCase() === want)
-      .map(v => v.id);
-
-    for (const id of ids) {
-      if (id === varId) continue; // already tried
-      const r = await fetch(`${UBIDOTS_V1}/variables/${id}/values/?page_size=${limit}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`);
-      if (!r.ok) continue;
-      const j = await r.json();
-      const rows = j?.[ 'result' in j ? 'result' : 'results' ] || [];
-      if (rows.length) {
-        // Cache the resolved ID under the requested label spelling
-        (variableCache[deviceID] ||= {})[varId ? varLabel : (jl.results.find(x => x.id === id)?.label || varLabel)] = id;
-        return rows;
-      }
-    }
-
-    return [];
+    const j = await r.json();
+    return j?.results || [];
   } catch (e) {
     console.error('fetchUbidotsVar error:', e);
     return [];
@@ -2185,117 +2144,109 @@ async function renderMaintenanceBox(truckLabel, deviceID){
 // Case-insensitive per-device CSV/crumbs fetch by var label (hex)
 async function fetchCsvRows(deviceID, varLabel, start, end, signal) {
   try {
-          // Special handling for GPS/position variables - merge from all sources ON THIS DEVICE
+              // Special handling for GPS/position variables - authoritative per-device merge
     if (varLabel === 'position' || varLabel === 'gps' || varLabel === 'location') {
-      console.log('[fetchCsvRows] GPS request - merging all position variables');
-      
-      // Get ALL variables for this device
-      const varsUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-      const varsResp = await fetch(varsUrl, signal ? { signal } : {});
-      
-      if (!varsResp.ok) {
-        console.error('[fetchCsvRows] Failed to fetch variables list');
+      await ensureVarCache(deviceID);
+
+      const gpsLabels = ['gps', 'position', 'location'].filter(lab => !!getVarIdCI(deviceID, lab));
+      if (!gpsLabels.length) {
+        console.warn('[fetchCsvRows] No GPS variables found for device', deviceID);
         return [];
       }
-      
-      const varsData = await varsResp.json();
-      
-      // Find ALL position/gps/location variables FOR THIS DEVICE ONLY
-      const gpsVars = (varsData.results || []).filter(v => 
-        v.label === 'position' || v.label === 'gps' || v.label === 'location'
-      );
-      
-      console.log(`[fetchCsvRows] Found ${gpsVars.length} GPS variables to check`);
-      
-      if (gpsVars.length === 0) {
-        console.warn('[fetchCsvRows] No GPS variables found for device');
-        return [];
+
+      const fetchValuesById = async (varId, useWindow, hardCap = 4000) => {
+        let url = `${UBIDOTS_V1}/variables/${encodeURIComponent(varId)}/values/?page_size=1000`;
+
+        if (useWindow) {
+          if (start !== undefined && start !== null) {
+            const startMs = Math.floor(Number(start));
+            if (isFinite(startMs) && startMs > 0) url += `&start=${startMs}`;
+          }
+          if (end !== undefined && end !== null) {
+            const endMs = Math.floor(Number(end));
+            if (isFinite(endMs) && endMs > 0) url += `&end=${endMs}`;
+          }
+        }
+
+        url += `&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+
+        const out = [];
+        while (url) {
+          const resp = await fetch(url, signal ? { signal } : {});
+          if (!resp.ok) break;
+          const data = await resp.json();
+          const rows = data?.results || [];
+          out.push(...rows);
+          if (out.length >= hardCap) break;
+          url = (data.next && typeof data.next === 'string')
+            ? `${data.next}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`
+            : null;
+        }
+        return out;
+      };
+
+      const normalizeGpsRows = (rows) => (rows || [])
+        .filter(point => point && point.context && point.context.lat != null && (point.context.lng != null || point.context.lon != null))
+        .map(point => ({
+          ...point,
+          timestamp: Number(point.timestamp),
+          context: {
+            ...point.context,
+            lat: Number(point.context.lat),
+            lng: Number(point.context.lng != null ? point.context.lng : point.context.lon)
+          }
+        }))
+        .filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.context.lat) && Number.isFinite(point.context.lng))
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      let allResults = [];
+      const sourceCounts = {};
+
+      for (const gpsLabel of gpsLabels) {
+        let gpsVarId = getVarIdCI(deviceID, gpsLabel);
+        if (!gpsVarId) gpsVarId = await resolveVarIdStrict(deviceID, gpsLabel);
+        if (!gpsVarId) continue;
+
+        let rows = normalizeGpsRows(await fetchValuesById(gpsVarId, true));
+
+        // fallback: if window query is empty, fetch last-N from the SAME device variable IDs,
+        // then filter locally into the requested time window
+        if (!rows.length && (start !== undefined || end !== undefined)) {
+          rows = normalizeGpsRows(await fetchValuesById(gpsVarId, false)).filter(r => {
+            const ts = r.timestamp;
+            if (start && ts < start) return false;
+            if (end && ts > end) return false;
+            return true;
+          });
+        }
+
+        if (rows.length) {
+          sourceCounts[gpsLabel] = rows.length;
+          allResults.push(...rows);
+        }
       }
-      
-      // Fetch data from ALL GPS variables for this device
-      const allResults = [];
-      let varCount = 0;
-      
-      for (const gpsVar of gpsVars) {
-        let varUrl = `${UBIDOTS_V1}/variables/${gpsVar.id}/values/?page_size=1000`;
-        
-        if (start !== undefined && start !== null) {
-          const startMs = Math.floor(Number(start));
-          if (isFinite(startMs) && startMs > 0) {
-            varUrl += `&start=${startMs}`;
-          }
-        }
-        
-        if (end !== undefined && end !== null) {
-          const endMs = Math.floor(Number(end));
-          if (isFinite(endMs) && endMs > 0) {
-            varUrl += `&end=${endMs}`;
-          }
-        }
-        
-        varUrl += `&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-        
-        try {
-          const varResp = await fetch(varUrl, signal ? { signal } : {});
-          
-          if (varResp.ok) {
-            const varData = await varResp.json();
-            
-            if (varData.results && varData.results.length > 0) {
-              console.log(`[fetchCsvRows] Variable ${gpsVar.id.substring(0,8)}... (${gpsVar.label}): ${varData.results.length} points`);
-              allResults.push(...varData.results);
-              varCount++;
-            }
-          }
-        } catch (e) {
-          if (e.name === 'AbortError') {
-            console.log('[fetchCsvRows] Request aborted');
-            return [];
-          }
-          console.warn(`[fetchCsvRows] Error fetching ${gpsVar.id}:`, e.message);
-        }
-      }
-      
-      console.log(`[fetchCsvRows] Fetched data from ${varCount} variables, total ${allResults.length} points`);
-      
-      // Sort by timestamp (oldest first)
+
       allResults.sort((a, b) => a.timestamp - b.timestamp);
-      
-      // Deduplicate based on timestamp and location
+
       const uniqueResults = [];
       const seen = new Set();
-      
       allResults.forEach(point => {
         const lat = point.context?.lat;
-        const lng = point.context?.lng || point.context?.lon;
-        
-        if (lat != null && lng != null) {
-          const key = `${point.timestamp}_${lat}_${lng}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueResults.push(point);
-          }
+        const lng = point.context?.lng;
+        const key = `${point.timestamp}_${lat}_${lng}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueResults.push(point);
         }
       });
-      
-      console.log(`[fetchCsvRows] After deduplication: ${uniqueResults.length} unique GPS points`);
-      
-      if ((start || end) && uniqueResults.length > 0) {
-        const filtered = uniqueResults.filter(r => {
-          const ts = r.timestamp;
-          if (!ts || !isFinite(ts)) return false;
-          if (start && ts < start) return false;
-          if (end && ts > end) return false;
-          return true;
-        });
-        
-        if (filtered.length !== uniqueResults.length) {
-          console.log('[fetchCsvRows] Time filter removed', uniqueResults.length - filtered.length, 'points outside range');
-        }
-        
-        return filtered;
-      }
-      
+
+      console.log('[fetchCsvRows] GPS rows fetched:', {
+        deviceID,
+        gpsLabels,
+        sourceCounts,
+        total: uniqueResults.length
+      });
+
       return uniqueResults;
     }
     
@@ -3807,53 +3758,12 @@ function closeMapAll(){
 
 // --- Export: single source of truth for display names (aliases + fallbacks) ---
 window.getDisplayName = getDisplayName;
-/* === HOTFIX: make resolveVarIdStrict device-scoped (CT5999 vs Warehouse2) === */
-(function(){
-  const V1 = window.UBIDOTS_V1 || 'https://industrial.api.ubidots.com/api/v1.6';
-  const getToken = () => window.UBIDOTS_ACCOUNT_TOKEN || window.UBIDOTS_TOKEN || '';
-  const withTokenQS = (url) => `${url}${url.includes('?')?'&':'?'}token=${encodeURIComponent(getToken())}`;
-  const authHeaders = () => (getToken() ? { 'X-Auth-Token': getToken() } : {});
-
-  // Device -> Map<label -> varId>
-  window.__varMapByDevice = window.__varMapByDevice || new Map();
-
-  async function buildVarMapForDevice(devId){
-    const cached = window.__varMapByDevice.get(devId);
-    if (cached && cached.byLabel && cached.byLabel.size) return cached.byLabel;
-
-    const url = `${V1}/variables/?device=${encodeURIComponent(devId)}&page_size=1000`;
-    const res = await fetch(withTokenQS(url), { headers: authHeaders() });
-    const j = await res.json();
-    const list = (j && j.results) ? j.results : [];
-
-    const byLabel = new Map();
-    for (const v of list) byLabel.set(String(v.label || ''), String(v.id));
-    window.__varMapByDevice.set(devId, { byLabel, ts: Date.now() });
-    return byLabel;
-  }
-
-  // Preserve the original for rollback
-  const orig = window.resolveVarIdStrict;
-  window.__resolveVarIdStrict_orig = orig;
-
-  // New device-scoped resolver
-  window.resolveVarIdStrict = async function(devId, label){
-    if (!devId || !label) return null;
-    try {
-      const byLabel = await buildVarMapForDevice(devId);
-      const vid = byLabel.get(String(label)) || null;
-      if (vid) return vid;
-
-      // fallback to original if not found
-      if (typeof orig === 'function') return await orig.call(this, devId, label);
-      return null;
-    } catch (e) {
-      if (typeof orig === 'function') return await orig.call(this, devId, label);
-      return null;
-    }
-  };
-  
-})();
+/* === Export fixed helpers for console/debug use === */
+window.resolveVarIdStrict = resolveVarIdStrict;
+window.resolveGpsLabel = resolveGpsLabel;
+window.fetchUbidotsVar = fetchUbidotsVar;
+window.fetchCsvRows = fetchCsvRows;
+window.ensureVarCache = ensureVarCache;
 
 /* ────────────────────────────────────────────────
    Anti-Phoenix Map Shim (safe install)
