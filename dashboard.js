@@ -1818,6 +1818,7 @@ function installSmoothToggleUI(){
 /* =================== Live panel + map =================== */
 // Ensure we use a lexical Leaflet map/marker (not window.map DOM element)
 let map, marker;
+let breadcrumbLayerGroup = null;
 
 function initMap(){
   // Create the Leaflet map once
@@ -1829,6 +1830,24 @@ function initMap(){
   if (!(marker && typeof marker.setLatLng === 'function')) {
     marker = L.marker([0, 0]).addTo(map);
   }
+
+  // Debug handle
+  window.__leafletMap = map;
+}
+
+function ensureBreadcrumbLayerGroup(){
+  initMap();
+
+  if (!(breadcrumbLayerGroup && typeof breadcrumbLayerGroup.clearLayers === 'function')) {
+    breadcrumbLayerGroup = L.layerGroup().addTo(map);
+  } else if (!map.hasLayer(breadcrumbLayerGroup)) {
+    breadcrumbLayerGroup.addTo(map);
+  }
+
+  // Debug handle
+  window.__breadcrumbLayerGroup = breadcrumbLayerGroup;
+
+  return breadcrumbLayerGroup;
 }
 // Helper: 0..31 CSQ → 0..5 bars
 function signalBarsFrom(value){
@@ -2608,14 +2627,14 @@ function smoothSegment(arr){
     }
     segmentDecorators.length = 0; // keep same array reference; avoids leaks
   }
-  try{
+      try{
     initMap(); // idempotent
+    const crumbGroup = ensureBreadcrumbLayerGroup();
     await ensurePolylineDecorator();
     ensureDwellStyles();
 
-    // Clear previous overlays only; keep base view stable
-    segmentPolylines.forEach(l => { try{ l.remove(); }catch(_){} });
-    segmentMarkers.forEach (m => { try{ m.remove(); }catch(_){} });
+    // Clear only breadcrumb overlays; keep base map + live marker stable
+    try { crumbGroup.clearLayers(); } catch(_) {}
     resetDecorators();
     if (legendControl){ try{ map.removeControl(legendControl); }catch(_){}; legendControl = null; }
     segmentPolylines = [];
@@ -2754,36 +2773,40 @@ origIndexOfUsable.forEach((orig, i)=> segIdxMap.set(orig, i));
 const legendEntries = [];
 const allLatLngs = [];
 
-    for (let idx = 0; idx < segmentsToDraw.length; idx++){
-  const segArr = segmentsToDraw[idx];
-           const latlngs = segArr.map(p => [p.lat, p.lon]);
+        for (let idx = 0; idx < segmentsToDraw.length; idx++){
+      const segArr = segmentsToDraw[idx];
+      const latlngs = segArr.map(p => [p.lat, p.lon]);
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
 
-      // FIX: create the polyline for this segment (poly was previously undefined)
-      const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.85 }).addTo(map);
+      const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.85 });
+      crumbGroup.addLayer(poly);
       segmentPolylines.push(poly);
-      // Keep dots above the line (optional safety)
       if (typeof poly.bringToBack === 'function') poly.bringToBack();
 
       // Visible breadcrumb dots on the ORIGINAL (raw, decimated) fixes for hover & gap inspection
-      const rawSeg = usable[idx]; // not smoothed/ densified
+      const rawSeg = usable[idx];
       if (Array.isArray(rawSeg)) {
         rawSeg.forEach((p, j) => {
           const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: UI_TZ
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: UI_TZ
           });
+
           const dot = L.circleMarker([p.lat, p.lon], {
-            radius: 3,                 // small but visible “crumb”
-            color: '#ffffff',          // white rim for contrast
+            radius: 3,
+            color: '#ffffff',
             weight: 1,
-            fillColor: color,          // same hue as segment
-            fillOpacity: 0.65,         // semi-transparent
+            fillColor: color,
+            fillOpacity: 0.65,
             opacity: 0.9,
             interactive: true
           }).bindTooltip(tStr, { direction: 'top', offset: [0, -6] });
 
-          // Bring above polyline so the dot is hoverable
-          dot.addTo(map).bringToFront();
+          crumbGroup.addLayer(dot);
+          if (typeof dot.bringToFront === 'function') dot.bringToFront();
           segmentMarkers.push(dot);
         });
       }
@@ -2795,11 +2818,14 @@ const allLatLngs = [];
             offset: '10%',
             repeat: `${ARROW_REPEAT_PX}px`,
             symbol: L.Symbol.arrowHead({
-              pixelSize: ARROW_SIZE_PX, polygon:false,
-              pathOptions: { color, weight:2, opacity:0.9 }
+              pixelSize: ARROW_SIZE_PX,
+              polygon: false,
+              pathOptions: { color, weight: 2, opacity: 0.9 }
             })
           }]
-        }).addTo(map);
+        });
+
+        crumbGroup.addLayer(deco);
         segmentDecorators.push(deco);
       }
 
@@ -2807,42 +2833,64 @@ const allLatLngs = [];
       latlngs.forEach(ll => allLatLngs.push(ll));
 
       // legend: start→end time and distance
-      const t0 = segArr[0].ts, t1 = segArr[segArr.length-1].ts;
+      const t0 = segArr[0].ts, t1 = segArr[segArr.length - 1].ts;
       let distSum = 0;
-      for (let i=1;i<segArr.length;i++){ distSum += haversineM(segArr[i-1], segArr[i]); }
-      const durMin = Math.round((t1 - t0)/60000);
+      for (let i = 1; i < segArr.length; i++) {
+        distSum += haversineM(segArr[i - 1], segArr[i]);
+      }
+      const durMin = Math.round((t1 - t0) / 60000);
       const startStr = fmtClock(t0), endStr = fmtClock(t1);
       legendEntries.push({
         color,
-        line: `${startStr}→${endStr} • ${durMin} min • ${(distSum/1000).toFixed(2)} km`
+        line: `${startStr}→${endStr} • ${durMin} min • ${(distSum / 1000).toFixed(2)} km`
       });
     }
 
     // dwell markers: arrival ⟶ and departure ⟵ (with faint halo)
-    for (const ev of dwellEvents){
+        for (const ev of dwellEvents){
       const drawIdx = segIdxMap.has(ev.nextSegIdx) ? segIdxMap.get(ev.nextSegIdx)
                     : segIdxMap.has(ev.prevSegIdx) ? segIdxMap.get(ev.prevSegIdx) : 0;
       const color = SEGMENT_COLORS[drawIdx % SEGMENT_COLORS.length];
 
       // halo at dwell center
       const halo = L.circle([ev.center.lat, ev.center.lon], {
-        radius: HALO_RADIUS_M, color, weight: 1, opacity: 0.6,
-        fill: true, fillOpacity: 0.15
-      }).addTo(map);
+        radius: HALO_RADIUS_M,
+        color,
+        weight: 1,
+        opacity: 0.6,
+        fill: true,
+        fillOpacity: 0.15
+      });
+      crumbGroup.addLayer(halo);
       segmentMarkers.push(halo);
 
       // labels
       const startIcon = L.divIcon({
-        className: 'dwell-label', iconSize: [1,1], iconAnchor: [0,0],
+        className: 'dwell-label',
+        iconSize: [1,1],
+        iconAnchor: [0,0],
         html: `<div class="dwell-badge" style="border-color:${color};color:${color}">⟶ ${fmtClock(ev.start.ts)}</div>`
       });
       const endIcon = L.divIcon({
-        className: 'dwell-label', iconSize: [1,1], iconAnchor: [0,0],
+        className: 'dwell-label',
+        iconSize: [1,1],
+        iconAnchor: [0,0],
         html: `<div class="dwell-badge" style="border-color:${color};color:${color}">${fmtClock(ev.end.ts)} ⟵</div>`
       });
 
-      const mStart = L.marker([ev.start.lat, ev.start.lon], { icon: startIcon, interactive:false, zIndexOffset: 1000 }).addTo(map);
-      const mEnd   = L.marker([ev.end  .lat, ev.end  .lon],   { icon: endIcon,   interactive:false, zIndexOffset: 1000 }).addTo(map);
+      const mStart = L.marker([ev.start.lat, ev.start.lon], {
+        icon: startIcon,
+        interactive: false,
+        zIndexOffset: 1000
+      });
+      const mEnd = L.marker([ev.end.lat, ev.end.lon], {
+        icon: endIcon,
+        interactive: false,
+        zIndexOffset: 1000
+      });
+
+      crumbGroup.addLayer(mStart);
+      crumbGroup.addLayer(mEnd);
       segmentMarkers.push(mStart, mEnd);
     }
 
