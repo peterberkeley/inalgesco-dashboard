@@ -2773,31 +2773,37 @@ const allLatLngs = [];
 
     for (let idx = 0; idx < segmentsToDraw.length; idx++){
   const segArr = segmentsToDraw[idx];
-      const latlngs = segArr.map(p => [p.lat, p.lon]);
+           const latlngs = segArr.map(p => [p.lat, p.lon]);
       const color = SEGMENT_COLORS[idx % SEGMENT_COLORS.length];
 
- // Visible breadcrumb dots on the ORIGINAL (raw, decimated) fixes for hover & gap inspection
-const rawSeg = usable[idx]; // not smoothed/ densified
-if (Array.isArray(rawSeg)) {
-  rawSeg.forEach((p, j) => {
-    const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: UI_TZ
-    });
-    const dot = L.circleMarker([p.lat, p.lon], {
-      radius: 3,                 // small but visible “crumb”
-      color: '#ffffff',          // white rim for contrast
-      weight: 1,
-      fillColor: color,          // same hue as segment
-      fillOpacity: 0.65,         // semi-transparent
-      opacity: 0.9,
-      interactive: true
-    }).bindTooltip(tStr, { direction: 'top', offset: [0, -6] });
+      // FIX: create the polyline for this segment (poly was previously undefined)
+      const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.85 }).addTo(map);
+      segmentPolylines.push(poly);
+      // Keep dots above the line (optional safety)
+      if (typeof poly.bringToBack === 'function') poly.bringToBack();
 
-    // Bring above polyline so the dot is hoverable
-    dot.addTo(map).bringToFront();
-    segmentMarkers.push(dot);
-  });
-}
+      // Visible breadcrumb dots on the ORIGINAL (raw, decimated) fixes for hover & gap inspection
+      const rawSeg = usable[idx]; // not smoothed/ densified
+      if (Array.isArray(rawSeg)) {
+        rawSeg.forEach((p, j) => {
+          const tStr = new Date(p.ts).toLocaleTimeString('en-GB', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: UI_TZ
+          });
+          const dot = L.circleMarker([p.lat, p.lon], {
+            radius: 3,                 // small but visible “crumb”
+            color: '#ffffff',          // white rim for contrast
+            weight: 1,
+            fillColor: color,          // same hue as segment
+            fillOpacity: 0.65,         // semi-transparent
+            opacity: 0.9,
+            interactive: true
+          }).bindTooltip(tStr, { direction: 'top', offset: [0, -6] });
+
+          // Bring above polyline so the dot is hoverable
+          dot.addTo(map).bringToFront();
+          segmentMarkers.push(dot);
+        });
+      }
 
       // arrowheads along the line (direction cues)
       if (L.polylineDecorator && L.Symbol && L.Symbol.arrowHead){
