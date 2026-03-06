@@ -2546,10 +2546,15 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   const ARROW_SIZE_PX    = 8;                // arrowhead size
   const HALO_RADIUS_M    = 9;                // faint dwell halo radius (~8–10 m)
 
-  // Prevent overlaps
-  if (window.__breadcrumbLock) return;
+    // Prevent overlaps
+  // FIX: if a redraw is already in progress, keep only the latest request
+  // instead of dropping it. This avoids "old route stays on map" when the
+  // user switches trucks/ranges while a long breadcrumb fetch is running.
+  if (window.__breadcrumbLock) {
+    window.__breadcrumbPending = { deviceID, rangeMinutes };
+    return;
+  }
   window.__breadcrumbLock = true;
-
   const myTok = ++__crumbToken;
   if (__crumbAbort) { try { __crumbAbort.abort(); } catch(_){} }
   __crumbAbort = (function(){
@@ -2915,8 +2920,16 @@ const allLatLngs = [];
   } catch (err){
     if (err && err.name === 'AbortError') return;
     console.error('updateBreadcrumbs error (arrows+dwell):', err);
-  } finally {
+   } finally {
     window.__breadcrumbLock = false;
+
+    // Run the newest queued request, if one arrived while we were busy
+    const pending = window.__breadcrumbPending || null;
+    window.__breadcrumbPending = null;
+
+    if (pending) {
+      setTimeout(() => updateBreadcrumbs(pending.deviceID, pending.rangeMinutes), 0);
+    }
   }
 }
 /* =================== Range buttons =================== */
