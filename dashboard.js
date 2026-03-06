@@ -49,6 +49,15 @@ window.__deviceMap = {};
 let __chartsInFlight = false;
 let __chartsQueued   = false;
 
+// ── Chart history throttle (keeps KPIs live, reduces heavy history fetches) ──
+const CHART_REFRESH_MS = 60_000;   // history refresh max 1/min (tune if needed)
+let __chartsLastRunMs = 0;
+let __chartsDirty = true;          // force first render
+let __chartsKeyPrev = null;        // detects sensor/layout changes
+
+function markChartsDirty(){ __chartsDirty = true; }
+window.markChartsDirty = markChartsDirty;
+
 // Prevent overlapping updateAll() runs (timer + device change, etc.)
 let __updateInFlight = false;
 let __updateQueued   = false;
@@ -3012,9 +3021,10 @@ installSmoothToggleUI();
   updateAll();
   setInterval(updateAll, REFRESH_INTERVAL);
 
-  const sel = document.getElementById("deviceSelect");
+   const sel = document.getElementById("deviceSelect");
   if (sel) sel.addEventListener("change", () => {
     try { window.bumpSelEpoch(); } catch(_) {}
+    try { window.markChartsDirty?.(); } catch(_) {}
     __breadcrumbsFixed = false;    // allow new breadcrumbs for new device
     updateAll();
   });
@@ -3448,18 +3458,44 @@ if (deviceID) {
     liveDallas
   });
 
-    SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+      SENSORS = buildSensorSlots(deviceLabel, liveDallas, sensorMapConfig);
+
+  // Detect chart layout changes (device + addresses). ensureCharts sets window.__chartsKey.
+  const prevKey = window.__chartsKey || null;
   ensureCharts(SENSORS, dataDeviceID);      // key on the actual data device
+  const newKey  = window.__chartsKey || null;
+  if (prevKey !== newKey) {
+    __chartsKeyPrev = newKey;
+    __chartsDirty = true;
+  }
+
   initMap();                                // idempotent
 
+  // Decide if we should refresh heavy chart history this cycle
+  const nowMs = Date.now();
+  const doCharts =
+    __chartsDirty ||
+    !__chartsLastRunMs ||
+    (nowMs - __chartsLastRunMs) >= CHART_REFRESH_MS;
+
   if (selectedRangeMode === 'last') {
-    // LAST mode — skip poll(); draw charts first, then KPIs/map via drawKpiLast
-    await updateCharts(dataDeviceID, SENSORS);
+    // LAST mode — charts (if needed) then KPIs/map
+    if (doCharts) {
+      await updateCharts(dataDeviceID, SENSORS);
+    }
     await drawKpiLast(dataDeviceID, SENSORS);
   } else {
-    // NOW mode — normal fast KPI + charts
+    // NOW mode — KPIs always, charts only when needed / throttled
     await poll(dataDeviceID, SENSORS);
-    await updateCharts(dataDeviceID, SENSORS);
+    if (doCharts) {
+      await updateCharts(dataDeviceID, SENSORS);
+    }
+  }
+
+  // If updateCharts ran, it completed this cycle: mark clean + stamp time.
+  if (doCharts) {
+    __chartsLastRunMs = Date.now();
+    __chartsDirty = false;
   }
 
   await renderMaintenanceBox(deviceLabel, dataDeviceID);
