@@ -2185,123 +2185,117 @@ async function renderMaintenanceBox(truckLabel, deviceID){
 // Case-insensitive per-device CSV/crumbs fetch by var label (hex)
 async function fetchCsvRows(deviceID, varLabel, start, end, signal) {
   try {
-       // Special handling for GPS/position variables - per-device, with fallback
+          // Special handling for GPS/position variables - merge from all sources ON THIS DEVICE
     if (varLabel === 'position' || varLabel === 'gps' || varLabel === 'location') {
-      await ensureVarCache(deviceID);
-
-      const map = variableCache[deviceID] || {};
-      const gpsLabels = ['gps', 'position', 'location'].filter(lab => {
-        if (map[lab]) return true;
-        return Object.keys(map).some(k => String(k).toLowerCase() === lab);
-      });
-
-      if (!gpsLabels.length) {
-        console.warn('[fetchCsvRows] No GPS variables found for device', deviceID);
+      console.log('[fetchCsvRows] GPS request - merging all position variables');
+      
+      // Get ALL variables for this device
+      const varsUrl = `${UBIDOTS_V1}/variables/?device=${encodeURIComponent(deviceID)}&page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+      const varsResp = await fetch(varsUrl, signal ? { signal } : {});
+      
+      if (!varsResp.ok) {
+        console.error('[fetchCsvRows] Failed to fetch variables list');
         return [];
       }
-
-      const fetchPaged = async (url, hardCap = 4000) => {
-        const out = [];
-        let nextUrl = url;
-        while (nextUrl) {
-          const resp = await fetch(nextUrl, signal ? { signal } : {});
-          if (!resp.ok) break;
-          const data = await resp.json();
-          const rows = data?.results || [];
-          out.push(...rows);
-          if (out.length >= hardCap) break;
-          nextUrl = (data.next && typeof data.next === 'string')
-            ? `${data.next}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`
-            : null;
-        }
-        return out;
-      };
-
-      const validGpsRows = (rows) => (rows || []).filter(point => {
-        const lat = point?.context?.lat;
-        const lng = point?.context?.lng ?? point?.context?.lon;
-        return lat != null && lng != null && isFinite(point?.timestamp);
-      });
-
-      let allResults = [];
-      const sourceCounts = {};
-
-      // Pass 1: direct windowed fetch
-      for (const gpsLabel of gpsLabels) {
-        let gpsVarId = getVarIdCI(deviceID, gpsLabel);
-        if (!gpsVarId) gpsVarId = await resolveVarIdStrict(deviceID, gpsLabel);
-        if (!gpsVarId) continue;
-
-        let gpsUrl = `${UBIDOTS_V1}/variables/${encodeURIComponent(gpsVarId)}/values/?page_size=1000`;
+      
+      const varsData = await varsResp.json();
+      
+      // Find ALL position/gps/location variables FOR THIS DEVICE ONLY
+      const gpsVars = (varsData.results || []).filter(v => 
+        v.label === 'position' || v.label === 'gps' || v.label === 'location'
+      );
+      
+      console.log(`[fetchCsvRows] Found ${gpsVars.length} GPS variables to check`);
+      
+      if (gpsVars.length === 0) {
+        console.warn('[fetchCsvRows] No GPS variables found for device');
+        return [];
+      }
+      
+      // Fetch data from ALL GPS variables for this device
+      const allResults = [];
+      let varCount = 0;
+      
+      for (const gpsVar of gpsVars) {
+        let varUrl = `${UBIDOTS_V1}/variables/${gpsVar.id}/values/?page_size=1000`;
+        
         if (start !== undefined && start !== null) {
           const startMs = Math.floor(Number(start));
-          if (isFinite(startMs) && startMs > 0) gpsUrl += `&start=${startMs}`;
-        }
-        if (end !== undefined && end !== null) {
-          const endMs = Math.floor(Number(end));
-          if (isFinite(endMs) && endMs > 0) gpsUrl += `&end=${endMs}`;
-        }
-        gpsUrl += `&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-
-        const rows = validGpsRows(await fetchPaged(gpsUrl, 4000));
-        if (rows.length) {
-          sourceCounts[gpsLabel] = rows.length;
-          allResults.push(...rows);
-        }
-      }
-
-      // Pass 2: fallback if windowed fetch came back empty
-      if (!allResults.length) {
-        console.warn('[fetchCsvRows] GPS window query returned 0 rows; falling back to last-N + local filter', {
-          deviceID,
-          gpsLabels,
-          start,
-          end
-        });
-
-        for (const gpsLabel of gpsLabels) {
-          let gpsVarId = getVarIdCI(deviceID, gpsLabel);
-          if (!gpsVarId) gpsVarId = await resolveVarIdStrict(deviceID, gpsLabel);
-          if (!gpsVarId) continue;
-
-          const gpsUrl = `${UBIDOTS_V1}/variables/${encodeURIComponent(gpsVarId)}/values/?page_size=1000&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
-          let rows = validGpsRows(await fetchPaged(gpsUrl, 4000));
-
-          rows = rows.filter(r => {
-            const ts = r.timestamp;
-            if (start && ts < start) return false;
-            if (end && ts > end) return false;
-            return true;
-          });
-
-          if (rows.length) {
-            sourceCounts[gpsLabel] = rows.length;
-            allResults.push(...rows);
+          if (isFinite(startMs) && startMs > 0) {
+            varUrl += `&start=${startMs}`;
           }
         }
+        
+        if (end !== undefined && end !== null) {
+          const endMs = Math.floor(Number(end));
+          if (isFinite(endMs) && endMs > 0) {
+            varUrl += `&end=${endMs}`;
+          }
+        }
+        
+        varUrl += `&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`;
+        
+        try {
+          const varResp = await fetch(varUrl, signal ? { signal } : {});
+          
+          if (varResp.ok) {
+            const varData = await varResp.json();
+            
+            if (varData.results && varData.results.length > 0) {
+              console.log(`[fetchCsvRows] Variable ${gpsVar.id.substring(0,8)}... (${gpsVar.label}): ${varData.results.length} points`);
+              allResults.push(...varData.results);
+              varCount++;
+            }
+          }
+        } catch (e) {
+          if (e.name === 'AbortError') {
+            console.log('[fetchCsvRows] Request aborted');
+            return [];
+          }
+          console.warn(`[fetchCsvRows] Error fetching ${gpsVar.id}:`, e.message);
+        }
       }
-
+      
+      console.log(`[fetchCsvRows] Fetched data from ${varCount} variables, total ${allResults.length} points`);
+      
+      // Sort by timestamp (oldest first)
       allResults.sort((a, b) => a.timestamp - b.timestamp);
-
+      
+      // Deduplicate based on timestamp and location
       const uniqueResults = [];
       const seen = new Set();
+      
       allResults.forEach(point => {
         const lat = point.context?.lat;
-        const lng = point.context?.lng ?? point.context?.lon;
-        const key = `${point.timestamp}_${lat}_${lng}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueResults.push(point);
+        const lng = point.context?.lng || point.context?.lon;
+        
+        if (lat != null && lng != null) {
+          const key = `${point.timestamp}_${lat}_${lng}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueResults.push(point);
+          }
         }
       });
-
-      console.log('[fetchCsvRows] GPS rows fetched:', {
-        deviceID,
-        gpsLabels,
-        sourceCounts,
-        total: uniqueResults.length
-      });
-
+      
+      console.log(`[fetchCsvRows] After deduplication: ${uniqueResults.length} unique GPS points`);
+      
+      if ((start || end) && uniqueResults.length > 0) {
+        const filtered = uniqueResults.filter(r => {
+          const ts = r.timestamp;
+          if (!ts || !isFinite(ts)) return false;
+          if (start && ts < start) return false;
+          if (end && ts > end) return false;
+          return true;
+        });
+        
+        if (filtered.length !== uniqueResults.length) {
+          console.log('[fetchCsvRows] Time filter removed', uniqueResults.length - filtered.length, 'points outside range');
+        }
+        
+        return filtered;
+      }
+      
       return uniqueResults;
     }
     
