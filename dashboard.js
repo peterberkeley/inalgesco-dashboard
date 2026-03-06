@@ -2627,12 +2627,14 @@ function smoothSegment(arr){
       document.head.appendChild(s);
     });
   }
-  function resetDecorators(){
-    if (!Array.isArray(window.segmentDecorators)) { window.segmentDecorators = []; return; }
-    for (const d of window.segmentDecorators){ try{ d.remove(); }catch(_){} }
-    window.segmentDecorators = [];
+    function resetDecorators(){
+    // FIX: use the module-scoped `segmentDecorators` array (not window.*)
+    // Otherwise decorators are never removed and arrowheads duplicate every refresh.
+    for (const d of segmentDecorators){
+      try { d.remove(); } catch(_) {}
+    }
+    segmentDecorators.length = 0; // keep same array reference; avoids leaks
   }
-
   try{
     initMap(); // idempotent
     await ensurePolylineDecorator();
