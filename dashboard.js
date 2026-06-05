@@ -49,7 +49,7 @@ window.__deviceMap = {};
 let __chartsInFlight = false;
 let __chartsQueued   = false;
 
-// ── Chart history throttle (keeps KPIs live, reduces heavy history fetches) ──
+// ââ Chart history throttle (keeps KPIs live, reduces heavy history fetches) ââ
 const CHART_REFRESH_MS = 60_000;   // history refresh max 1/min (tune if needed)
 let __chartsLastRunMs = 0;
 let __chartsDirty = true;          // force first render
@@ -63,7 +63,7 @@ let __updateInFlight = false;
 let __updateQueued   = false;
 let __breadcrumbsFixed = false;  // prevents auto-refresh when true
 
-// Unified selection epoch — increment on any user selection that should cancel in-flight work
+// Unified selection epoch â increment on any user selection that should cancel in-flight work
 let __selEpoch = 0;
 function bumpSelEpoch(){
   // increment based on the public mirror to avoid any drift
@@ -124,7 +124,7 @@ const INTERP_STEP_MS  = 10 * 1000;  // densify step
 const SPEED_CAP_KMH   = 60;         // max plausible on apron
 const EMA_ALPHA       = 0.25;       // smoothing strength
 
-  const fmt = (v,p=1)=>(v==null||isNaN(v))?"–":(+v).toFixed(p);
+  const fmt = (v,p=1)=>(v==null||isNaN(v))?"â":(+v).toFixed(p);
 
 // Fast HH:MM formatter with per-timezone Intl cache
 const __dtfCache = {};
@@ -254,7 +254,7 @@ window.findDeviceByIccid = findDeviceByIccid;
  *  Rule:
  *   - If the device has NO admin-mapped sensors AND appears Offline (v2 Devices)
  *     AND we have no heartbeat variables (signal/volt/gps) to corroborate activity,
- *     and the current view is 'now' → suppress discovery (show nothing).
+ *     and the current view is 'now' â suppress discovery (show nothing).
  */
 async function shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline){
   // If Admin mapping exists, allow (we know which addresses belong to this truck)
@@ -285,7 +285,7 @@ async function shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline){
 async function shouldUseAdminDallas(deviceLabel, deviceID, isOnline){
   if (isOnline) return true;
   const adminICC = getAdminIccid(deviceLabel);
-  if (!adminICC) return false;                // no identity configured → don't trust
+  if (!adminICC) return false;                // no identity configured â don't trust
   const match = await iccidMatchesAdmin(deviceLabel, deviceID);
   return match === true;                      // only if we can *prove* identity
 }
@@ -397,7 +397,7 @@ async function fetchSensorMapConfig(){
 
       const display =
         name ||
-        (label.startsWith("skycafe-") ? label.replace(/^skycafe-/i, "SkyCafé ") : label);
+        (label.startsWith("skycafe-") ? label.replace(/^skycafe-/i, "SkyCafÃ© ") : label);
 
       context[key] = {
         label: display,
@@ -431,7 +431,7 @@ function buildDeviceDropdownFromConfig(sensorMap){
 
   entries.forEach(([dev,obj])=>{
     const isOnline = (now - (obj.last_seen||0)) < ONLINE_WINDOW_SEC;
-    const dot = isOnline ? "🟢" : "⚪️";
+    const dot = isOnline ? "ð¢" : "âªï¸";
     const opt = document.createElement("option");
     opt.value = dev;
     const displayLabel = getDisplayName(dev);
@@ -493,7 +493,7 @@ async function ensureVarCache(deviceID){
       if (lab && id && !map[lab]) map[lab] = id;
     });
 
-    // Supplement with v1.6 API — v2.0 only returns pinned variables, missing active probe addresses
+    // Supplement with v1.6 API â v2.0 only returns pinned variables, missing active probe addresses
     try {
       const v1Url = `https://industrial.api.ubidots.com/api/v1.6/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
       const v1R = await fetch(v1Url);
@@ -597,7 +597,7 @@ async function resolveGpsLabel(deviceID){
 
   if (bestLab) {
     gpsLabelCache[deviceID] = bestLab;
-    console.log('[gps label]', deviceID, '→', bestLab);
+    console.log('[gps label]', deviceID, 'â', bestLab);
     return bestLab;
   }
   gpsLabelCache[deviceID] = null; // cache miss so we never rescan for this device
@@ -669,7 +669,7 @@ async function computeLastAnchorMs(deviceID, SENSORS){
 // Expose for console/tests and to ensure global visibility in Safari
 window.computeLastAnchorMs = computeLastAnchorMs;
 
-// ------------- FRESH-ONLY DALLAS RESOLVER (≤48 h) -------------
+// ------------- FRESH-ONLY DALLAS RESOLVER (â¤48 h) -------------
 // Replace your existing fetchDallasAddresses function with this version
 // It properly filters sensors based on the selected time range
 
@@ -858,13 +858,22 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
       (entryA && typeof entryA.offset === 'number') ? entryA.offset :
       (entryM && typeof entryM.offset === 'number') ? entryM.offset : 0;
 
+    const auto_offset =
+      (entryA && typeof entryA.auto_offset === 'number') ? entryA.auto_offset :
+      (entryM && typeof entryM.auto_offset === 'number') ? entryM.auto_offset : 0;
+
+    const truckAA = adminMap.__autoAdjust || {};
+    const auto_adjust = !!(truckAA.enabled);
+
     return {
       id: addr,
       label,
       col: SENSOR_COLORS[idx % SENSOR_COLORS.length],
       chart: null,
       address: addr,
-      calibration: offset
+      calibration: offset,
+      auto_offset,
+      auto_adjust
     };
   });
 
@@ -872,6 +881,37 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
   slots.unshift({ id: "avg", label: "Chillrail Avg", col: SENSOR_COLORS[5], chart: null, address: null, calibration: 0 });
 
   return slots;
+}
+
+
+// ===== AUTO ADJUST — apply offset during confirmed cooling phases only =====
+function applyConditionalOffset(readings, offsetVal) {
+  if (!offsetVal || !readings || readings.length < 4) return readings;
+  const FADE_STEPS = 8;
+  const MIN_COOL_MS = 10 * 60 * 1000;
+  const SLOPE_WIN = 3;
+  const result = [];
+  let fraction = 0, coolingStartTs = null, coolingConfirmed = false;
+  const slopes = readings.map((r, i) => {
+    if (i < SLOPE_WIN) return 0;
+    const older = readings[i - SLOPE_WIN];
+    const dt = r.ts - older.ts;
+    return dt > 0 ? (r.v - older.v) / dt : 0;
+  });
+  for (let i = 0; i < readings.length; i++) {
+    const r = readings[i];
+    const isCooling = slopes[i] < 0;
+    if (isCooling) {
+      if (coolingStartTs === null) { coolingStartTs = r.ts; coolingConfirmed = false; }
+      if (!coolingConfirmed && (r.ts - coolingStartTs) >= MIN_COOL_MS) coolingConfirmed = true;
+      if (coolingConfirmed) fraction = Math.min(1, fraction + 1 / FADE_STEPS);
+    } else {
+      if (coolingStartTs !== null) { coolingStartTs = null; coolingConfirmed = false; }
+      fraction = Math.max(0, fraction - 1 / FADE_STEPS);
+    }
+    result.push({ ts: r.ts, v: r.v + offsetVal * fraction });
+  }
+  return result;
 }
 
 //Part 2
@@ -900,7 +940,7 @@ function initCharts(SENSORS){
   borderWidth:3,
   fill:false,
   backgroundColor:'transparent',
-  // parsing:false,  // ← remove this line
+  // parsing:false,  // â remove this line
   pointRadius:2,            // TEMP: make dots visible while testing
   pointHoverRadius:4,
   spanGaps:true
@@ -943,7 +983,7 @@ function ensureCharts(SENSORS, deviceID){
     .join(',');
   const key = `${String(deviceID)}|${addrsSorted}`;
 
-  // ── Reuse existing canvases, but REFRESH labels/colors and DOM order to match SENSORS ──
+  // ââ Reuse existing canvases, but REFRESH labels/colors and DOM order to match SENSORS ââ
   if (chartsEl && window.__chartsKey === key && chartsEl.children && chartsEl.children.length){
     const boxes = Array.from(chartsEl.querySelectorAll('.chart-box'));
     const boxByAddr  = new Map();
@@ -992,7 +1032,7 @@ function ensureCharts(SENSORS, deviceID){
     return;   // ends the reuse branch
   }
 
-  // ── Full rebuild when device/layout changed ──
+  // ââ Full rebuild when device/layout changed ââ
   if (Array.isArray(window.__currentCharts)) {
     window.__currentCharts.forEach(c => { try { c.destroy(); } catch(_){} });
   }
@@ -1019,7 +1059,7 @@ async function updateCharts(deviceID, SENSORS){
 
   }
 
-     // ── LOCK ONLY: prevent overlapping repaints; no pre-wipe ──
+     // ââ LOCK ONLY: prevent overlapping repaints; no pre-wipe ââ
     if (__chartsInFlight) { __chartsQueued = true; return; }
   __chartsInFlight = true;
   const __chartsT0 = performance.now();
@@ -1078,8 +1118,8 @@ async function updateCharts(deviceID, SENSORS){
         }
       }
 
-                   // 3) No anchor → clear charts and exit (prevents painting another device's data)
-            // 3) No anchor → keep previous draw and exit
+                   // 3) No anchor â clear charts and exit (prevents painting another device's data)
+            // 3) No anchor â keep previous draw and exit
       if (!Number.isFinite(tLast) || tLast === -Infinity) {
         const rng0 = document.getElementById('chartRange');
         if (rng0) rng0.textContent = '';
@@ -1110,7 +1150,7 @@ async function updateCharts(deviceID, SENSORS){
           const anchorNew = (tLastAgeSec >= 0) && (tLastAgeSec < FRESH_ANCHOR);
 
           if (v2Stale && anchorNew) {
-            console.warn('[sanity] NOW: v2 last_seen stale + fresh anchor — blanking to avoid cross-truck illusion.');
+            console.warn('[sanity] NOW: v2 last_seen stale + fresh anchor â blanking to avoid cross-truck illusion.');
             const rng0 = document.getElementById('chartRange');
             if (rng0) rng0.textContent = '';
             SENSORS.forEach(s => {
@@ -1131,7 +1171,7 @@ async function updateCharts(deviceID, SENSORS){
            // 4) Fixed 60-min window ending at tLast
       wndEnd   = tLast;
       wndStart = tLast - (60 * 60 * 1000);
-    } // ← CLOSE the `else { ... }` block for selectedRangeMode !== 'now'
+    } // â CLOSE the `else { ... }` block for selectedRangeMode !== 'now'
 
        // --- 2) Fetch series: window for NOW, last-N for LAST ---
 
@@ -1250,8 +1290,11 @@ async function updateCharts(deviceID, SENSORS){
       if (!s.address || !s.chart) return;
       const ordered = seriesByAddr.get(s.address) || [];
  const labels = ordered.map(r => fmtTimeHHMM(r.timestamp, UI_TZ));
-      const data   = ordered.map(r => {
-        let v = parseFloat(r.value);
+      const rawRdings = ordered.map(r => ({ ts: r.timestamp, v: parseFloat(r.value) }));
+      const adjRdings = (s.auto_adjust && s.auto_offset)
+        ? applyConditionalOffset(rawRdings, s.auto_offset) : rawRdings;
+      const data = adjRdings.map(r => {
+        let v = r.v;
         if (typeof s.calibration === 'number') v += s.calibration;
         return Number.isFinite(v) ? v : null;
       });
@@ -1279,10 +1322,13 @@ async function updateCharts(deviceID, SENSORS){
         if (!s.address) continue;
         const arr = seriesByAddr.get(s.address) || [];
         if (!arr.length) continue;
-        const items = arr.map(r=>{
-          let v = parseFloat(r.value);
+        const rawRdings2 = arr.map(r => ({ ts: r.timestamp, v: parseFloat(r.value) }));
+        const adjRdings2 = (s.auto_adjust && s.auto_offset)
+          ? applyConditionalOffset(rawRdings2, s.auto_offset) : rawRdings2;
+        const items = adjRdings2.map(r => {
+          let v = r.v;
           if (typeof s.calibration === 'number') v += s.calibration;
-          return { ts: Math.floor(r.timestamp/60000)*60000, v: Number.isFinite(v) ? v : null };
+          return { ts: Math.floor(r.ts/60000)*60000, v: Number.isFinite(v) ? v : null };
         }).filter(o => o.v != null);
         if (items.length) series.push(items);
       }
@@ -1335,7 +1381,7 @@ async function updateCharts(deviceID, SENSORS){
       const same = a.toDateString()===b.toDateString();
    const fmtD = d=>d.toLocaleDateString('en-GB', { year:'numeric', month:'short', day:'numeric', timeZone: UI_TZ });
 const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone: UI_TZ });
-      rng.textContent = same ? `${fmtD(a)} · ${fmtT(a)}–${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} → ${fmtD(b)} ${fmtT(b)}`;
+      rng.textContent = same ? `${fmtD(a)} Â· ${fmtT(a)}â${fmtT(b)}` : `${fmtD(a)} ${fmtT(a)} â ${fmtD(b)} ${fmtT(b)}`;
     } else if (rng) {
       rng.textContent = '';
     }
@@ -1348,7 +1394,7 @@ const fmtT = d=>d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit'
   }
 }
 
-// Part 3 — FAST live paint: bulk last values, then fallback
+// Part 3 â FAST live paint: bulk last values, then fallback
 async function poll(deviceID, SENSORS){
     { // stale-call guard: if user changed dropdown mid-fetch, abort this run
     const selNow = document.getElementById('deviceSelect')?.value || null;
@@ -1440,7 +1486,7 @@ if (selectedRangeMode === 'last') {
     const anchorFresh = (tLastAgeSec >= 0) && (tLastAgeSec < (6 * 3600));
 
     if (v2Stale && anchorFresh) {
-      console.warn('[sanity] NOW: v2 last_seen stale + fresh anchor — suppressing draw.');
+      console.warn('[sanity] NOW: v2 last_seen stale + fresh anchor â suppressing draw.');
       const rng0 = document.getElementById('chartRange'); if (rng0) rng0.textContent = '';
       SENSORS.forEach(s => {
         if (!s.chart) return;
@@ -1456,7 +1502,7 @@ if (selectedRangeMode === 'last') {
 }
 
 
-    // Filter each value into the window; out-of-window → blank (null/undefined)
+    // Filter each value into the window; out-of-window â blank (null/undefined)
     const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
 
     // Temps by address (keep only values whose timestamp is in window)
@@ -1490,9 +1536,9 @@ try {
     let got = iccidNow;
     if (!got) got = await fetchDeviceIccid(deviceID); // fallback if bulk didn't carry it
     if (got && want !== String(got).trim()) {
-      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', want, 'now=', got, '— suppressing draw.');
+      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', want, 'now=', got, 'â suppressing draw.');
       const rng0 = document.getElementById('chartRange'); 
-      if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
+      if (rng0) rng0.textContent = 'ICCID mismatch â data hidden';
 
       // Clear charts immediately
       SENSORS.forEach(s => {
@@ -1572,7 +1618,7 @@ if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
     lastLat = devLoc.lat; lastLon = devLoc.lon;
     lat = devLoc.lat;  lon = devLoc.lon;
   } else {
-    // No device.location → fall back to scanning for a GPS variable once
+    // No device.location â fall back to scanning for a GPS variable once
     const gpsLabel = await resolveGpsLabel(deviceID);
     if (gpsLabel) {
       gpsArr = await fetchUbidotsVar(deviceID, gpsLabel, 1);
@@ -1626,7 +1672,7 @@ if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
   }
   const inWnd = ts => (isFinite(ts) && ts >= startTimeMs && ts <= endTimeMs);
 
-  // Filter each value into the window; out-of-window → blank
+  // Filter each value into the window; out-of-window â blank
   // Temps:
   const readingsInWindow = {};
   await Promise.all(SENSORS.filter(s => s.address).map(async s => {
@@ -1655,9 +1701,9 @@ try {
     const want = String(adminIcc).trim();
     const got  = iccidVal || (await fetchDeviceIccid(deviceID));
     if (got && want !== String(got).trim()) {
-      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', want, 'now=', got, '— suppressing draw.');
+      console.warn('[identity] ICCID mismatch for', selectedLabel, 'admin=', want, 'now=', got, 'â suppressing draw.');
       const rng0 = document.getElementById('chartRange'); 
-      if (rng0) rng0.textContent = 'ICCID mismatch — data hidden';
+      if (rng0) rng0.textContent = 'ICCID mismatch â data hidden';
       SENSORS.forEach(s => {
         if (!s.chart) return;
         s.chart.data.labels = [];
@@ -1683,7 +1729,7 @@ try {
   if (typeof c.speed === 'number') speedInWnd = c.speed;
 }
 
-// Keep last-known GPS age for label (used by drawLive to show “(last known)”)
+// Keep last-known GPS age for label (used by drawLive to show â(last known)â)
 // Do NOT null-out lastLat/lastLon here; they may hold the previous valid GPS.
 if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
 
@@ -1700,7 +1746,7 @@ if (tsGps) lastGpsAgeMin = Math.round((Date.now() - tsGps) / 60000);
 
   // Panel timestamp:
   // - 'last' mode: anchor to the last data window
-  // - 'now' mode: only if there is in-window data; else null (prevents “today” on offline)
+  // - 'now' mode: only if there is in-window data; else null (prevents âtodayâ on offline)
   const tsPanel = (selectedRangeMode === 'last') ? endTimeMs : (hasAny ? endTimeMs : null);
   // Abort if selection changed while we were fetching
   if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
@@ -1860,7 +1906,7 @@ function ensureBreadcrumbLayerGroup(){
 
   return breadcrumbLayerGroup;
 }
-// Helper: 0..31 CSQ → 0..5 bars
+// Helper: 0..31 CSQ â 0..5 bars
 function signalBarsFrom(value){
   if (value == null || isNaN(value)) return 0;
   const v = Number(value);
@@ -1870,7 +1916,7 @@ function signalBarsFrom(value){
 function drawLive(data, SENSORS){
   let {ts,iccid,lat,lon,lastLat,lastLon,lastGpsAgeMin,speed,signal,volt,readings} = data;
 
-  // IMPORTANT: keep `ts === null` as null (caller uses null to mean “no in-window data”)
+  // IMPORTANT: keep `ts === null` as null (caller uses null to mean âno in-window dataâ)
   // Only default to "now" when ts is truly missing/undefined.
   if (ts === undefined) ts = Date.now();
 
@@ -1878,7 +1924,7 @@ function drawLive(data, SENSORS){
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
     .filter(v=>v!=null && isFinite(v));
   const avg = temps.length ? (temps.reduce((a,b)=>a+b,0)/temps.length) : null;
-  document.getElementById("kpiAvg").textContent = avg!=null ? fmt(avg,1) + "°" : "—";
+  document.getElementById("kpiAvg").textContent = avg!=null ? fmt(avg,1) + "Â°" : "â";
 
   const devSel = document.getElementById("deviceSelect");
   const deviceKey = devSel ? devSel.value : '';
@@ -1889,7 +1935,7 @@ function drawLive(data, SENSORS){
   const sigBars = signalBarsFrom(signal);
   const sigClass = sigBars >= 4 ? 'high' : (sigBars >= 2 ? 'med' : 'low');
   const sigHtml =
-    (signal != null ? String(signal) : "—") + " " +
+    (signal != null ? String(signal) : "â") + " " +
     `<span class="sig ${sigClass}">
        <i class="l1 ${sigBars>0?'on':''}"></i>
        <i class="l2 ${sigBars>1?'on':''}"></i>
@@ -1909,7 +1955,7 @@ function drawLive(data, SENSORS){
   const useLat = hasFresh ? lat : ((lastLat != null && isFinite(lastLat)) ? lastLat : null);
   const useLon = hasFresh ? lon : ((lastLon != null && isFinite(lastLon)) ? lastLon : null);
 
-  let locationHtml = "—";
+  let locationHtml = "â";
   if (useLat != null && useLon != null) {
     const href = `https://maps.google.com/?q=${useLat},${useLon}`;
     const label = `${Number(useLat).toFixed(6)}, ${Number(useLon).toFixed(6)}`;
@@ -1923,7 +1969,7 @@ function drawLive(data, SENSORS){
   const rows = [];
 
   // Build 2-line Local Time derived **only** from the data window.
-  // If no in-window data, show "—" (prevents showing today's date for offline devices).
+  // If no in-window data, show "â" (prevents showing today's date for offline devices).
 const tz = data.tz || UI_TZ;
   if (ts && isFinite(ts)) {
     const localDate = new Date(ts).toLocaleDateString('en-GB', { timeZone: tz });
@@ -1936,7 +1982,7 @@ const tz = data.tz || UI_TZ;
     });
     rows.push(["Local Time", `<div>${localDate}</div><div class="text-gray-500">${localTime}</div>`]);
   } else {
-    rows.push(["Local Time", "—"]);
+    rows.push(["Local Time", "â"]);
   }
 
   if ((lat == null || lon == null) && lastLat != null && lastLon != null) {
@@ -1946,13 +1992,13 @@ const tz = data.tz || UI_TZ;
   }
 
 
-  rows.push(["ICCID", iccid || "—"]);
+  rows.push(["ICCID", iccid || "â"]);
 
   const _fresh = (lat != null && isFinite(lat) && lon != null && isFinite(lon));
   const _lat   = _fresh ? Number(lat) : (isFinite(lastLat) ? Number(lastLat) : null);
   const _lon   = _fresh ? Number(lon) : (isFinite(lastLon) ? Number(lastLon) : null);
 
-  let _locationHtml = "—";
+  let _locationHtml = "â";
   if (_lat != null && _lon != null) {
     const _href  = `https://maps.google.com/?q=${_lat},${_lon}`;
     const _label = `${_lat.toFixed(6)}, ${_lon.toFixed(6)}`;
@@ -1967,7 +2013,7 @@ const tz = data.tz || UI_TZ;
   rows.push(["Location", _locationHtml]);
   rows.push(["Speed (km/h)", fmt(speed, 1)]);
   rows.push(["Signal", sigHtml]);
-  rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "—"]);
+  rows.push(["Volt (V)", (volt != null && isFinite(volt)) ? Number(volt).toFixed(2) : "â"]);
   rows.push(...sensorRows);
 
   document.getElementById("latest").innerHTML =
@@ -2006,7 +2052,7 @@ if (haveFresh) {
   tooltipNote = '(last known)';
 } else {
   target = [STATIC_BASE.lat, STATIC_BASE.lon];
-  tooltipNote = '(SkyCafè PHX)';
+  tooltipNote = '(SkyCafÃ¨ PHX)';
   console.info('[map] Using static base location (Phoenix) for non-GPS truck');
 }
 
@@ -2030,7 +2076,7 @@ if (shouldMove) {
   marker.setLatLng(target);
   marker.bindTooltip(tooltipNote, { direction:'top', offset:[0,-8] }).openTooltip();
 
-  // Only adjust view if we’re far enough or we’ve never set a zoom
+  // Only adjust view if weâre far enough or weâve never set a zoom
   const wantZoom = Math.max(map.getZoom() || 0, ZOOM_MIN);
   if (firstPlacement || distFromPrev > MOVE_THRESH_M) {
     map.setView(target, wantZoom);
@@ -2040,7 +2086,7 @@ if (shouldMove) {
   window.__lastMapTarget = target;
   window.__lastMapZoom = map.getZoom();
 } else {
-  // No meaningful move → just keep marker where it was (no setView)
+  // No meaningful move â just keep marker where it was (no setView)
   // (Minor tooltip refresh if state changed)
   try {
     const tt = marker.getTooltip();
@@ -2418,7 +2464,7 @@ async function downloadCsvForCurrentSelection(){
       return;
     }
 
-    if(expStatus) expStatus.textContent = "Building CSV…";
+    if(expStatus) expStatus.textContent = "Building CSVâ¦";
 
     // Columns: timestamp ISO, lat, lng, speed, signal, volt, then each temp sensor (by label)
     const baseCols = ["timestamp", "lat", "lng", "speed", "signal", "volt"];
@@ -2511,16 +2557,16 @@ async function downloadCsvForCurrentSelection(){
 // part 4
 /* =================== Breadcrumb route drawing (manual refresh, arrows + dwell markers) =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
-  // ── thresholds & styles ──
-  const MIN_DIST_M       = 15;                // decimator: keep if ≥5 m since last-kept
+  // ââ thresholds & styles ââ
+  const MIN_DIST_M       = 15;                // decimator: keep if â¥5 m since last-kept
   const MIN_DT_MS        = 55 * 1000;        // decimator: accept ~60 s cadence jitter
   const MAX_SPEED_KMH    = 120;              // drop teleports
  const GAP_SPLIT_MS     = 2 * 60 * 1000;    // new segment if gap > 2 min
   const DWELL_RADIUS_M   = 5;                // dwell cluster radius
-  const DWELL_TIME_MS    = 10 * 60 * 1000;   // new journey after ≥10 min dwell
+  const DWELL_TIME_MS    = 10 * 60 * 1000;   // new journey after â¥10 min dwell
   const ARROW_REPEAT_PX  = 25;               // arrow spacing along line
   const ARROW_SIZE_PX    = 8;                // arrowhead size
-  const HALO_RADIUS_M    = 9;                // faint dwell halo radius (~8–10 m)
+  const HALO_RADIUS_M    = 9;                // faint dwell halo radius (~8â10 m)
 
     // Prevent overlaps
   // FIX: if a redraw is already in progress, keep only the latest request
@@ -2540,7 +2586,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   const signal = __crumbAbort.signal;
   const __epochAtStart = Number(window.__selEpoch) || 0;
 
-  // ── helpers ──
+  // ââ helpers ââ
   const toRad = d => d * Math.PI / 180;
   const haversineM = (a,b) => {
     const R=6371000; const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
@@ -2552,7 +2598,7 @@ async function updateBreadcrumbs(deviceID, rangeMinutes){
   const fmtClock = ts => new Date(ts).toLocaleTimeString('en-GB', {
     hour:'2-digit', minute:'2-digit', hour12:false, timeZone: UI_TZ
   });
-// Insert intermediate points every INTERP_STEP_MS if implied speed ≤ SPEED_CAP_KMH
+// Insert intermediate points every INTERP_STEP_MS if implied speed â¤ SPEED_CAP_KMH
 function densifySegment(arr){
   if (!Array.isArray(arr) || arr.length < 2) return arr;
   const out = [arr[0]];
@@ -2589,15 +2635,15 @@ function densifySegment(arr){
 // Exponential moving average smoother for lat/lon (preserves last point)
 function smoothSegment(arr){
   if (!Array.isArray(arr) || arr.length < 3) return arr;
-  const α = EMA_ALPHA;
+  const Î± = EMA_ALPHA;
   const out = [arr[0]];
   for (let i=1; i<arr.length; i++){
     const prev = out[out.length-1];
     const p = arr[i];
     out.push({
       ts:   p.ts,
-      lat:  prev.lat + α*(p.lat - prev.lat),
-      lon:  prev.lon + α*(p.lon - prev.lon),
+      lat:  prev.lat + Î±*(p.lat - prev.lat),
+      lon:  prev.lon + Î±*(p.lon - prev.lon),
       speed:p.speed
     });
   }
@@ -2690,7 +2736,7 @@ function smoothSegment(arr){
       return;
     }
 
-    // 3) SEGMENT first (gaps + dwell≥10 min within 5 m)
+    // 3) SEGMENT first (gaps + dwellâ¥10 min within 5 m)
     const segments = [];      // array<array<Point>>
     const dwellEvents = [];   // array<{start,end,center,prevSegIdx,nextSegIdx}>
     let seg = [ rows[0] ];
@@ -2742,7 +2788,7 @@ function smoothSegment(arr){
 
           dwellEvents.push({ start: startPt, end: endPt, center, prevSegIdx, nextSegIdx: prevSegIdx + 1 });
         } else {
-          // movement but dwell not long enough → reset dwell origin to current point
+          // movement but dwell not long enough â reset dwell origin to current point
           dwellOriginIdx = seg.length - 1;
           dwellOriginTs  = cur.ts;
         }
@@ -2843,7 +2889,7 @@ const allLatLngs = [];
       // accumulate for fitBounds
       latlngs.forEach(ll => allLatLngs.push(ll));
 
-      // legend: start→end time and distance
+      // legend: startâend time and distance
       const t0 = segArr[0].ts, t1 = segArr[segArr.length - 1].ts;
       let distSum = 0;
       for (let i = 1; i < segArr.length; i++) {
@@ -2853,11 +2899,11 @@ const allLatLngs = [];
       const startStr = fmtClock(t0), endStr = fmtClock(t1);
       legendEntries.push({
         color,
-        line: `${startStr}→${endStr} • ${durMin} min • ${(distSum / 1000).toFixed(2)} km`
+        line: `${startStr}â${endStr} â¢ ${durMin} min â¢ ${(distSum / 1000).toFixed(2)} km`
       });
     }
 
-    // dwell markers: arrival ⟶ and departure ⟵ (with faint halo)
+    // dwell markers: arrival â¶ and departure âµ (with faint halo)
         for (const ev of dwellEvents){
       const drawIdx = segIdxMap.has(ev.nextSegIdx) ? segIdxMap.get(ev.nextSegIdx)
                     : segIdxMap.has(ev.prevSegIdx) ? segIdxMap.get(ev.prevSegIdx) : 0;
@@ -2880,13 +2926,13 @@ const allLatLngs = [];
         className: 'dwell-label',
         iconSize: [1,1],
         iconAnchor: [0,0],
-        html: `<div class="dwell-badge" style="border-color:${color};color:${color}">⟶ ${fmtClock(ev.start.ts)}</div>`
+        html: `<div class="dwell-badge" style="border-color:${color};color:${color}">â¶ ${fmtClock(ev.start.ts)}</div>`
       });
       const endIcon = L.divIcon({
         className: 'dwell-label',
         iconSize: [1,1],
         iconAnchor: [0,0],
-        html: `<div class="dwell-badge" style="border-color:${color};color:${color}">${fmtClock(ev.end.ts)} ⟵</div>`
+        html: `<div class="dwell-badge" style="border-color:${color};color:${color}">${fmtClock(ev.end.ts)} âµ</div>`
       });
 
       const mStart = L.marker([ev.start.lat, ev.start.lon], {
@@ -3003,7 +3049,7 @@ function wireRangeButtons(){
       const unit = m[2].toLowerCase();
       if (unit === 'h') return Math.round(val * 60);
       if (unit === 'm') return Math.round(val);
-      // No unit: treat small numbers (≤48) as hours, larger as minutes
+      // No unit: treat small numbers (â¤48) as hours, larger as minutes
       return (val <= 48) ? Math.round(val * 60) : Math.round(val);
     }
     const n = Number(raw);
@@ -3039,7 +3085,7 @@ function wireDateInputsCommit(){
 
 /* =================== Main update loop =================== */
 onReady(() => {
-  // Wire buttons immediately; if it throws, don’t block the rest of init
+  // Wire buttons immediately; if it throws, donât block the rest of init
   try { wireRangeButtons(); } catch (e) { console.warn('[init] wireRangeButtons failed:', e); }
 installSmoothToggleUI();   
   wireDateInputsCommit();          // commit date instantly
@@ -3057,7 +3103,7 @@ installSmoothToggleUI();
 });
 
 
-// === INSERT ↓ (helpers used by LAST-mode selection) =========================
+// === INSERT â (helpers used by LAST-mode selection) =========================
 async function __countRowsFast(deviceID, varLabel, maxPages = 3){
   try{
     await ensureVarCache(deviceID);
@@ -3093,7 +3139,7 @@ async function __topHexByRows(deviceID, k = 3){
 }
 
 
-// === INSERT ↑ ===============================================================
+// === INSERT â ===============================================================
 // New: pick top hex labels by newest timestamp (no pagination, 1 row per label)
 async function __topHexByNewestTs(deviceID, k = 3){
   await ensureVarCache(deviceID);
@@ -3165,7 +3211,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
         const isOnline = (nowSecForBuild - (obj.last_seen || 0)) < ONLINE_WINDOW_SEC;
         const opt = document.createElement("option");
         opt.value = dev;
-        opt.text  = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(dev)} (${isOnline ? "Online" : "Offline"})`;
+        opt.text  = `${isOnline ? "ð¢" : "âªï¸"} ${getDisplayName(dev)} (${isOnline ? "Online" : "Offline"})`;
         sel.appendChild(opt);
       }
 
@@ -3207,7 +3253,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
 
     // No heartbeat vars -> keep Offline and stop re-check for this device
     if (hb.length === 0) {
-      opt.text = `⚪️ ${getDisplayName(label)} (Offline)`;
+      opt.text = `âªï¸ ${getDisplayName(label)} (Offline)`;
       return;
     }
 
@@ -3224,7 +3270,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
     }
 
     const ageOk = bestTs && (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
-    opt.text = `${ageOk ? "🟢" : "⚪️"} ${getDisplayName(label)} (${ageOk ? "Online" : "Offline"})`;
+    opt.text = `${ageOk ? "ð¢" : "âªï¸"} ${getDisplayName(label)} (${ageOk ? "Online" : "Offline"})`;
   } catch (e) {
     console.warn("dropdown re-check failed for", label, e);
   }
@@ -3250,14 +3296,14 @@ function __resolveSelectedDevice(sensorMap){
     }
   }
 
-  // NO FALLBACK — prevent binding to “first device”
+  // NO FALLBACK â prevent binding to âfirst deviceâ
   return { deviceLabel: key, deviceID: null };
 }
 
 const { deviceLabel, deviceID } = __resolveSelectedDevice(sensorMap);
 
 
-// DEBUG: show binding to ensure we’re fetching from the selected device
+// DEBUG: show binding to ensure weâre fetching from the selected device
 console.debug('[device binding]', { selected: document.getElementById('deviceSelect')?.value, deviceLabel, deviceID });
 
 
@@ -3322,9 +3368,9 @@ console.log('[lastSeen]', {
     const dd = document.getElementById("deviceSelect");
     if (dd && dd.selectedIndex >= 0) {
       const opt = dd.options[dd.selectedIndex];
-      opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
+      opt.text = `${isOnline ? "ð¢" : "âªï¸"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
     }
-   // Update KPI “last updated” using lastSeenSec (localized to Phoenix)
+   // Update KPI âlast updatedâ using lastSeenSec (localized to Phoenix)
 {
   const el = document.getElementById("kpiSeen");
   if (el) {
@@ -3341,7 +3387,7 @@ console.log('[lastSeen]', {
       const zoneLabel = UI_TZ.split('/')[1] || UI_TZ; // shows "Phoenix"
       el.innerHTML = `<div>${dStr}</div><div class="text-gray-500">${tStr} (${zoneLabel})</div>`;
     } else {
-      el.textContent = "—";
+      el.textContent = "â";
     }
   }
 }
@@ -3355,8 +3401,8 @@ let dataDeviceLabel = deviceLabel;
 
 /**
  * LAST-mode robust selector:
- * 1) If Admin ICCID exists AND matches the selected device → keep selected.
- * 2) Else if Admin ICCID exists but mismatch → rebind by ICCID (if found).
+ * 1) If Admin ICCID exists AND matches the selected device â keep selected.
+ * 2) Else if Admin ICCID exists but mismatch â rebind by ICCID (if found).
  * 3) Else (no Admin ICCID): pick the device that actually holds the most rows
  *    for the first admin-mapped Dallas address (fast heuristic).
  */
@@ -3368,13 +3414,13 @@ try {
       if (match !== true) {
         const rebound = await findDeviceByIccid(adminICC, window.__deviceMap);
         if (rebound && rebound.deviceID) {
-          console.warn('[rebind] ICCID-bound device for', deviceLabel, '→', rebound.deviceLabel, rebound.deviceID);
+          console.warn('[rebind] ICCID-bound device for', deviceLabel, 'â', rebound.deviceLabel, rebound.deviceID);
           dataDeviceID    = rebound.deviceID;
           dataDeviceLabel = rebound.deviceLabel;
         }
       }
         } else {
-      // PATCH: disable automatic row-count rebinding — keep current device.
+      // PATCH: disable automatic row-count rebinding â keep current device.
       const adminAddrs = getAdminAddresses(deviceLabel) || [];
       const targetAddr = adminAddrs[0] || null;
 
@@ -3395,7 +3441,7 @@ try {
         }
       }
       // Always keep current selection (no automatic jump)
-      console.warn('[rebind skipped] keeping', deviceLabel, '→', dataDeviceLabel);
+      console.warn('[rebind skipped] keeping', deviceLabel, 'â', dataDeviceLabel);
     }
 
   }
@@ -3409,7 +3455,7 @@ try {
 if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
-  // 6) Discovered addresses for this device — recompute per device
+  // 6) Discovered addresses for this device â recompute per device
   let discovered = [];
   try {
     const suppress = await shouldSuppressAutoDallas(deviceLabel, dataDeviceID, isOnline);
@@ -3470,7 +3516,7 @@ if (deviceID) {
     } else if (Array.isArray(discovered) && discovered.length > 0) {
       liveDallas = discovered;
     } else {
-      console.warn('[Dallas gating] No trusted sensors for', deviceLabel, '→ skip charts');
+      console.warn('[Dallas gating] No trusted sensors for', deviceLabel, 'â skip charts');
       liveDallas = [];
     }
   }
@@ -3506,13 +3552,13 @@ if (deviceID) {
     (nowMs - __chartsLastRunMs) >= CHART_REFRESH_MS;
 
   if (selectedRangeMode === 'last') {
-    // LAST mode — charts (if needed) then KPIs/map
+    // LAST mode â charts (if needed) then KPIs/map
     if (doCharts) {
       await updateCharts(dataDeviceID, SENSORS);
     }
     await drawKpiLast(dataDeviceID, SENSORS);
   } else {
-    // NOW mode — KPIs always, charts only when needed / throttled
+    // NOW mode â KPIs always, charts only when needed / throttled
     await poll(dataDeviceID, SENSORS);
     if (doCharts) {
       await updateCharts(dataDeviceID, SENSORS);
@@ -3589,7 +3635,7 @@ if (!document.getElementById('mapAllOverlay')) {
     'display:none',
     'position:fixed',
     'inset:0',
-    'z-index:9999',              // ↑ ensure overlay beats any Leaflet panes
+    'z-index:9999',              // â ensure overlay beats any Leaflet panes
     'background:#fff',
     'box-sizing:border-box'
   ].join(';');
@@ -3783,9 +3829,9 @@ const mk = L.circleMarker([offsetLat, offsetLon], {
     return div;
   };
   mapAllLegend.addTo(mapAll);
-  // ──────────────────────────────
+  // ââââââââââââââââââââââââââââââ
   // SAFE ASCII-ONLY DIAGNOSTIC LOG
-  // ──────────────────────────────
+  // ââââââââââââââââââââââââââââââ
   try {
     const summary = {
       plotted: plotted,
@@ -3825,10 +3871,10 @@ window.fetchUbidotsVar = fetchUbidotsVar;
 window.fetchCsvRows = fetchCsvRows;
 window.ensureVarCache = ensureVarCache;
 
-/* ────────────────────────────────────────────────
+/* ââââââââââââââââââââââââââââââââââââââââââââââââ
    Anti-Phoenix Map Shim (safe install)
    Only installs if drawLive already exists; otherwise skips silently.
-   ──────────────────────────────────────────────── */
+   ââââââââââââââââââââââââââââââââââââââââââââââââ */
 
 (function installNoMapLastShimSafe() {
   const L = window.L;
@@ -3885,10 +3931,10 @@ window.ensureVarCache = ensureVarCache;
   window.drawLive.__shimmedOnceGPS = true;
 })();
 
-  // ─────────────────────────────────────────────
+  // âââââââââââââââââââââââââââââââââââââââââââââ
 // HOTPATCH: force fixed 48-hour Dallas discovery window
 // Paste exactly here (between the two closing })() blocks near EOF)
-// ─────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââ
 (() => {
   const prev = window.fetchDallasAddresses;
   window.__fetchDallasAddresses_orig = prev;
