@@ -329,24 +329,23 @@
 
     // ===== FETCH DALLAS ADDRESSES =====
     async function fetchDallasAddresses(deviceID) {
-      const url = `${UBIDOTS_BASE}/variables/?device=${deviceID}`;
+      // Use v1.6 API — v2.0 only returns ~13 pinned variables, missing active Dallas probe addresses
+      const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
       try {
-        const res = await fetch(url, {
-          headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-        });
+        const res = await fetch(url);
         if (!res.ok) {
           console.error("[fetchDallasAddresses] API error:", res.status, "for deviceID:", deviceID);
           return [];
         }
         const js = await res.json();
         const now = Date.now();
-        return js.results
-          .filter(v => /^[0-9a-fA-F]{16}$/.test(v.label))
+        return (js.results || [])
+          .filter(v => /^[0-9a-fA-F]{16}$/.test(String(v.label || '').trim()))
           .filter(v => {
             let t = (v.lastValue && v.lastValue.timestamp) || 0;
-            return (now - t) < 3 * 60 * 1000;
+            return (now - t) < 48 * 60 * 60 * 1000; // 48h window for admin view
           })
-          .map(v => v.label)
+          .map(v => String(v.label).trim())
           .sort();
       } catch (err) {
         console.error("[fetchDallasAddresses] Exception:", err, "for deviceID:", deviceID);
@@ -361,7 +360,8 @@
       DALLAS_LIST.forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
-      Object.keys(mapped).forEach(addr => {
+      // Only include 16-char hex keys (Dallas addresses); skip filterdays, serviceDays, etc.
+      Object.keys(mapped).filter(k => /^[0-9a-fA-F]{16}$/.test(k)).forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
       while (allAddr.length < 5) allAddr.push(null);
