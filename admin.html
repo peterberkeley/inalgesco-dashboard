@@ -325,18 +325,21 @@
     // ===== BUILD SENSOR SLOTS =====
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
       const mapped = SENSOR_MAP[deviceLabel] || {};
-      const allAddr = [];
+      const isHex16 = k => /^[0-9a-fA-F]{16}$/.test(k);
 
-      DALLAS_LIST.forEach(addr => {
-        if (!allAddr.includes(addr)) allAddr.push(addr);
+      // Partition stored addresses: named (have a label) vs unnamed
+      const namedStored = [];
+      const unnamedStored = [];
+      Object.keys(mapped).filter(isHex16).forEach(addr => {
+        if (mapped[addr] && mapped[addr].label) namedStored.push(addr);
+        else unnamedStored.push(addr);
       });
 
-      // Only include 16-char hex keys (Dallas addresses); skip __autoAdjust, filterdays, etc.
-      Object.keys(mapped)
-        .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
-        .forEach(addr => {
-          if (!allAddr.includes(addr)) allAddr.push(addr);
-        });
+      // Live addresses not already in any stored set
+      const liveNew = DALLAS_LIST.filter(a => !namedStored.includes(a) && !unnamedStored.includes(a));
+
+      // Priority: named stored → new live → unnamed stored
+      const allAddr = [...namedStored, ...liveNew, ...unnamedStored];
 
       while (allAddr.length < 5) allAddr.push(null);
 
