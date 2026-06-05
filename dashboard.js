@@ -767,7 +767,7 @@ console.log('[fetchDallasAddresses] Using fixed 2h discovery window');
     }
     
     console.log('[fetchDallasAddresses] Found', withData.length, 'sensors with data (v1.6)');
-    return withData;
+    return withData.slice(0, 5); // cap at 5 probes per truck
     
   } catch (e) {
     console.error('fetchDallasAddresses error', e);
@@ -3963,7 +3963,7 @@ window.ensureVarCache = ensureVarCache;
         rs.forEach(l=>{ if (l) withData.push(l); });
       }
       console.log('[fetchDallasAddresses] Found', withData.length, 'sensors with data (v1.6)');
-      return withData;
+      return withData.slice(0, 5); // cap at 5 probes per truck
 
     } catch (e) {
       console.error('fetchDallasAddresses error (hotpatch)', e);
