@@ -10,7 +10,7 @@
     .container { max-width: 640px; margin: 2rem auto; }
     input[type="text"], input[type="number"], select { border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; }
     th, td { padding: 5px 8px; }
-    .btn { background: #2563eb; color: #fff; border-radius: 5px; padding: 6px 18px; font-weight: 600; }
+    .btn { background: #2563eb; color: #fff; border-radius: 5px; padding: 6px 18px; font-weight: 600; cursor: pointer; border: none; }
     .btn:hover { background: #0ea5e9; }
     .error { color: #b91c1c; font-weight: 600; }
     .success { color: #059669; font-weight: 600; }
@@ -18,10 +18,14 @@
     .locked-row { opacity: 0.55; }
     .return-btn { margin-bottom: 1rem; background: #10b981; color: white; padding: 8px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; transition: background 0.2s ease; }
     .return-btn:hover { background: #059669; }
+    .aa-toggle-on  { background: #10b981; color: white; border-radius: 5px; padding: 4px 16px; font-weight: 700; cursor: pointer; border: none; min-width: 52px; }
+    .aa-toggle-off { background: #9ca3af; color: white; border-radius: 5px; padding: 4px 16px; font-weight: 700; cursor: pointer; border: none; min-width: 52px; }
+    .aa-run-btn { background: #2563eb; color: white; border-radius: 5px; padding: 4px 12px; font-weight: 600; cursor: pointer; border: none; font-size: 13px; }
+    .aa-run-btn:hover { background: #1d4ed8; }
+    .aa-run-btn:disabled { background: #93c5fd; cursor: not-allowed; }
   </style>
 </head>
-  <style>
-  /* Simple dashboard/auth overlay (shared style) */
+<style>
   #auth-overlay {
     position: fixed; inset: 0; display: none;
     align-items: center; justify-content: center;
@@ -31,7 +35,7 @@
     background: #111; color: #fff; padding: 24px;
     border-radius: 12px; width: min(92vw, 360px);
     box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    font-family: system-ui, sans-serif;
   }
   #auth-card h2 { margin: 0 0 12px 0; font-size: 18px; }
   #auth-card p  { margin: 0 0 16px 0; font-size: 13px; opacity: .8; }
@@ -49,6 +53,7 @@
 
   <div class="container bg-white shadow-lg rounded-2xl p-7 mt-8">
     <button class="return-btn" onclick="window.location.href='dashboard.html'">← Return to Dashboard</button>
+
     <div id="lockscreen" class="flex flex-col items-center justify-center py-16">
       <h2 class="text-xl mb-4 font-semibold">Admin Access Required</h2>
       <input id="adminPass" type="password" placeholder="Enter password" class="mb-2 p-2 rounded border" />
@@ -70,11 +75,25 @@
         <select id="deviceSelect" class="p-1 rounded border"></select>
       </div>
 
-      <!-- Alias (friendly name) input -->
+      <!-- Alias input -->
       <div class="mb-3 flex flex-row gap-2 items-center" id="aliasRow">
         <label for="aliasInput" class="font-medium">Display name:</label>
         <input type="text" id="aliasInput" placeholder="Optional display name" class="p-1 rounded border" />
         <span class="text-xs text-gray-500">Original: <span id="origName"></span></span>
+      </div>
+
+      <!-- Auto Adjust section -->
+      <div class="mb-4 p-3 rounded-lg" style="background:#f0fdf4;border:1px solid #bbf7d0;" id="autoAdjustSection">
+        <div class="flex flex-row gap-3 items-center flex-wrap">
+          <span class="font-medium text-gray-700">Auto Adjust:</span>
+          <button id="autoAdjustToggle" class="aa-toggle-off" onclick="toggleAutoAdjust()">OFF</button>
+          <button id="autoAdjustRunBtn" class="aa-run-btn" onclick="runAutoAdjust()">Recalculate</button>
+          <span id="autoAdjustStatus" class="text-xs text-gray-500"></span>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">
+          When ON, each probe's offset is auto-calculated from its cooling-cycle floor (target 4°C / 39°F).
+          Applied on the dashboard during cooling phases only — invisible to users.
+        </p>
       </div>
 
       <div class="mb-6">
@@ -84,7 +103,8 @@
               <th class="w-1/12">#</th>
               <th class="w-3/12">Sensor Address</th>
               <th class="w-4/12">Label</th>
-              <th class="w-2/12">Calibration Offset (°)</th>
+              <th class="w-2/12">Cal Offset (°)</th>
+              <th class="w-2/12">Auto Offset</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -106,11 +126,17 @@
     // ===== CONFIG =====
     const UBIDOTS_ACCOUNT_TOKEN = "BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK";
     const PASSWORD = "Deirdre68";
-    const UBIDOTS_BASE = "https://industrial.api.ubidots.com/api/v2.0";
+    const UBIDOTS_BASE    = "https://industrial.api.ubidots.com/api/v2.0";
     const UBIDOTS_V1_BASE = "https://industrial.api.ubidots.com/api/v1.6";
-    const CONFIG_DEVICE = "config";
-    const RAW_GET_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/sensor_map/values?page_size=1`;
+    const CONFIG_DEVICE   = "config";
+    const RAW_GET_URL  = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/sensor_map/values?page_size=1`;
     const RAW_POST_URL = `${UBIDOTS_V1_BASE}/devices/${CONFIG_DEVICE}/sensor_map/values`;
+
+    // ===== AUTO ADJUST CONSTANTS =====
+    const AA_TARGET_C   = 4.0;
+    const AA_N_CYCLES   = 3;
+    const AA_MIN_COOL_MS = 10 * 60 * 1000; // 10 min sustained cooling required
+    const AA_SLOPE_WIN  = 3;               // readings window for slope calculation
 
     // ===== GLOBALS =====
     let sensorMap = {};
@@ -135,37 +161,27 @@
       }
     };
 
-           // ===== FETCH DEVICE LIST =====
+    // ===== FETCH DEVICE LIST =====
     async function fetchSensorMapConfig() {
       try {
         deviceIdMap = {};
 
         const looksLikeTruckKey = (s) => {
           const t = String(s || "").trim().toLowerCase();
-          return t.startsWith("skycafe-") || /^\d{3,6}$/.test(t); // e.g. 5999, 6001, 8011
+          return t.startsWith("skycafe-") || /^\d{3,6}$/.test(t);
         };
 
-        // --- paginate through ALL devices ---
         let url = `${UBIDOTS_BASE}/devices/?page_size=200`;
         const allDevices = [];
         let guard = 0;
 
         while (url && guard < 50) {
           guard++;
-
-          const res = await fetch(url, {
-            headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN }
-          });
+          const res = await fetch(url, { headers: { "X-Auth-Token": UBIDOTS_ACCOUNT_TOKEN } });
           if (!res.ok) throw new Error(`Failed to fetch devices (HTTP ${res.status})`);
-
           const js = await res.json();
           if (Array.isArray(js.results)) allDevices.push(...js.results);
-
           url = js.next || null;
-        }
-
-        if (guard >= 50) {
-          console.warn("[fetchSensorMapConfig] Pagination guard hit; device list may be incomplete.");
         }
 
         const context = {};
@@ -173,43 +189,30 @@
         allDevices
           .filter(dev => looksLikeTruckKey(dev.name) || looksLikeTruckKey(dev.label))
           .forEach(dev => {
-            const rawName  = (dev.name || "").trim();
+            const rawName  = (dev.name  || "").trim();
             const rawLabel = (dev.label || "").trim();
-
-            // Canonical key must match dashboard logic: label || name
             const key = rawLabel || rawName;
             if (!key) return;
 
-            // robust last activity parse
             const la = dev.lastActivity || dev.last_activity || null;
             let lastSeenMs = 0;
             if (typeof la === "string") {
               const t = Date.parse(la);
               lastSeenMs = Number.isFinite(t) ? t : 0;
             } else if (typeof la === "number") {
-              lastSeenMs = la > 1e12 ? la : la * 1000; // ms vs seconds
+              lastSeenMs = la > 1e12 ? la : la * 1000;
             }
 
             const id = dev.id || dev._id || dev["$id"];
-
-            const displayLabel =
-              rawLabel ||
-              rawName.replace(/^skycafe-/i, "SkyCafé ");
-
             context[key] = {
-              label: displayLabel,
+              label: rawLabel || rawName.replace(/^skycafe-/i, "SkyCafé "),
               last_seen: Math.floor(lastSeenMs / 1000),
               id,
               raw_name: rawName,
               raw_label: rawLabel
             };
-
             deviceIdMap[key] = id;
           });
-
-        console.log(
-          `[fetchSensorMapConfig] fetched ${allDevices.length} devices; kept ${Object.keys(context).length} trucks`
-        );
 
         return context;
       } catch (err) {
@@ -222,115 +225,80 @@
     function buildDeviceDropdownFromConfig(sensorMap) {
       const deviceSelect = document.getElementById("deviceSelect");
       if (!deviceSelect) return;
-
       const now = Math.floor(Date.now() / 1000);
       deviceSelect.innerHTML = "";
 
-      // Sort: by numeric part if present (skycafe-7, 6000, 6003...), else by key
       const sortedEntries = Object.entries(sensorMap).sort(([aKey], [bKey]) => {
-        const numFromKey = k => {
-          const m = String(k).match(/\d+/);
-          return m ? parseInt(m[0], 10) : NaN;
-        };
-        const na = numFromKey(aKey);
-        const nb = numFromKey(bKey);
-
-        const aHas = Number.isFinite(na);
-        const bHas = Number.isFinite(nb);
-        if (aHas && bHas) return na - nb;
-        if (aHas) return -1;
-        if (bHas) return 1;
+        const num = k => { const m = String(k).match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
+        const na = num(aKey), nb = num(bKey);
+        const aH = Number.isFinite(na), bH = Number.isFinite(nb);
+        if (aH && bH) return na - nb;
+        if (aH) return -1;
+        if (bH) return 1;
         return String(aKey).localeCompare(String(bKey));
       });
 
       sortedEntries.forEach(([devKey, info]) => {
-        const lastSeen = info.last_seen || 0;
-        const isOnline = (now - lastSeen) < 60;
-
-        const label = info.label || devKey;
-        const dot   = isOnline ? "" : "⚪️";
-
+        const isOnline = (now - (info.last_seen || 0)) < 60;
         const opt = document.createElement("option");
         opt.value = devKey;
-        opt.text  = `${dot} ${label} (${isOnline ? "Online" : "Offline"})`;
+        opt.text  = `${isOnline ? "" : "⚪️ "}${info.label || devKey} (${isOnline ? "Online" : "Offline"})`;
         deviceSelect.appendChild(opt);
       });
 
-      // Prefer first Online, else first in list
       let selected = false;
       for (let i = 0; i < deviceSelect.options.length; i++) {
         if (deviceSelect.options[i].text.includes("Online")) {
-          deviceSelect.selectedIndex = i;
-          selected = true;
-          break;
+          deviceSelect.selectedIndex = i; selected = true; break;
         }
       }
-      if (!selected && deviceSelect.options.length > 0) {
-        deviceSelect.selectedIndex = 0;
-      }
+      if (!selected && deviceSelect.options.length > 0) deviceSelect.selectedIndex = 0;
     }
 
+    // ===== MERGE / NORMALIZE CONFIG =====
     function mergeTruckConfig(legacyCfg, canonicalCfg) {
       const out = {};
-
-      const copyIntoOut = (src) => {
+      const copy = (src) => {
         if (!src || typeof src !== "object") return;
-
         Object.entries(src).forEach(([k, v]) => {
-          if (/^[0-9a-fA-F]{16}$/.test(k)) {
-            out[k] = { ...(out[k] || {}), ...(v || {}) };
-          } else {
-            out[k] = v;
-          }
+          if (/^[0-9a-fA-F]{16}$/.test(k)) out[k] = { ...(out[k] || {}), ...(v || {}) };
+          else out[k] = v;
         });
       };
-
-      copyIntoOut(legacyCfg);
-      copyIntoOut(canonicalCfg);
+      copy(legacyCfg);
+      copy(canonicalCfg);
       return out;
     }
 
     function normalizeConfigKeys(sensorMap, config) {
       const normalized = { ...(config || {}) };
-
-      if (!normalized.__aliases || typeof normalized.__aliases !== "object") {
-        normalized.__aliases = {};
-      }
+      if (!normalized.__aliases || typeof normalized.__aliases !== "object") normalized.__aliases = {};
 
       Object.entries(sensorMap || {}).forEach(([canonicalKey, info]) => {
         const legacyKey = (info && info.raw_name) ? String(info.raw_name).trim() : "";
-
         if (!legacyKey || legacyKey === canonicalKey) return;
 
-        const legacyCfg = normalized[legacyKey];
-        const canonicalCfg = normalized[canonicalKey];
+        const legacyCfg     = normalized[legacyKey];
+        const canonicalCfg  = normalized[canonicalKey];
 
-        if (legacyCfg && canonicalCfg) {
-          normalized[canonicalKey] = mergeTruckConfig(legacyCfg, canonicalCfg);
-        } else if (legacyCfg && !canonicalCfg) {
-          normalized[canonicalKey] = mergeTruckConfig(legacyCfg, {});
-        }
+        if (legacyCfg && canonicalCfg)      normalized[canonicalKey] = mergeTruckConfig(legacyCfg, canonicalCfg);
+        else if (legacyCfg && !canonicalCfg) normalized[canonicalKey] = mergeTruckConfig(legacyCfg, {});
 
-        if (legacyKey in normalized && legacyKey !== canonicalKey) {
-          delete normalized[legacyKey];
-        }
+        if (legacyKey in normalized && legacyKey !== canonicalKey) delete normalized[legacyKey];
 
-        if (normalized.__aliases[legacyKey] && !normalized.__aliases[canonicalKey]) {
+        if (normalized.__aliases[legacyKey] && !normalized.__aliases[canonicalKey])
           normalized.__aliases[canonicalKey] = normalized.__aliases[legacyKey];
-        }
-
-        if (legacyKey in normalized.__aliases && legacyKey !== canonicalKey) {
+        if (legacyKey in normalized.__aliases && legacyKey !== canonicalKey)
           delete normalized.__aliases[legacyKey];
-        }
       });
 
       return normalized;
     }
 
-    // ===== FETCH DALLAS ADDRESSES =====
+    // ===== FETCH DALLAS ADDRESSES (v1.6 API — returns all variables) =====
     async function fetchDallasAddresses(deviceID) {
-      // Use v1.6 API — v2.0 only returns ~13 pinned variables, missing active Dallas probe addresses
-      // v1.6 uses last_value (underscore), not lastValue (camelCase)
+      // v2.0 only returns ~13 pinned variables; v1.6 returns all
+      // v1.6 uses last_value (snake_case), not lastValue (camelCase)
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
       try {
         const res = await fetch(url);
@@ -344,7 +312,7 @@
           .filter(v => /^[0-9a-fA-F]{16}$/.test(String(v.label || '').trim()))
           .filter(v => {
             const lv = v.last_value || v.lastValue;
-            let t = (lv && lv.timestamp) || 0;
+            const t  = (lv && lv.timestamp) || 0;
             return (now - t) < 30 * 24 * 60 * 60 * 1000; // 30-day window for admin
           })
           .sort((a, b) => {
@@ -364,74 +332,40 @@
     function buildSensorSlots(deviceLabel, DALLAS_LIST, SENSOR_MAP) {
       const mapped = SENSOR_MAP[deviceLabel] || {};
       const allAddr = [];
+
       DALLAS_LIST.forEach(addr => {
         if (!allAddr.includes(addr)) allAddr.push(addr);
       });
-      // Only include 16-char hex keys (Dallas addresses); skip filterdays, serviceDays, etc.
-      Object.keys(mapped).filter(k => /^[0-9a-fA-F]{16}$/.test(k)).forEach(addr => {
-        if (!allAddr.includes(addr)) allAddr.push(addr);
-      });
+
+      // Only include 16-char hex keys (Dallas addresses); skip __autoAdjust, filterdays, etc.
+      Object.keys(mapped)
+        .filter(k => /^[0-9a-fA-F]{16}$/.test(k))
+        .forEach(addr => {
+          if (!allAddr.includes(addr)) allAddr.push(addr);
+        });
+
       while (allAddr.length < 5) allAddr.push(null);
+
       return allAddr.slice(0, 5).map((addr, idx) => {
         if (!addr) return {
-          id: `empty${idx}`,
-          label: "",
-          address: "",
-          calibration: 0,
-          isLive: false,
-          isMapped: false
+          id: `empty${idx}`, label: "", address: "", calibration: 0,
+          auto_offset: null, isLive: false, isMapped: false
         };
-        let isLive = DALLAS_LIST.includes(addr);
-        let isMapped = !!mapped[addr];
-        let label = mapped[addr]?.label?.trim() || "";
-        let offset = typeof mapped[addr]?.offset === "number" ? mapped[addr].offset : 0;
+
+        const entry   = mapped[addr] || {};
+        const offset  = typeof entry.offset     === "number" ? entry.offset     : 0;
+        const autoOff = typeof entry.auto_offset === "number" ? entry.auto_offset : null;
+
         return {
           id: addr,
-          label,
-          address: addr,
+          label:      (entry.label || "").trim(),
+          address:    addr,
           calibration: offset,
-          isLive,
-          isMapped
+          auto_offset: autoOff,
+          isLive:  DALLAS_LIST.includes(addr),
+          isMapped: !!(mapped[addr])
         };
       });
-    }
-
-           function mergeTruckConfig(legacyCfg, canonicalCfg) {
-      const out = {};
-      const copy = (src) => {
-        if (!src || typeof src !== "object") return;
-        for (const [k, v] of Object.entries(src)) {
-          if (/^[0-9a-fA-F]{16}$/.test(k)) out[k] = { ...(out[k] || {}), ...(v || {}) };
-          else out[k] = v;
-        }
-      };
-      copy(legacyCfg);
-      copy(canonicalCfg);
-      return out;
-    }
-
-    function normalizeConfigKeys(sensorMap, config) {
-      const normalized = { ...(config || {}) };
-      if (!normalized.__aliases || typeof normalized.__aliases !== "object") normalized.__aliases = {};
-
-      for (const [canonicalKey, info] of Object.entries(sensorMap || {})) {
-        const legacyKey = (info && info.raw_name) ? String(info.raw_name).trim() : "";
-        if (!legacyKey || legacyKey === canonicalKey) continue;
-
-        const legacyCfg = normalized[legacyKey];
-        const canonCfg  = normalized[canonicalKey];
-
-        if (legacyCfg && canonCfg) normalized[canonicalKey] = mergeTruckConfig(legacyCfg, canonCfg);
-        else if (legacyCfg && !canonCfg) normalized[canonicalKey] = mergeTruckConfig(legacyCfg, {});
-
-        if (legacyKey in normalized && legacyKey !== canonicalKey) delete normalized[legacyKey];
-
-        if (normalized.__aliases[legacyKey] && !normalized.__aliases[canonicalKey]) {
-          normalized.__aliases[canonicalKey] = normalized.__aliases[legacyKey];
-        }
-        if (legacyKey in normalized.__aliases && legacyKey !== canonicalKey) delete normalized.__aliases[legacyKey];
-      }
-      return normalized;
     }
 
     // ===== LOAD INITIAL DATA =====
@@ -449,18 +383,17 @@
         }
       } catch {}
 
-      // Normalize old keys (raw device name) → canonical keys (label||name)
       fullMapData = normalizeConfigKeys(sensorMap, config);
 
       const deviceSelect = document.getElementById("deviceSelect");
       deviceSelect.onchange = handleDeviceChange;
 
       const aliasInput = document.getElementById("aliasInput");
-      aliasInput.oninput = function(){
+      aliasInput.oninput = function() {
         const alias = this.value.trim();
-        if (!fullMapData.__aliases || typeof fullMapData.__aliases !== "object") fullMapData.__aliases = {};
-        if (alias && selectedDeviceLabel) fullMapData.__aliases[selectedDeviceLabel] = alias;
-        else if (selectedDeviceLabel) delete fullMapData.__aliases[selectedDeviceLabel];
+        if (!fullMapData.__aliases) fullMapData.__aliases = {};
+        if (alias && selectedDeviceLabel)  fullMapData.__aliases[selectedDeviceLabel] = alias;
+        else if (selectedDeviceLabel)      delete fullMapData.__aliases[selectedDeviceLabel];
       };
 
       handleDeviceChange();
@@ -469,123 +402,292 @@
 
     // ===== HANDLE TRUCK CHANGE =====
     async function handleDeviceChange() {
-      const deviceSelect = document.getElementById("deviceSelect");
-      selectedDeviceLabel = deviceSelect.value;
+      const deviceSelect    = document.getElementById("deviceSelect");
+      selectedDeviceLabel   = deviceSelect.value;
       const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
 
-      // update alias input and show original name
-      const aliasInput = document.getElementById("aliasInput");
-      const origNameEl = document.getElementById("origName");
-      origNameEl.textContent = selectedDeviceLabel;
-      aliasInput.value = (fullMapData.__aliases && fullMapData.__aliases[selectedDeviceLabel]) || '';
+      document.getElementById("origName").textContent   = selectedDeviceLabel;
+      document.getElementById("aliasInput").value =
+        (fullMapData.__aliases && fullMapData.__aliases[selectedDeviceLabel]) || '';
 
       document.getElementById("statusMsg").textContent = "Loading sensors...";
       const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
       const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
       renderSensorTable(slots);
+      updateAutoAdjustUI();
       document.getElementById("statusMsg").textContent = "";
     }
 
     // ===== RENDER SENSOR TABLE =====
-  function renderSensorTable(slots) {
-  const tbl = document.getElementById("sensorTable").querySelector("tbody");
-  tbl.innerHTML = '';
+    function renderSensorTable(slots) {
+      const tbl = document.getElementById("sensorTable").querySelector("tbody");
+      tbl.innerHTML = '';
 
-  slots.forEach((s, idx) => {
-    // Address is editable only when the slot is empty (lets you add an offline sensor by typing its 16-hex address)
-    const addrReadonly = !!s.address && (s.isMapped || s.isLive); // discovered or already mapped => keep address immutable
-    // Labels and calibration are ALWAYS editable (even if offline)
-    const labelReadonly = false;
-    const calReadonly   = false;
+      slots.forEach((s, idx) => {
+        const addrReadonly = !!s.address && (s.isMapped || s.isLive);
+        const autoOffStr   = (s.auto_offset !== null && Number.isFinite(s.auto_offset))
+          ? (s.auto_offset >= 0 ? "+" : "") + s.auto_offset.toFixed(2) + "°"
+          : "—";
 
-    tbl.innerHTML += `
-      <tr${(!s.isLive && s.isMapped && s.address) ? ' class="locked-row"' : ''}>
-        <td>Sensor ${idx + 1}</td>
-        <td>
-          <input type="text" value="${s.address || ''}" class="sensorAddr" style="width:200px;"
-                 ${addrReadonly ? 'readonly tabindex="-1"' : ''}/>
-        </td>
-        <td>
-          <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:130px;"
-                 ${labelReadonly ? 'readonly tabindex="-1"' : ''}/>
-        </td>
-        <td>
-          <input type="number" value="${Number.isFinite(s.calibration) ? s.calibration : 0}" step="0.1"
-                 class="sensorCal" style="width:65px;" ${calReadonly ? 'readonly tabindex="-1"' : ''}/>
-        </td>
-      </tr>`;
-  });
-}
-
+        tbl.innerHTML += `
+          <tr${(!s.isLive && s.isMapped && s.address) ? ' class="locked-row"' : ''}>
+            <td>Sensor ${idx + 1}</td>
+            <td>
+              <input type="text" value="${s.address || ''}" class="sensorAddr" style="width:180px;"
+                     ${addrReadonly ? 'readonly tabindex="-1"' : ''}/>
+            </td>
+            <td>
+              <input type="text" value="${s.label || ''}" class="sensorLabel" style="width:120px;"/>
+            </td>
+            <td>
+              <input type="number" value="${Number.isFinite(s.calibration) ? s.calibration : 0}" step="0.1"
+                     class="sensorCal" style="width:60px;"/>
+            </td>
+            <td style="color:#059669;font-size:12px;text-align:center;">${autoOffStr}</td>
+          </tr>`;
+      });
+    }
 
     // ===== HANDLE SENSOR TABLE EDITS =====
-    document.getElementById("sensorTable").addEventListener("input", function () {
-  const tbl = document.getElementById("sensorTable").querySelector("tbody");
+    document.getElementById("sensorTable").addEventListener("input", function() {
+      const tbl  = document.getElementById("sensorTable").querySelector("tbody");
+      const prev = (fullMapData && fullMapData[selectedDeviceLabel])
+        ? { ...fullMapData[selectedDeviceLabel] } : {};
+      const updated = { ...prev };
+      const isHex16 = s => /^[0-9a-fA-F]{16}$/.test(s);
 
-  // Start from previous mapping to avoid wiping offline entries
-  const prev = (fullMapData && fullMapData[selectedDeviceLabel])
-    ? { ...fullMapData[selectedDeviceLabel] }
-    : {};
+      Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
+        const addrEl = tr.querySelector(".sensorAddr");
+        const lblEl  = tr.querySelector(".sensorLabel");
+        const calEl  = tr.querySelector(".sensorCal");
 
-  const updated = { ...prev };
-  const isHex16 = s => /^[0-9a-fA-F]{16}$/.test(s);
+        const addr = (addrEl?.value || '').trim();
+        if (!isHex16(addr)) return;
 
-  Array.from(tbl.querySelectorAll("tr")).forEach(tr => {
-    const addrEl = tr.querySelector(".sensorAddr");
-    const lblEl  = tr.querySelector(".sensorLabel");
-    const calEl  = tr.querySelector(".sensorCal");
+        const label  = (lblEl?.value || '').trim();
+        let   offset = parseFloat(calEl?.value);
+        if (!Number.isFinite(offset)) offset = 0;
 
-    const addr = (addrEl?.value || '').trim();
-    if (!isHex16(addr)) return; // only persist valid 16-hex addresses
+        if (label || offset || prev[addr]) {
+          // Preserve auto_offset if it exists
+          const prevEntry = prev[addr] || {};
+          updated[addr] = {
+            label,
+            offset,
+            ...(typeof prevEntry.auto_offset === 'number' ? { auto_offset: prevEntry.auto_offset } : {})
+          };
+        }
+      });
 
-    const label  = (lblEl?.value || '').trim();
-    let offset   = parseFloat(calEl?.value);
-    if (!Number.isFinite(offset)) offset = 0;
-
-    // Keep if there is any content OR it already existed (prevents accidental data loss)
-    if (label || offset || prev[addr]) {
-      updated[addr] = { label, offset };
-    }
-  });
-
-  if (!fullMapData) fullMapData = {};
-  fullMapData[selectedDeviceLabel] = updated;
-});
-
-
-  // ===== SAVE BUTTON =====
-document.getElementById("saveBtn").onclick = async function() {
-  const saveBtn = document.getElementById("saveBtn");
-  const status = document.getElementById("statusMsg");
-  saveBtn.disabled = true;
-  status.textContent = "Saving...";
-
-  // ensure alias map exists and include current alias explicitly
-  if (!fullMapData.__aliases) fullMapData.__aliases = {};
-  const aliasInput = document.getElementById("aliasInput").value.trim();
-  if (selectedDeviceLabel && aliasInput) {
-    fullMapData.__aliases[selectedDeviceLabel] = aliasInput;
-  }
-
-  // prepare payload
-  const payload = { value: 0, context: { ...fullMapData } };
-
-  try {
-    const res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_ACCOUNT_TOKEN}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      if (!fullMapData) fullMapData = {};
+      fullMapData[selectedDeviceLabel] = updated;
     });
-    if (!res.ok) throw new Error("Failed to save");
-    status.textContent = "Saved to Ubidots!";
-  } catch (e) {
-    status.textContent = "Failed to save. Check network/Ubidots.";
-    console.error(e);
-  }
 
-  setTimeout(() => { status.textContent = ""; }, 3000);
-  saveBtn.disabled = false;
-};
+    // ===== SAVE TO UBIDOTS (shared helper) =====
+    async function saveCfgToUbidots() {
+      if (!fullMapData.__aliases) fullMapData.__aliases = {};
+      const payload = { value: 0, context: { ...fullMapData } };
+      const res = await fetch(RAW_POST_URL + `?token=${UBIDOTS_ACCOUNT_TOKEN}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`Ubidots returned ${res.status}`);
+    }
+
+    // ===== SAVE BUTTON =====
+    document.getElementById("saveBtn").onclick = async function() {
+      const saveBtn = document.getElementById("saveBtn");
+      const status  = document.getElementById("statusMsg");
+      saveBtn.disabled = true;
+      status.textContent = "Saving...";
+
+      if (!fullMapData.__aliases) fullMapData.__aliases = {};
+      const aliasInput = document.getElementById("aliasInput").value.trim();
+      if (selectedDeviceLabel && aliasInput)
+        fullMapData.__aliases[selectedDeviceLabel] = aliasInput;
+
+      try {
+        await saveCfgToUbidots();
+        status.textContent = "Saved to Ubidots!";
+      } catch (e) {
+        status.textContent = "Failed to save. Check network/Ubidots.";
+        console.error(e);
+      }
+
+      setTimeout(() => { status.textContent = ""; }, 3000);
+      saveBtn.disabled = false;
+    };
+
+    // ===== AUTO ADJUST — TOGGLE =====
+    async function toggleAutoAdjust() {
+      if (!selectedDeviceLabel) return;
+      if (!fullMapData[selectedDeviceLabel]) fullMapData[selectedDeviceLabel] = {};
+      const aa      = fullMapData[selectedDeviceLabel].__autoAdjust || {};
+      const wasOn   = !!(aa.enabled);
+      fullMapData[selectedDeviceLabel].__autoAdjust = { ...aa, enabled: !wasOn };
+
+      const status = document.getElementById("autoAdjustStatus");
+      status.textContent = "Saving...";
+      try {
+        await saveCfgToUbidots();
+        updateAutoAdjustUI();
+        if (!wasOn) status.textContent = "Enabled — click Recalculate to compute probe offsets";
+      } catch (e) {
+        status.textContent = "Save failed: " + e.message;
+        // Revert on failure
+        fullMapData[selectedDeviceLabel].__autoAdjust = { ...aa, enabled: wasOn };
+        updateAutoAdjustUI();
+      }
+    }
+
+    // ===== AUTO ADJUST — UPDATE UI =====
+    function updateAutoAdjustUI() {
+      if (!selectedDeviceLabel) return;
+      const aa    = (fullMapData[selectedDeviceLabel] || {}).__autoAdjust || {};
+      const isOn  = !!(aa.enabled);
+      const toggle = document.getElementById("autoAdjustToggle");
+      if (toggle) {
+        toggle.textContent  = isOn ? "ON" : "OFF";
+        toggle.className    = isOn ? "aa-toggle-on" : "aa-toggle-off";
+      }
+      const statusEl = document.getElementById("autoAdjustStatus");
+      if (!statusEl) return;
+      if (isOn && aa.lastRun) {
+        const diffH  = Math.floor((Date.now() / 1000 - aa.lastRun) / 3600);
+        const probes = Object.keys(aa.offsets || {}).length;
+        statusEl.textContent =
+          `Active · ${probes} probe${probes !== 1 ? "s" : ""} · last calculated ${diffH < 1 ? "recently" : diffH + "h ago"}`;
+      } else if (isOn) {
+        statusEl.textContent = "ON — click Recalculate to compute offsets";
+      } else {
+        statusEl.textContent = "";
+      }
+    }
+
+    // ===== AUTO ADJUST — DETECT COOLING CYCLES =====
+    function detectCoolingCycles(readings) {
+      // readings: [{ts, v}] sorted oldest first
+      const cycles = [];
+      let inCool = false, coolStartTs = null, cycleMin = Infinity;
+
+      for (let i = AA_SLOPE_WIN; i < readings.length; i++) {
+        const older = readings[i - AA_SLOPE_WIN];
+        const cur   = readings[i];
+        const dt    = cur.ts - older.ts;
+        if (dt <= 0) continue;
+        const cooling = (cur.v - older.v) / dt < 0; // negative slope = falling temp
+
+        if (cooling && !inCool) {
+          inCool = true; coolStartTs = cur.ts; cycleMin = cur.v;
+        } else if (cooling && inCool) {
+          if (cur.v < cycleMin) cycleMin = cur.v;
+        } else if (!cooling && inCool) {
+          const dur = cur.ts - coolStartTs;
+          if (dur >= AA_MIN_COOL_MS && cycleMin < Infinity)
+            cycles.push({ floor: cycleMin, durationMs: dur });
+          inCool = false; coolStartTs = null; cycleMin = Infinity;
+        }
+      }
+      // Close any still-open cycle at end of data
+      if (inCool && coolStartTs !== null && readings.length) {
+        const last = readings[readings.length - 1];
+        const dur  = last.ts - coolStartTs;
+        if (dur >= AA_MIN_COOL_MS && cycleMin < Infinity)
+          cycles.push({ floor: cycleMin, durationMs: dur });
+      }
+      return cycles;
+    }
+
+    // ===== AUTO ADJUST — RUN CALCULATION =====
+    async function runAutoAdjust() {
+      if (!selectedDeviceLabel) return;
+
+      const statusEl = document.getElementById("autoAdjustStatus");
+      const runBtn   = document.getElementById("autoAdjustRunBtn");
+      runBtn.disabled = true;
+      statusEl.textContent = "Fetching probe data...";
+
+      const truckCfg   = fullMapData[selectedDeviceLabel] || {};
+      const probeAddrs = Object.keys(truckCfg).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
+
+      if (probeAddrs.length === 0) {
+        statusEl.textContent = "No probe addresses mapped — save sensor labels first.";
+        runBtn.disabled = false;
+        return;
+      }
+
+      const calculatedOffsets = {};
+      const errors = [];
+
+      for (const addr of probeAddrs) {
+        statusEl.textContent = `Analysing probe …${addr.slice(-4)}`;
+        try {
+          // v1.6 API: GET /devices/{devLabel}/{varLabel}/values
+          const url = `${UBIDOTS_V1_BASE}/devices/${selectedDeviceLabel}/${addr}/values/?page_size=1000&order_by=-timestamp&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+          const res = await fetch(url);
+          if (!res.ok) { errors.push(`…${addr.slice(-4)}: HTTP ${res.status}`); continue; }
+          const js = await res.json();
+
+          const readings = (js.results || [])
+            .map(r => ({ ts: r.timestamp, v: parseFloat(r.value) }))
+            .filter(r => Number.isFinite(r.v) && Number.isFinite(r.ts))
+            .reverse(); // oldest first
+
+          if (readings.length < 10) {
+            errors.push(`…${addr.slice(-4)}: insufficient data (${readings.length} pts)`); continue;
+          }
+
+          const cycles = detectCoolingCycles(readings);
+          if (cycles.length === 0) {
+            errors.push(`…${addr.slice(-4)}: no cooling cycles ≥10 min found`); continue;
+          }
+
+          const lastN    = cycles.slice(-AA_N_CYCLES);
+          const avgFloor = lastN.reduce((s, c) => s + c.floor, 0) / lastN.length;
+          const offset   = parseFloat((AA_TARGET_C - avgFloor).toFixed(2));
+          calculatedOffsets[addr] = offset;
+
+          // Write back into probe entry, preserving label/offset
+          if (!fullMapData[selectedDeviceLabel][addr]) fullMapData[selectedDeviceLabel][addr] = {};
+          fullMapData[selectedDeviceLabel][addr].auto_offset = offset;
+
+        } catch (err) {
+          errors.push(`…${addr.slice(-4)}: ${err.message}`);
+        }
+      }
+
+      // Update __autoAdjust metadata
+      if (!fullMapData[selectedDeviceLabel]) fullMapData[selectedDeviceLabel] = {};
+      fullMapData[selectedDeviceLabel].__autoAdjust = {
+        enabled:  true,
+        lastRun:  Math.floor(Date.now() / 1000),
+        N:        AA_N_CYCLES,
+        offsets:  calculatedOffsets
+      };
+
+      // Save
+      statusEl.textContent = "Saving...";
+      try {
+        await saveCfgToUbidots();
+        const summary = Object.entries(calculatedOffsets)
+          .map(([a, o]) => `…${a.slice(-4)}: ${o >= 0 ? "+" : ""}${o.toFixed(1)}°`)
+          .join("  ");
+        statusEl.textContent = `Done — ${summary || "no offsets"}${errors.length ? "  ⚠ " + errors.join(", ") : ""}`;
+
+        // Refresh the table to show new auto_offset values
+        const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
+        const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
+        const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
+        renderSensorTable(slots);
+        updateAutoAdjustUI();
+
+      } catch (e) {
+        statusEl.textContent = "Calculation done but save failed: " + e.message;
+      }
+
+      runBtn.disabled = false;
+    }
 
   </script>
 
