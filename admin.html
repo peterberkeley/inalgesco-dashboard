@@ -418,6 +418,7 @@
 
       const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
       renderSensorTable(slots);
+      syncAutoToggle();
       document.getElementById("statusMsg").textContent = "";
     }
 
@@ -523,6 +524,12 @@
     };
 
     // ===== AUTO ADJUST — TOGGLE =====
+    function syncAutoToggle() {
+      const cfg = (fullMapData || {})[selectedDeviceLabel] || {};
+      const isOn = cfg.__autoAdjust?.enabled === true;
+      const btn = document.getElementById('autoAdjustToggle');
+      if (btn) { btn.textContent = isOn ? 'ON' : 'OFF'; btn.className = isOn ? 'aa-toggle-on' : 'aa-toggle-off'; }
+    }
     async function toggleAutoAdjust() {
       if (!selectedDeviceLabel) return;
       if (!fullMapData[selectedDeviceLabel]) fullMapData[selectedDeviceLabel] = {};
@@ -683,6 +690,7 @@
         const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
         const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
         renderSensorTable(slots);
+      syncAutoToggle();
         updateAutoAdjustUI();
 
       } catch (e) {
