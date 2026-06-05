@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sky CafÃ© Trucks Dashboard</title>
+  <title>Sky Café Trucks Dashboard</title>
 
   <!-- Libs -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -61,7 +61,7 @@
     .chart-box{ background:var(--color-card); border-radius:1rem; box-shadow:0 4px 16px rgba(15,23,42,.06); padding:1rem 1rem 1.25rem; height:360px; overflow:hidden; }
     .chart-box h3{ font-weight:700; margin:0 0 .5rem 0; font-size:1rem }
 
-    /* Info table â compact, no wrap, tighter label/value gap */
+    /* Info table — compact, no wrap, tighter label/value gap */
     #latest{
       width:100%;
       border-radius:.75rem;
@@ -138,7 +138,7 @@
       box-shadow:0 2px 4px rgba(0,0,0,0.1);
     }
 
-    /* âââ Spacing tweaks (sensors card & column gap) âââ */
+    /* ——— Spacing tweaks (sensors card & column gap) ——— */
     @media (min-width:1024px){
       #dashMain { column-gap: 2rem !important; }
     }
@@ -164,7 +164,7 @@
 <body>
   <div id="auth-overlay" aria-modal="true" role="dialog">
     <div id="auth-card">
-      <h2>Sky CafÃ© Dashboard</h2>
+      <h2>Sky Café Dashboard</h2>
       <p>Please enter the dashboard password to continue.</p>
       <form id="auth-form">
         <input id="auth-pass" type="password" inputmode="text" autocomplete="current-password" placeholder="Password" required />
@@ -186,7 +186,7 @@
       />
 
       <div class="flex flex-col leading-tight">
-        <span class="text-white font-semibold text-lg">Sky CafÃ© Trucks</span>
+        <span class="text-white font-semibold text-lg">Sky Café Trucks</span>
         <span class="text-white/80 text-xs -mt-0.5">Dashboard</span>
       </div>
 
@@ -229,12 +229,12 @@
       <div class="kpi">
         <div class="tile md:col-span-2">
           <div class="lab">Truck</div>
-          <div class="val text-[1.1rem]" id="kpiTruck">â</div>
-          <div class="sub" id="kpiSeen">â</div>
+          <div class="val text-[1.1rem]" id="kpiTruck">—</div>
+          <div class="sub" id="kpiSeen">—</div>
         </div>
         <div class="tile">
           <div class="lab">Avg Temp</div>
-          <div class="val" id="kpiAvg">â</div>
+          <div class="val" id="kpiAvg">—</div>
           <div class="sub">last readings</div>
         </div>
       </div>
@@ -258,7 +258,7 @@
 
       <div id="maintenanceBox" class="card p-4">
         <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
-        <div class="text-sm text-gray-500">Loadingâ¦</div>
+        <div class="text-sm text-gray-500">Loading…</div>
       </div>
     </section>
 
@@ -302,7 +302,7 @@
 
       // If any element is missing, bail gracefully
       if (!overlay || !form || !pass || !err) {
-        console.warn("[auth] Overlay elements not found â auth disabled.");
+        console.warn("[auth] Overlay elements not found — auth disabled.");
         return;
       }
 
