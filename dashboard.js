@@ -1313,6 +1313,22 @@ async function updateCharts(deviceID, SENSORS){
     // Abort if selection changed while fetching series
     if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
 
+    // --- Auto Adjust: fetch last 72h for offset calibration (independent of display window) ---
+    const calSeriesByAddr = new Map();
+    const _aaProbes = SENSORS.filter(s => s.address && s.auto_adjust);
+    if (_aaProbes.length > 0) {
+      const _calEnd = Date.now();
+      const _calStart = _calEnd - 72 * 60 * 60 * 1000;
+      await Promise.all(_aaProbes.map(async s => {
+        let _calRows = await fetchVarWindow(deviceID, s.address, _calStart, _calEnd, 4000);
+        if (!_calRows || _calRows.length === 0) _calRows = await fetchVarLastN(deviceID, s.address, 4000);
+        calSeriesByAddr.set(s.address, _calRows
+          .map(r => ({ ts: +r.timestamp, v: (r.value != null) ? +r.value : null }))
+          .filter(r => Number.isFinite(r.ts) && r.v !== null)
+          .sort((a, b) => a.ts - b.ts));
+      }));
+    }
+
     const computedOffsets = new Map();
     SENSORS.forEach(s => {
       if (!s.address || !s.chart) return;
@@ -1320,11 +1336,14 @@ async function updateCharts(deviceID, SENSORS){
  const labels = ordered.map(r => fmtTimeHHMM(r.timestamp, UI_TZ));
       const rawRdings = ordered.map(r => ({ ts: r.timestamp, v: parseFloat(r.value) }));
       let _autoOff = 0;
-      if (s.auto_adjust && rawRdings.length >= 4) {
-        const _floors = detectCoolingFloors(rawRdings, 10 * 60 * 1000, 3);
-        if (_floors.length > 0) {
-          const _n = Math.min(_floors.length, 3);
-          _autoOff = 39.0 - (_floors.slice(-_n).reduce((a, b) => a + b, 0) / _n);
+      if (s.auto_adjust) {
+        const _calData = calSeriesByAddr.get(s.address) || rawRdings;
+        if (_calData.length >= 4) {
+          const _floors = detectCoolingFloors(_calData, 10 * 60 * 1000, 3);
+          if (_floors.length > 0) {
+            const _n = Math.min(_floors.length, 3);
+            _autoOff = 39.0 - (_floors.slice(-_n).reduce((a, b) => a + b, 0) / _n);
+          }
         }
       }
       computedOffsets.set(s.address, _autoOff);
