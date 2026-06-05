@@ -330,6 +330,7 @@
     // ===== FETCH DALLAS ADDRESSES =====
     async function fetchDallasAddresses(deviceID) {
       // Use v1.6 API — v2.0 only returns ~13 pinned variables, missing active Dallas probe addresses
+      // v1.6 uses last_value (underscore), not lastValue (camelCase)
       const url = `${UBIDOTS_V1_BASE}/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
       try {
         const res = await fetch(url);
@@ -342,11 +343,17 @@
         return (js.results || [])
           .filter(v => /^[0-9a-fA-F]{16}$/.test(String(v.label || '').trim()))
           .filter(v => {
-            let t = (v.lastValue && v.lastValue.timestamp) || 0;
-            return (now - t) < 48 * 60 * 60 * 1000; // 48h window for admin view
+            const lv = v.last_value || v.lastValue;
+            let t = (lv && lv.timestamp) || 0;
+            return (now - t) < 30 * 24 * 60 * 60 * 1000; // 30-day window for admin
           })
-          .map(v => String(v.label).trim())
-          .sort();
+          .sort((a, b) => {
+            const ta = ((a.last_value || a.lastValue) || {}).timestamp || 0;
+            const tb = ((b.last_value || b.lastValue) || {}).timestamp || 0;
+            return tb - ta; // most recent first
+          })
+          .slice(0, 5)
+          .map(v => String(v.label).trim());
       } catch (err) {
         console.error("[fetchDallasAddresses] Exception:", err, "for deviceID:", deviceID);
         return [];
