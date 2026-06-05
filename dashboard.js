@@ -709,9 +709,9 @@ console.log('[fetchDallasAddresses] Using fixed 2h discovery window');
               timestamp: obj.timestamp
             }));
           
-          // Sort by most recent first
+          // Sort by most recent first, cap at 5 (max probes per truck)
           sensorsWithData.sort((a, b) => b.timestamp - a.timestamp);
-          const addresses = sensorsWithData.map(s => s.address);
+          const addresses = sensorsWithData.slice(0, 5).map(s => s.address);
           
           if (addresses.length) {
             console.log('[fetchDallasAddresses] Found', addresses.length, 'sensors with data (v2)');
@@ -766,8 +766,9 @@ console.log('[fetchDallasAddresses] Using fixed 2h discovery window');
       rs.forEach(l => { if (l) withData.push(l); });
     }
     
-    console.log('[fetchDallasAddresses] Found', withData.length, 'sensors with data (v1.6)');
-    return withData;
+    const cappedData = withData.slice(0, 5);
+    console.log('[fetchDallasAddresses] Found', cappedData.length, 'sensors (capped at 5) via v1.6');
+    return cappedData;
     
   } catch (e) {
     console.error('fetchDallasAddresses error', e);
