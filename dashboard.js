@@ -493,6 +493,17 @@ async function ensureVarCache(deviceID){
       if (lab && id && !map[lab]) map[lab] = id;
     });
 
+    // Supplement with v1.6 API — v2.0 only returns pinned variables, missing active probe addresses
+    try {
+      const v1Url = `https://industrial.api.ubidots.com/api/v1.6/variables/?device=${deviceID}&page_size=1000&token=${UBIDOTS_ACCOUNT_TOKEN}`;
+      const v1R = await fetch(v1Url);
+      const v1D = await v1R.json();
+      (v1D.results || []).forEach(v => {
+        const lab = String(v.label || v.name || '').trim();
+        const id  = String(v.id || '');
+        if (lab && id && !map[lab]) map[lab] = id;
+      });
+    } catch(e2) { console.warn('[ensureVarCache] v1.6 supplement failed', e2); }
     variableCache[deviceID] = map;
   }catch(e){
     console.error("ensureVarCache", e);
