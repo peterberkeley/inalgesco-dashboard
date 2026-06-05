@@ -912,6 +912,35 @@ function applyConditionalOffset(readings, offsetVal) {
   return result;
 }
 
+function detectCoolingFloors(readings, minCoolMs, slopeWin) {
+  if (!readings || readings.length < slopeWin + 2) return [];
+  const slopes = readings.map((r, i) => {
+    if (i < slopeWin) return 0;
+    const older = readings[i - slopeWin];
+    const dt = r.ts - older.ts;
+    return dt > 0 ? (r.v - older.v) / dt : 0;
+  });
+  const floors = [];
+  let coolingStartIdx = null, coolingStartTs = null, minV = Infinity;
+  for (let i = 0; i < readings.length; i++) {
+    if (slopes[i] < 0) {
+      if (coolingStartIdx === null) { coolingStartIdx = i; coolingStartTs = readings[i].ts; minV = readings[i].v; }
+      else if (readings[i].v < minV) minV = readings[i].v;
+    } else {
+      if (coolingStartIdx !== null) {
+        const dur = readings[i - 1].ts - coolingStartTs;
+        if (dur >= minCoolMs) floors.push(minV);
+        coolingStartIdx = null; minV = Infinity;
+      }
+    }
+  }
+  if (coolingStartIdx !== null) {
+    const dur = readings[readings.length - 1].ts - coolingStartTs;
+    if (dur >= minCoolMs) floors.push(minV);
+  }
+  return floors;
+}
+
 //Part 2
 /* =================== Charts =================== */
 function initCharts(SENSORS){
@@ -1284,13 +1313,23 @@ async function updateCharts(deviceID, SENSORS){
     // Abort if selection changed while fetching series
     if ((Number(window.__selEpoch) || 0) !== __epochAtStart) return;
 
+    const computedOffsets = new Map();
     SENSORS.forEach(s => {
       if (!s.address || !s.chart) return;
       const ordered = seriesByAddr.get(s.address) || [];
  const labels = ordered.map(r => fmtTimeHHMM(r.timestamp, UI_TZ));
       const rawRdings = ordered.map(r => ({ ts: r.timestamp, v: parseFloat(r.value) }));
-      const adjRdings = (s.auto_adjust && s.auto_offset)
-        ? applyConditionalOffset(rawRdings, s.auto_offset) : rawRdings;
+      let _autoOff = 0;
+      if (s.auto_adjust && rawRdings.length >= 4) {
+        const _floors = detectCoolingFloors(rawRdings, 10 * 60 * 1000, 3);
+        if (_floors.length > 0) {
+          const _n = Math.min(_floors.length, 3);
+          _autoOff = 39.0 - (_floors.slice(-_n).reduce((a, b) => a + b, 0) / _n);
+        }
+      }
+      computedOffsets.set(s.address, _autoOff);
+      const adjRdings = _autoOff !== 0
+        ? applyConditionalOffset(rawRdings, _autoOff) : rawRdings;
       const data = adjRdings.map(r => {
         let v = r.v;
         if (typeof s.calibration === 'number') v += s.calibration;
@@ -1321,8 +1360,9 @@ async function updateCharts(deviceID, SENSORS){
         const arr = seriesByAddr.get(s.address) || [];
         if (!arr.length) continue;
         const rawRdings2 = arr.map(r => ({ ts: r.timestamp, v: parseFloat(r.value) }));
-        const adjRdings2 = (s.auto_adjust && s.auto_offset)
-          ? applyConditionalOffset(rawRdings2, s.auto_offset) : rawRdings2;
+        const _autoOff2 = computedOffsets.get(s.address) || 0;
+        const adjRdings2 = _autoOff2 !== 0
+          ? applyConditionalOffset(rawRdings2, _autoOff2) : rawRdings2;
         const items = adjRdings2.map(r => {
           let v = r.v;
           if (typeof s.calibration === 'number') v += s.calibration;
