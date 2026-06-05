@@ -2564,7 +2564,7 @@ async function downloadCsvForCurrentSelection(){
     const tempSeries = {};
     await Promise.all(SENSORS.filter(s => s.address).map(async s => {
       const rows = await fetchCsvRows(deviceID, s.address, startMs, endMs);
-      tempSeries[s.label || s.address] = { rows, calibration: s.calibration||0 };
+      tempSeries[s.label || s.address] = { rows, calibration: s.calibration||0, auto_offset: s.auto_offset||0 };
     }));
 
     // Merge by exact timestamp (ms)
@@ -2581,9 +2581,12 @@ async function downloadCsvForCurrentSelection(){
     voltRows.forEach(r=>{ ensure(r.timestamp).volt   = (typeof r.value === 'number') ? r.value : null; });
 
     Object.entries(tempSeries).forEach(([label, obj])=>{
+      const rawRdgs = obj.rows.map(r=>({ts:r.timestamp,v:parseFloat(r.value)})).filter(r=>!isNaN(r.v));
+      const adjRdgs = applyConditionalOffset(rawRdgs, obj.auto_offset||0);
+      const adjByTs = new Map(adjRdgs.map(r=>[r.ts,r.v]));
       obj.rows.forEach(r=>{
         const o = ensure(r.timestamp);
-        let v = parseFloat(r.value);
+        let v = adjByTs.has(r.timestamp) ? adjByTs.get(r.timestamp) : parseFloat(r.value);
         if(!isNaN(v)) v += obj.calibration || 0;
         o[label] = isNaN(v) ? null : v;
       });
