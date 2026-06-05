@@ -309,6 +309,7 @@
         const js = await res.json();
         return (js.results || [])
           .filter(v => /^[0-9a-fA-F]{16}$/.test(String(v.label || '').trim()))
+          .filter(v => { const ts = ((v.last_value || v.lastValue) || {}).timestamp || 0; return ts > Date.now() - 15 * 60 * 1000; })
           .sort((a, b) => {
             const ta = ((a.last_value || a.lastValue) || {}).timestamp || 0;
             const tb = ((b.last_value || b.lastValue) || {}).timestamp || 0;
