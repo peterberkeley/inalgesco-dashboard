@@ -401,7 +401,9 @@
     }
 
     // ===== HANDLE TRUCK CHANGE =====
+    let _changeToken = 0;
     async function handleDeviceChange() {
+      const token = ++_changeToken;
       const deviceSelect    = document.getElementById("deviceSelect");
       selectedDeviceLabel   = deviceSelect.value;
       const selectedDeviceId = sensorMap[selectedDeviceLabel]?.id;
@@ -412,9 +414,12 @@
 
       document.getElementById("statusMsg").textContent = "Loading sensors...";
       const liveDallas = selectedDeviceId ? await fetchDallasAddresses(selectedDeviceId) : [];
+
+      // Stale — user switched truck while this fetch was in flight
+      if (token !== _changeToken) return;
+
       const slots = buildSensorSlots(selectedDeviceLabel, liveDallas, fullMapData);
       renderSensorTable(slots);
-      updateAutoAdjustUI();
       document.getElementById("statusMsg").textContent = "";
     }
 
