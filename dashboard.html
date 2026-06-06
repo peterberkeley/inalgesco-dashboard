@@ -271,6 +271,7 @@
     #charts { display: block; margin-top: 14px; }
     .chart-box { display: none; background: transparent; border: none; border-radius: 0; padding: 0; height: 280px; overflow: hidden; }
     .chart-box:first-child { display: block; }
+    #charts .chart-box h3 { display: none !important; }
     .chart-box h3 { font-weight: 600; margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
     .chart-box canvas { border-radius: 6px; }
     /* ─── MAP SECTION ─── */
@@ -367,11 +368,11 @@
       </div>
 
       <!-- Time range: Now=last-mode, 3h/12h/24h=range-mode -->
-      <div class="time-seg">
-        <button data-range="60"   data-mode="last"  class="rangeBtn active">Now</button>
+      <div class="time-seg" style="display:none">
+        <button data-range="60"   data-mode="last"  class="rangeBtn">Now</button>
         <button data-range="180"  data-mode="range" class="rangeBtn">3h</button>
         <button data-range="720"  data-mode="range" class="rangeBtn">12h</button>
-        <button data-range="1440" data-mode="range" class="rangeBtn">24h</button>
+        <button data-range="1440" data-mode="range" class="rangeBtn active">24h</button>
         <!-- Hidden "Last" button kept for JS compatibility -->
         <button data-range="60"   data-mode="last"  class="rangeBtn" hidden>Last</button>
       </div>
@@ -526,7 +527,7 @@
       <!-- Gauge row (SVG dials, fed by MutationObserver on #latest) -->
       <div id="sct-gauges">
         <!-- Left Side gauge -->
-        <div class="gauge-card" id="gauge-left">
+        <div class="gauge-card" id="gauge-left" style="position:relative"><span style="position:absolute;top:8px;left:10px;background:var(--inalgesco);color:#fff;font-size:9px;font-weight:800;padding:2px 8px;border-radius:10px;letter-spacing:.07em;z-index:2;pointer-events:none">NOW</span>
           <div class="gauge-svg-wrap">
             <svg viewBox="0 0 210 165" id="gsvg-left" style="width:100%;display:block">
               <path id="gbg-left"  fill="none" stroke="#202840" stroke-width="12" stroke-linecap="round"/>
@@ -546,7 +547,7 @@
         </div>
 
         <!-- Right Side gauge -->
-        <div class="gauge-card" id="gauge-right">
+        <div class="gauge-card" id="gauge-right" style="position:relative"><span style="position:absolute;top:8px;left:10px;background:var(--inalgesco);color:#fff;font-size:9px;font-weight:800;padding:2px 8px;border-radius:10px;letter-spacing:.07em;z-index:2;pointer-events:none">NOW</span>
           <div class="gauge-svg-wrap">
             <svg viewBox="0 0 210 165" id="gsvg-right" style="width:100%;display:block">
               <path id="gbg-right"  fill="none" stroke="#202840" stroke-width="12" stroke-linecap="round"/>
@@ -566,7 +567,7 @@
         </div>
 
         <!-- Oven Box gauge -->
-        <div class="gauge-card" id="gauge-oven">
+        <div class="gauge-card" id="gauge-oven" style="position:relative"><span style="position:absolute;top:8px;left:10px;background:var(--inalgesco);color:#fff;font-size:9px;font-weight:800;padding:2px 8px;border-radius:10px;letter-spacing:.07em;z-index:2;pointer-events:none">NOW</span>
           <div class="gauge-svg-wrap">
             <svg viewBox="0 0 210 165" id="gsvg-oven" style="width:100%;display:block">
               <path id="gbg-oven"  fill="none" stroke="#202840" stroke-width="12" stroke-linecap="round"/>
@@ -590,7 +591,7 @@
       <div id="sct-charts-wrap">
         <div style="display:flex;align-items:baseline;justify-content:space-between;">
           <div>
-            <h2>ChillRail History</h2>
+            <h2>ChillRail History<span style="display:inline-flex;align-items:center;margin-left:8px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.25);color:var(--green);font-size:9px;font-weight:800;padding:2px 8px;border-radius:10px;letter-spacing:.07em;vertical-align:middle">24H</span></h2>
             <div id="chartRange"></div>
           </div>
         </div>
