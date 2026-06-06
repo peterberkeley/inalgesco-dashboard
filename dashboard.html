@@ -205,8 +205,8 @@
     }
     #latest td {
       text-align: right; padding: 4px 6px; color: var(--text);
-      font-variant-numeric: tabular-nums; width: 55%; max-width: 120px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-variant-numeric: tabular-nums; width: 55%;
+      max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     #latest tr:nth-child(odd)  { background: rgba(255,255,255,.02); }
     #latest tr:nth-child(even) { background: transparent; }
@@ -720,8 +720,24 @@
         if (isFinite(val)) probes[label] = val;
       });
 
-      var avg=0,_qi; for(_qi=0;_qi<matched.length;_qi++){avg+=matched[_qi][1];} avg/=matched.length;
-      var rising=null;
+      // Detect trends (rising vs cooling) by comparing to previous
+      const trends = {};
+      Object.entries(probes).forEach(([label, val]) => {
+        if (_prevReadings[label] !== undefined) {
+          trends[label] = val > _prevReadings[label] + 0.1;
+        } else {
+          trends[label] = null;
+        }
+        _prevReadings[label] = val;
+      });
+
+      // Aggregate into zones
+      ZONES.forEach(zone => {
+        const matched = Object.entries(probes).filter(([l]) => zone.match(l));
+        if (!matched.length) { updateGauge(zone.id, null, null); return; }
+        const avg  = matched.reduce((s, [, v]) => s + v, 0) / matched.length;
+        const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null);
+        const rising = risingVals.length ? risingVals.some(Boolean) : null;
         updateGauge(zone.id, avg, rising);
 
         // Update probe label
@@ -743,7 +759,8 @@
       ZONES.forEach(zone => {
         const matched = Object.entries(probes).filter(([l]) => zone.match(l));
         if (!matched.length) return;
-          const anyRising = matched.some(([l]) => trends[l] === true);
+        const avg = matched.reduce((s,[,v])=>s+v,0)/matched.length;
+        const anyRising = matched.some(([l]) => trends[l] === true);
         if (anyRising && avg > TARGET + TOL) rising.push({ name: zone.id === 'left' ? 'Left Side' : zone.id === 'right' ? 'Right Side' : 'Oven Box', avg });
       });
 
