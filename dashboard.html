@@ -808,28 +808,48 @@
     let _timerInterval = null;
 
     function updateChillCycleState(probes, trends) {
-      // Read cooling state directly from the gauge trend indicators already rendered
       const trendEls = ['gtrend-left','gtrend-right','gtrend-oven']
-        .map(id => document.getElementById(id)?.textContent || '');
-      const anyGaugeCooling = trendEls.some(t => t.includes('\u25bc'));
+        .map(function(id){return document.getElementById(id)?document.getElementById(id).textContent:'';});
+      const anyGaugeCooling = trendEls.some(function(t){return t.indexOf('\u25bc')>=0;});
 
-      // Require 3 consecutive cooling readings before declaring active chill
       if (!updateChillCycleState._n) updateChillCycleState._n = 0;
-      updateChillCycleState._n = anyGaugeCooling ? updateChillCycleState._n + 1 : 0;
-      const isCooling = updateChillCycleState._n >= 3;
+      if (!updateChillCycleState._coolingStart) updateChillCycleState._coolingStart = null;
+      if (!updateChillCycleState._ticker) updateChillCycleState._ticker = null;
 
+      if (anyGaugeCooling) {
+        updateChillCycleState._n++;
+        if (updateChillCycleState._n >= 3 && !updateChillCycleState._coolingStart) {
+          updateChillCycleState._coolingStart = Date.now();
+          if (updateChillCycleState._ticker) clearInterval(updateChillCycleState._ticker);
+          updateChillCycleState._ticker = setInterval(function(){
+            var sub = document.getElementById('ccSub');
+            if (!sub || !updateChillCycleState._coolingStart) return;
+            var rem = Math.max(0, 15*60 - (Date.now()-updateChillCycleState._coolingStart)/1000);
+            var m = Math.floor(rem/60), s = Math.floor(rem%60);
+            sub.textContent = rem<=0 ? 'At target temperature' : 'Target in '+m+'m '+s+'s';
+          }, 1000);
+        }
+      } else {
+        updateChillCycleState._n = 0;
+        updateChillCycleState._coolingStart = null;
+        if (updateChillCycleState._ticker){ clearInterval(updateChillCycleState._ticker); updateChillCycleState._ticker=null; }
+      }
+
+      const isCooling = updateChillCycleState._n >= 3 && updateChillCycleState._coolingStart !== null;
       const ccIconEl  = document.getElementById('ccIcon');
       const ccStateEl = document.getElementById('ccState');
       const ccSubEl   = document.getElementById('ccSub');
 
       if (isCooling) {
-        if (ccIconEl)  { ccIconEl.style.background = 'rgba(96,165,250,.15)'; ccIconEl.textContent = '\u2744\ufe0f'; }
-        if (ccStateEl) { ccStateEl.textContent = 'Cooling'; ccStateEl.style.color = 'var(--blue)'; }
-        if (ccSubEl)   ccSubEl.textContent = 'Temperature falling steadily';
+        const rem = Math.max(0, 15*60 - (Date.now()-updateChillCycleState._coolingStart)/1000);
+        const m = Math.floor(rem/60), s = Math.floor(rem%60);
+        if (ccIconEl)  { ccIconEl.style.background='rgba(96,165,250,.15)'; ccIconEl.textContent='\u2744\ufe0f'; }
+        if (ccStateEl) { ccStateEl.textContent='Cooling'; ccStateEl.style.color='var(--blue)'; }
+        if (ccSubEl)   ccSubEl.textContent = rem<=0 ? 'At target temperature' : 'Target in '+m+'m '+s+'s';
       } else {
-        if (ccIconEl)  { ccIconEl.style.background = 'rgba(98,114,164,.1)'; ccIconEl.textContent = '\u2764\ufe0f'; }
-        if (ccStateEl) { ccStateEl.textContent = 'Monitoring'; ccStateEl.style.color = 'var(--muted)'; }
-        if (ccSubEl)   ccSubEl.textContent = 'Tracking since last connection';
+        if (ccIconEl)  { ccIconEl.style.background='rgba(98,114,164,.1)'; ccIconEl.textContent='\u2764\ufe0f'; }
+        if (ccStateEl) { ccStateEl.textContent='Monitoring'; ccStateEl.style.color='var(--muted)'; }
+        if (ccSubEl)   ccSubEl.textContent='Tracking since last connection';
       }
     }
 
