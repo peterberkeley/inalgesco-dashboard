@@ -719,16 +719,18 @@
         if (isFinite(val)) probes[label] = val;
       });
 
-      // Detect cooling: require >= 0.8 degrees/min sustained drop (not just drift)
-      // _prevReadings stores {v: value, t: timestamp} per probe label
+      // Compute zone average temperature
+      const avg = matched.reduce((s,[,v])=>s+v,0)/matched.length;
+
+      // Detect cooling: require >=0.8 deg/min drop to exclude drift/ambient
       let coolingVotes = 0, risingVotes = 0;
       Object.entries(probes).forEach(([label, val]) => {
         if (typeof val !== 'number') return;
         const prev = _prevReadings[label];
         if (prev && typeof prev.v === 'number') {
           const durationMin = (Date.now() - prev.t) / 60000;
-          if (durationMin > 0.3) {  // only evaluate if at least 18s have passed
-            const ratePerMin = (prev.v - val) / durationMin;  // positive = cooling
+          if (durationMin > 0.3) {
+            const ratePerMin = (prev.v - val) / durationMin;
             if (ratePerMin >= 0.8) coolingVotes++;
             else if (ratePerMin <= -0.3) risingVotes++;
           }
