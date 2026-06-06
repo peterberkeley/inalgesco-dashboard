@@ -205,7 +205,8 @@
     }
     #latest td {
       text-align: right; padding: 4px 6px; color: var(--text);
-      font-variant-numeric: tabular-nums; width: 55%;
+      font-variant-numeric: tabular-nums; width: 55%; max-width: 120px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     #latest tr:nth-child(odd)  { background: rgba(255,255,255,.02); }
     #latest tr:nth-child(even) { background: transparent; }
@@ -719,26 +720,8 @@
         if (isFinite(val)) probes[label] = val;
       });
 
-      // Compute zone average temperature
-       var avg = 0;
-      for (var _i = 0; _i < matched.length; _i++) { avg += matched[_i][1]; }
-      avg = avg / matched.length;
-
-      var _coolingVotes = 0, _risingVotes = 0, _now = Date.now();
-      for (var _j = 0; _j < matched.length; _j++) {
-        var _lbl = matched[_j][0], _val = matched[_j][1];
-        var _prev = _prevReadings[_lbl];
-        if (_prev && _prev.t) {
-          var _dur = (_now - _prev.t) / 60000;
-          if (_dur > 0.3) {
-            var _rate = (_prev.v - _val) / _dur;
-            if (_rate >= 0.8) { _coolingVotes++; }
-            else if (_rate <= -0.3) { _risingVotes++; }
-          }
-        }
-        _prevReadings[_lbl] = {v: _val, t: _now};
-      }
-      var rising = (_coolingVotes === 0 && _risingVotes === 0) ? null : (_coolingVotes >= _risingVotes ? false : true);
+      var avg=0,_qi; for(_qi=0;_qi<matched.length;_qi++){avg+=matched[_qi][1];} avg/=matched.length;
+      var rising=null;
         updateGauge(zone.id, avg, rising);
 
         // Update probe label
