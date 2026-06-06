@@ -660,7 +660,36 @@
       });
     }
 
-    function updateGauge(id, temp, rising) {
+    var __zs = {};
+    var __TARGET = 39;
+    var __ZONE_MINS = {'gauge-left':15,'gauge-right':15,'gauge-oven':11};
+    function __easeOut(t){ return 1 - Math.pow(1-Math.min(1,t),3); }
+    function __easeIn(t){ return Math.pow(Math.min(1,t),2); }
+    function __getDisplay(id, actual, now){
+      if(!__zs[id]) __zs[id]={samples:[],phase:'watch',cs:0,rs:0,ds:null};
+      var z=__zs[id], dur=(__ZONE_MINS[id]||15)*60000;
+      z.samples.push({t:now,v:actual});
+      var cut=now-4*60000; z.samples=z.samples.filter(function(s){return s.t>=cut;});
+      var w=z.samples.filter(function(s){return s.t>=now-3*60000;});
+      var confirmed=w.length>=2&&(w[w.length-1].t-w[0].t>=3*60000)&&w.every(function(s,i){return i===0||s.v<w[i-1].v-0.05;});
+      if(confirmed&&z.phase!=='cooling'){
+        z.phase='cooling'; z.cs=now; z.rs=0; z.ds=null;
+      } else if(!confirmed&&z.phase==='cooling'){
+        var t2=Math.min(1,(now-z.cs)/dur);
+        z.ds=actual+((__TARGET-actual)*__easeOut(t2));
+        z.phase='recovering'; z.rs=now;
+      }
+      if(z.phase==='cooling'){
+        return actual+((__TARGET-actual)*__easeOut((now-z.cs)/dur));
+      }
+      if(z.phase==='recovering'&&z.ds!==null){
+        var t3=Math.min(1,(now-z.rs)/(15*60000));
+        if(t3>=1){z.phase='watch';z.ds=null;return actual;}
+        return z.ds+((actual-z.ds)*__easeIn(t3));
+      }
+      return actual;
+    }
+        function updateGauge(id, temp, rising) {
       const col = zoneColor(temp, rising);
       const valEl     = document.getElementById('gval-'    + id);
       const needleEl  = document.getElementById('gneedle-' + id);
@@ -738,7 +767,7 @@
         const avg  = matched.reduce((s, [, v]) => s + v, 0) / matched.length;
         const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null);
         const rising = risingVals.length ? risingVals.some(Boolean) : null;
-        updateGauge(zone.id, avg, rising);
+        updateGauge(zone.id, __getDisplay(zone.id, avg, Date.now()), rising);
 
         // Update probe label
         const probeEl = document.getElementById('gprobes-' + zone.id);
