@@ -721,8 +721,7 @@
 
       // Compute zone average temperature
        const avg = matched.reduce(function(s,p){return s+p[1];},0)/matched.length;
-     const avg = matched.reduce((s,[,v])=>s+v,0)/matched.length;
-
+     
       // Detect cooling: require >=0.8 deg/min drop to exclude drift/ambient
       let coolingVotes = 0, risingVotes = 0;
       Object.entries(probes).forEach(([label, val]) => {
