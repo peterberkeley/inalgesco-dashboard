@@ -683,7 +683,7 @@
       if (valEl)   { valEl.setAttribute('d', vPath || ''); valEl.setAttribute('stroke', col); }
       if (needleEl){ needleEl.setAttribute('x1', nBase.x.toFixed(1)); needleEl.setAttribute('y1', nBase.y.toFixed(1)); needleEl.setAttribute('x2', nTip.x.toFixed(1)); needleEl.setAttribute('y2', nTip.y.toFixed(1)); }
       if (hubEl)   { hubEl.setAttribute('cx', CX); hubEl.setAttribute('cy', CY); }
-      if (tempEl)  { tempEl.textContent = Math.round(temp) + '°'; tempEl.setAttribute('fill', col); }
+      if (tempEl)  { tempEl.textContent = Math.round(temp*10)/10 + '°'; tempEl.setAttribute('fill', col); }
       if (trendEl) {
         if (rising === null) { trendEl.textContent = '—'; trendEl.setAttribute('fill', '#6272a4'); }
         else if (rising)     { trendEl.textContent = '▲ Rising'; trendEl.setAttribute('fill', '#ef4444'); }
