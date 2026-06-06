@@ -793,9 +793,9 @@
       const buf = updateChillCycleState._buf;
 
       // Add current average (exclude oven box)
-      const temps = (probes || [])
-        .filter(p => p && typeof p.temp === 'number' && !isNaN(p.temp) && !/oven/i.test(p.label || ''))
-        .map(p => p.temp);
+      const temps = Object.entries(probes || {})
+        .filter(([lbl, v]) => !/oven/i.test(lbl) && typeof v === 'number' && !isNaN(v))
+        .map(([, v]) => v);
       if (temps.length) buf.push({ t: Date.now(), v: temps.reduce((a,b)=>a+b,0)/temps.length });
 
       // Trim to last 30 min
