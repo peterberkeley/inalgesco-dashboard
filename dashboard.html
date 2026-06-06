@@ -719,24 +719,24 @@
         if (isFinite(val)) probes[label] = val;
       });
 
-      // Detect trends (rising vs cooling) by comparing to previous
-      const trends = {};
+      // Detect cooling: require >= 0.8 degrees/min sustained drop (not just drift)
+      // _prevReadings stores {v: value, t: timestamp} per probe label
+      let coolingVotes = 0, risingVotes = 0;
       Object.entries(probes).forEach(([label, val]) => {
-        if (_prevReadings[label] !== undefined) {
-          trends[label] = val > _prevReadings[label] + 0.1;
-        } else {
-          trends[label] = null;
+        if (typeof val !== 'number') return;
+        const prev = _prevReadings[label];
+        if (prev && typeof prev.v === 'number') {
+          const durationMin = (Date.now() - prev.t) / 60000;
+          if (durationMin > 0.3) {  // only evaluate if at least 18s have passed
+            const ratePerMin = (prev.v - val) / durationMin;  // positive = cooling
+            if (ratePerMin >= 0.8) coolingVotes++;
+            else if (ratePerMin <= -0.3) risingVotes++;
+          }
         }
-        _prevReadings[label] = val;
+        _prevReadings[label] = { v: val, t: Date.now() };
       });
-
-      // Aggregate into zones
-      ZONES.forEach(zone => {
-        const matched = Object.entries(probes).filter(([l]) => zone.match(l));
-        if (!matched.length) { updateGauge(zone.id, null, null); return; }
-        const avg  = matched.reduce((s, [, v]) => s + v, 0) / matched.length;
-        const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null);
-        const rising = risingVals.length ? risingVals.some(Boolean) : null;
+      const rising = coolingVotes === 0 && risingVotes === 0 ? null :
+                     coolingVotes >= risingVotes ? false : true;
         updateGauge(zone.id, avg, rising);
 
         // Update probe label
