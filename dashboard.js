@@ -435,7 +435,7 @@ function buildDeviceDropdownFromConfig(sensorMap){
     const opt = document.createElement("option");
     opt.value = dev;
     const displayLabel = getDisplayName(dev);
-    opt.text  = `${dot} ${displayLabel} (${isOnline?"Online":"Offline"})`;
+    opt.text  = (function(){var _sa=now-(obj.last_seen||0);return isOnline?(dot+' '+displayLabel+' ('+Math.max(0,Math.round(_sa/60))+'m)'):(dot+' '+displayLabel+' '+((_sa>86400)?'(>24h)':'('+Math.round(_sa/3600)+'h)'));}());
     sel.appendChild(opt);
   });
 
