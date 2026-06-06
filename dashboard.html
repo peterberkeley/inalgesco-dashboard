@@ -788,30 +788,15 @@
     let _timerInterval = null;
 
     function updateChillCycleState(probes, trends) {
-      // Rolling buffer -- tracks average non-oven temp over time
-      if (!updateChillCycleState._buf) updateChillCycleState._buf = [];
-      const buf = updateChillCycleState._buf;
+      // Read cooling state directly from the gauge trend indicators already rendered
+      const trendEls = ['gtrend-left','gtrend-right','gtrend-oven']
+        .map(id => document.getElementById(id)?.textContent || '');
+      const anyGaugeCooling = trendEls.some(t => t.includes('\u25bc'));
 
-      // Add current average (exclude oven box)
-      const temps = Object.entries(probes || {})
-        .filter(([lbl, v]) => !/oven/i.test(lbl) && typeof v === 'number' && !isNaN(v))
-        .map(([, v]) => v);
-      if (temps.length) buf.push({ t: Date.now(), v: temps.reduce((a,b)=>a+b,0)/temps.length });
-
-      // Trim to last 30 min
-      const cutoff = Date.now() - 30*60*1000;
-      while (buf.length && buf[0].t < cutoff) buf.shift();
-
-      // Cooling requires: >=5 min sustained data, >=3 samples, rate >= 0.3degC/min
-      let isCooling = false;
-      if (buf.length >= 3) {
-        const oldest = buf[0], newest = buf[buf.length-1];
-        const durMs = newest.t - oldest.t;
-        if (durMs >= 5*60*1000) {
-          const drop = oldest.v - newest.v;
-          isCooling = drop > 0 && (drop / (durMs/60000)) >= 0.3;
-        }
-      }
+      // Require 3 consecutive cooling readings before declaring active chill
+      if (!updateChillCycleState._n) updateChillCycleState._n = 0;
+      updateChillCycleState._n = anyGaugeCooling ? updateChillCycleState._n + 1 : 0;
+      const isCooling = updateChillCycleState._n >= 3;
 
       const ccIconEl  = document.getElementById('ccIcon');
       const ccStateEl = document.getElementById('ccState');
@@ -846,53 +831,52 @@
 
     // Watch kpiSeen for ping-rate updates written by JS
     function watchHeartbeat() {
+      // Record this update cycle
+      if (!window.__pingTs) window.__pingTs = [];
+      window.__pingTs.push(Date.now());
+      // Trim to last 70 minutes
+      const cutoff = Date.now() - 70*60*1000;
+      while (window.__pingTs.length && window.__pingTs[0] < cutoff) window.__pingTs.shift();
+
       const hbRateEl     = document.getElementById('hbRateEl');
       const hbBarsEl     = document.getElementById('hbBarsEl');
       const hbStatusEl   = document.getElementById('hbStatusEl');
       const hbIntervalEl = document.getElementById('hbIntervalEl');
 
-      // Only show heartbeat for online trucks
-      const deviceSel = document.getElementById('deviceSelect');
-      const selText = deviceSel ? (deviceSel.selectedOptions[0]?.text || '') : '';
-      const isLive = !/offline/i.test(selText);
+      // Only show for online trucks
+      const sel = document.getElementById('deviceSelect');
+      const isLive = sel ? !/offline/i.test(sel.selectedOptions[0]?.text || '') : false;
 
       if (!isLive) {
-        if (hbRateEl)     hbRateEl.textContent = '\u2014';
-        if (hbIntervalEl) hbIntervalEl.textContent = '\u2014';
+        if (hbRateEl)     hbRateEl.textContent = '--';
+        if (hbIntervalEl) hbIntervalEl.textContent = '--';
         if (hbStatusEl)   hbStatusEl.textContent = 'Offline';
         if (hbBarsEl)     hbBarsEl.innerHTML = '';
         return;
       }
 
-      // Count pings in last hour from heartbeat variable history
-      // Use the window.__hbTimestamps if available (set by dashboard.js)
-      const stamps = window.__hbTimestamps || [];
-      const now = Date.now();
-      const recentStamps = stamps.filter(t => t >= now - 60*60*1000);
-      const pingsPerHour = recentStamps.length;
+      const stamps = window.__pingTs.filter(t => t >= Date.now() - 60*60*1000);
+      const pph = stamps.length;
+      if (hbRateEl) hbRateEl.textContent = pph > 0 ? String(pph) : '--';
 
-      if (hbRateEl) hbRateEl.textContent = pingsPerHour > 0 ? String(pingsPerHour) : '\u2014';
-
-      // Average interval
-      if (hbIntervalEl && recentStamps.length >= 2) {
-        const sorted = [...recentStamps].sort((a,b)=>a-b);
+      if (hbIntervalEl && stamps.length >= 2) {
+        const sorted = [...stamps].sort((a,b)=>a-b);
         const gaps = [];
         for(let i=1;i<sorted.length;i++) gaps.push(sorted[i]-sorted[i-1]);
-        const avgGapSec = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length/1000);
-        hbIntervalEl.textContent = avgGapSec + 's';
+        const avgSec = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length/1000);
+        hbIntervalEl.textContent = avgSec + 's';
       } else if (hbIntervalEl) {
-        hbIntervalEl.textContent = '\u2014';
+        hbIntervalEl.textContent = '--';
       }
 
-      if (hbStatusEl) hbStatusEl.textContent = pingsPerHour > 0 ? 'Live' : 'Monitoring\u2026';
+      if (hbStatusEl) hbStatusEl.textContent = pph > 0 ? 'Live' : 'Monitoring...';
 
-      // Draw bars (12 x 5-min buckets = last hour)
       if (hbBarsEl) {
+        const now = Date.now();
         const buckets = new Array(12).fill(0);
-        recentStamps.forEach(t => {
-          const minAgo = (now - t) / 60000;
-          const bucket = Math.min(11, Math.floor(minAgo / 5));
-          buckets[11 - bucket]++;
+        stamps.forEach(t => {
+          const b = Math.min(11, Math.floor((now - t) / (5*60*1000)));
+          buckets[11 - b]++;
         });
         const maxB = Math.max(1, ...buckets);
         hbBarsEl.innerHTML = buckets.map(b => {
