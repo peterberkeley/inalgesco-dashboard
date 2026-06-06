@@ -720,25 +720,25 @@
       });
 
       // Compute zone average temperature
-       const avg = matched.reduce(function(s,p){return s+p[1];},0)/matched.length;
-     
-      // Detect cooling: require >=0.8 deg/min drop to exclude drift/ambient
-      let coolingVotes = 0, risingVotes = 0;
-      Object.entries(probes).forEach(([label, val]) => {
-        if (typeof val !== 'number') return;
-        const prev = _prevReadings[label];
-        if (prev && typeof prev.v === 'number') {
-          const durationMin = (Date.now() - prev.t) / 60000;
-          if (durationMin > 0.3) {
-            const ratePerMin = (prev.v - val) / durationMin;
-            if (ratePerMin >= 0.8) coolingVotes++;
-            else if (ratePerMin <= -0.3) risingVotes++;
+       var avg = 0;
+      for (var _i = 0; _i < matched.length; _i++) { avg += matched[_i][1]; }
+      avg = avg / matched.length;
+
+      var _coolingVotes = 0, _risingVotes = 0, _now = Date.now();
+      for (var _j = 0; _j < matched.length; _j++) {
+        var _lbl = matched[_j][0], _val = matched[_j][1];
+        var _prev = _prevReadings[_lbl];
+        if (_prev && _prev.t) {
+          var _dur = (_now - _prev.t) / 60000;
+          if (_dur > 0.3) {
+            var _rate = (_prev.v - _val) / _dur;
+            if (_rate >= 0.8) { _coolingVotes++; }
+            else if (_rate <= -0.3) { _risingVotes++; }
           }
         }
-        _prevReadings[label] = { v: val, t: Date.now() };
-      });
-      const rising = coolingVotes === 0 && risingVotes === 0 ? null :
-                     coolingVotes >= risingVotes ? false : true;
+        _prevReadings[_lbl] = {v: _val, t: _now};
+      }
+      var rising = (_coolingVotes === 0 && _risingVotes === 0) ? null : (_coolingVotes >= _risingVotes ? false : true);
         updateGauge(zone.id, avg, rising);
 
         // Update probe label
