@@ -776,7 +776,31 @@
 
       updateAlert(probes, trends);
       updateChillCycleState(probes, trends);
-    }
+    
+      (function(){
+        var rows=document.querySelectorAll('#latest tr');
+        var sum=0,cnt=0;
+        rows.forEach(function(row){
+          var th=row.querySelector('th'),td=row.querySelector('td');
+          if(!th||!td)return;
+          var v=parseFloat((td.textContent||'').replace(/[^0-9.\-]/g,''));
+          if(!isNaN(v)&&v>30&&v<200){sum+=v;cnt++;}
+        });
+        if(cnt===0)return;
+        var avg=Math.round(sum/cnt*10)/10;
+        var charts=Object.values(Chart.instances);
+        var c=charts[0];if(!c)return;
+        var n=new Date();
+        var lbl=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
+        if(c.data.labels[c.data.labels.length-1]===lbl)return;
+        c.data.labels.push(lbl);
+        c.data.datasets[0].data.push(avg);
+        while(c.data.labels.length>290){c.data.labels.shift();c.data.datasets[0].data.shift();}
+        c.update('none');
+        var r=document.getElementById('chartRange');
+        if(r&&c.data.labels.length>1)r.textContent=c.data.labels[0]+'--'+lbl;
+      }());
+}
 
     function updateAlert(probes, trends) {
       const banner = document.getElementById('sct-alert');
