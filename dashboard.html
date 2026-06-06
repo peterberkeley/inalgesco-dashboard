@@ -671,7 +671,7 @@
       z.samples.push({t:now,v:actual});
       var cut=now-4*60000; z.samples=z.samples.filter(function(s){return s.t>=cut;});
       var w=z.samples.filter(function(s){return s.t>=now-3*60000;});
-      var confirmed=w.length>=2&&(w[w.length-1].t-w[0].t>=3*60000)&&w.every(function(s,i){return i===0||s.v<w[i-1].v-0.05;});
+      var confirmed=w.length>=2&&(w[w.length-1].t-w[0].t>=3*60000)&&w.every(function(s,i){return i===0||s.v<w[i-1].v-0.5;});
       if(confirmed&&z.phase!=='cooling'){
         z.phase='cooling'; z.cs=now; z.rs=0; z.ds=null;
       } else if(!confirmed&&z.phase==='cooling'){
