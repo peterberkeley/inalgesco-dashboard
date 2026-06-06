@@ -861,7 +861,7 @@ function buildSensorSlots(deviceLabel, liveDallas, SENSOR_MAP){
     const auto_offset =
       (entryA && typeof entryA.auto_offset === 'number') ? entryA.auto_offset :
       (entryM && typeof entryM.auto_offset === 'number') ? entryM.auto_offset :
-      (label && fullMapData.__fleetProfile && typeof fullMapData.__fleetProfile[label] === 'number') ? fullMapData.__fleetProfile[label] : 0;
+      (label && SENSOR_MAP.__fleetProfile && typeof SENSOR_MAP.__fleetProfile[label] === 'number') ? SENSOR_MAP.__fleetProfile[label] : 0;
 
     const truckAA = adminMap.__autoAdjust || {};
     const auto_adjust = !!(truckAA.enabled);
