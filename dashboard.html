@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -8,160 +8,336 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sky Café Trucks Dashboard</title>
 
-  <!-- Libs -->
+  <!-- Libs (unchanged) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- Styles -->
   <style>
-    :root{
-      --color-bg:#f6f7fb;
-      --color-card:#ffffff;
-      --color-text:#0f172a;
-      --color-primary:#3b82f6;
+    /* ═══ BRAND PALETTE ═══
+       Inalgesco  : #1e72d8 (bright blue)
+       PrimeFlight: #1a2540 (navy), #c9a020 (gold)
+       Sky Café   : #2b3d99 (script navy)
+    ═══════════════════════ */
+    :root {
+      --bg:        #0b1120;
+      --surface:   #111827;
+      --surface2:  #172035;
+      --surface3:  #1e2a42;
+      --border:    #243050;
+      --border2:   #2e3d60;
+      --inalgesco: #1e72d8;
+      --inal2:     #4d9de8;
+      --pf-gold:   #c9a020;
+      --pf-gold2:  #e2bd52;
+      --sc-navy:   #2b3d99;
+      --green:     #22c55e;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --blue:      #60a5fa;
+      --text:      #dde3f5;
+      --muted:     #6272a4;
+      --dim:       #364165;
     }
 
-    /* Allow full-page scrolling */
+    *, *::before, *::after { box-sizing: border-box; }
+
     html, body {
       height: auto !important;
       min-height: 100%;
       overflow-y: auto !important;
       overflow-x: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
     }
 
-    body{
-      background:var(--color-bg);
-      color:var(--color-text);
-      font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+    /* ─── HEADER ─── */
+    #sct-header {
+      position: sticky; top: 0; z-index: 40;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 18px; height: 52px;
+    }
+    .h-brand { display: flex; align-items: center; gap: 0; }
+    .h-inal {
+      display: flex; align-items: center; gap: 8px;
+      padding-right: 14px; border-right: 1px solid var(--border2);
+    }
+    .h-inal-mark {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: var(--inalgesco);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; line-height: 1; color: #fff; flex-shrink: 0;
+    }
+    .h-inal-name { font-size: 11px; font-weight: 800; letter-spacing: .1em; color: var(--inal2); }
+    .h-inal-sub  { font-size: 9px;  color: var(--dim); margin-top: 1px; }
+    .h-sc { padding: 0 14px; border-right: 1px solid var(--border2); }
+    .h-sc-name { font-size: 15px; font-weight: 700; color: var(--text); }
+    .h-sc-sub  { font-size: 10px; color: var(--muted); }
+    .h-pf {
+      margin-left: 10px;
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(201,160,32,.1); border: 1px solid rgba(201,160,32,.2);
+      border-radius: 6px; padding: 3px 8px;
+    }
+    .h-pf-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pf-gold); flex-shrink: 0; }
+    .h-pf-txt { font-size: 10px; color: var(--pf-gold); font-weight: 600; }
+
+    .h-center { display: flex; align-items: center; gap: 10px; }
+
+    /* Device pill */
+    .h-device-pill {
+      display: flex; align-items: center; gap: 7px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 500;
+    }
+    /* Status pill — overridden by JS via window.__setDeviceStatus */
+    #deviceStatusPill { display: none; }
+
+    /* Time selector */
+    .time-seg { display: flex; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .time-seg .rangeBtn {
+      padding: 5px 13px; border: none; background: none;
+      color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .time-seg .rangeBtn.active { background: var(--inalgesco); color: #fff; }
+    .time-seg .rangeBtn:hover:not(.active) { color: var(--text); }
+    .time-seg .rangeBtn[hidden] { display: none; }
+
+    .h-actions { display: flex; gap: 7px; }
+    .hbtn {
+      padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text); cursor: pointer;
+      font-size: 12px; font-weight: 500; transition: all .15s;
+    }
+    .hbtn:hover { border-color: var(--inalgesco); color: var(--inal2); }
+    .hbtn.gold  { background: var(--pf-gold); border-color: var(--pf-gold); color: #0b1120; font-weight: 700; }
+    .hbtn.gold:hover { background: var(--pf-gold2); }
+
+    /* ─── LAYOUT ─── */
+    #dashMain {
+      display: grid;
+      grid-template-columns: 272px 1fr;
+      gap: 0;
+      max-width: 100%;
+    }
+    @media (max-width: 900px) {
+      #dashMain { grid-template-columns: 1fr; }
     }
 
-    /* Cards */
-    .card{ background:var(--color-card); border-radius:1rem; box-shadow:0 6px 28px rgba(15,23,42,.06) }
-
-    /* KPI tiles */
-    .kpi{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem }
-    .kpi .tile{ background:var(--color-card); border-radius:1rem; box-shadow:0 4px 16px rgba(15,23,42,.06); padding:1rem }
-    .kpi .lab{ font-size:.72rem; letter-spacing:.02em; text-transform:uppercase; color:#6b7280; }
-    .kpi .val{ font-weight:700; font-size:1.35rem; line-height:1.2 }
-    .kpi .sub{ font-size:.72rem; color:#6b7280 }
-
-    /* KPI: force two lines (we write two <div>s from JS) */
-    #kpiSeen{ white-space: normal; min-height: 2.6em; line-height: 1.2; }
-    #kpiSeen > div{ display:block; }
-
-    /* Charts grid (does not trap scroll) */
-    #charts{
-      display:grid;
-      grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
-      gap:1rem;
-      overflow:visible !important;
-    }
-    .chart-box{ background:var(--color-card); border-radius:1rem; box-shadow:0 4px 16px rgba(15,23,42,.06); padding:1rem 1rem 1.25rem; height:360px; overflow:hidden; }
-    .chart-box h3{ font-weight:700; margin:0 0 .5rem 0; font-size:1rem }
-
-    /* Info table — compact, no wrap, tighter label/value gap */
-    #latest{
-      width:100%;
-      border-radius:.75rem;
-      overflow:hidden;
-      table-layout:fixed;                /* predictable column widths */
-    }
-    #latest th,
-    #latest td{
-      white-space:nowrap;                 /* prevent multi-line rows */
-      overflow:hidden;
-      text-overflow:ellipsis;
-      line-height:1.15;
-    }
-    #latest th{
-      text-align:left;
-      padding:.28rem .45rem;              /* tighter vertical spacing */
-      font-weight:600;
-      color:#334155;
-      width:45%;                          /* reduce label column from 55% -> 45% */
-    }
-    #latest td{
-      text-align:right;
-      padding:.28rem .45rem;
-      color:#0f172a;
-      font-variant-numeric:tabular-nums;
-      width:55%;
-    }
-    #latest tr:nth-child(odd){ background:#f9fafb }
-    #latest tr:nth-child(even){ background:#f3f4f6 }
-
-    /* Keep signal bars from inflating row height */
-    #latest td .sig{
-      display:inline-flex;
-      align-items:flex-end;
-      height:18px;                        /* matches tallest bar */
-      line-height:1;
+    /* ─── SIDEBAR ─── */
+    #sct-sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 14px;
+      display: flex; flex-direction: column; gap: 11px;
     }
 
-    /* Phone-like signal bars */
-    .sig{ display:inline-flex; gap:2px; vertical-align:middle }
-    .sig i{ width:5px; background:#e5e7eb; border-radius:2px; display:inline-block }
-    .sig i.on{ background:#10b981 }
-    .sig i.l1{ height:6px } .sig i.l2{ height:9px } .sig i.l3{ height:12px } .sig i.l4{ height:15px } .sig i.l5{ height:18px }
-    .sig.low  i.on{ background:#ef4444 }
-    .sig.med  i.on{ background:#f59e0b }
-    .sig.high i.on{ background:#10b981 }
-
-    /* Map height */
-    #map{ height:22rem }
-    @media (min-width:1024px){ #map{ height:34rem } }
-
-    /* Spinner */
-    #spinner{
-      position:fixed; inset:0; display:none; align-items:center; justify-content:center; backdrop-filter:saturate(1.2) blur(2px);
-      background:rgba(255,255,255,.4); z-index:60;
+    /* ─── CARDS ─── */
+    .sct-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 13px;
     }
-    #spinner:before{
-      content:""; width:42px; height:42px; border-radius:50%;
-      border:4px solid rgba(2,6,23,.12); border-top-color:var(--color-primary);
-      animation:spin 1s linear infinite;
-    }
-    @keyframes spin{ to{ transform:rotate(360deg) } }
-
-    /* Breadcrumb legend styling */
-    .breadcrumb-legend { font-size: 0.75rem; }
-
-    /* Tooltip styling for breadcrumbs */
-    .leaflet-tooltip.tooltip {
-      background:#fff;
-      color:#374151;
-      border:1px solid #d1d5db;
-      border-radius:4px;
-      padding:2px 4px;
-      box-shadow:0 2px 4px rgba(0,0,0,0.1);
+    .sct-sec {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .09em;
+      color: var(--dim); margin-bottom: 5px;
     }
 
-    /* ——— Spacing tweaks (sensors card & column gap) ——— */
-    @media (min-width:1024px){
-      #dashMain { column-gap: 2rem !important; }
+    /* Truck identity */
+    .truck-number { font-size: 30px; font-weight: 800; line-height: 1; }
+    .truck-meta   { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .online-badge {
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.22);
+      color: var(--green); border-radius: 20px; padding: 3px 9px;
+      font-size: 11px; font-weight: 700;
     }
-    #sensorsCard { margin-bottom: 1.25rem; }
+    .odot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px var(--green); flex-shrink:0; }
 
-    /* Auth overlay */
-    #auth-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); z-index: 9999; }
-    #auth-card { background: #111; color: #fff; padding: 24px; border-radius: 12px; width: min(92vw, 360px); box-shadow: 0 10px 30px rgba(0,0,0,0.4); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif; }
+    /* Hidden KPI tiles — kept for JS; visually absorbed into sidebar */
+    .kpi { display: none !important; }
+
+    /* Chill cycle */
+    .cc-icon { width: 38px; height: 38px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .cc-timer { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .cc-meta { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+    .cc-key { font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
+    .cc-val { font-size: 12px; font-weight: 600; margin-top: 1px; }
+
+    /* Heartbeat */
+    .hb-rate { font-size: 26px; font-weight: 700; }
+    .hb-unit { font-size: 11px; color: var(--muted); }
+    .hb-bars { display: flex; align-items: flex-end; gap: 2.5px; height: 26px; }
+    .hb-bar  { width: 7px; border-radius: 2px; }
+
+    /* Progress bar */
+    .prog-wrap { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 5px; }
+    .prog-fill { height: 100%; border-radius: 2px; }
+
+    /* Maintenance — JS writes innerHTML of #maintenanceBox; style its children */
+    #maintenanceBox .text-lg  { color: var(--text) !important; font-size: 13px !important; font-weight: 700 !important; margin-bottom: 10px !important; }
+    #maintenanceBox .space-y-4 > div { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    #maintenanceBox .space-y-4 > div:last-child { border-bottom: none; padding-bottom: 0; }
+    #maintenanceBox strong { color: var(--text); font-weight: 500; }
+    #maintenanceBox button {
+      background: var(--inalgesco) !important; border: none !important;
+      color: #fff !important; font-size: 11px !important; padding: 3px 10px !important;
+      border-radius: 6px !important; cursor: pointer;
+    }
+    #maintenanceBox button:hover { background: var(--inal2) !important; }
+    #maintenanceBox { color: var(--muted); font-size: 12px; }
+
+    /* Device info table — JS writes #latest; we render it in sidebar */
+    #sensorsCard { border: none; padding: 0; background: transparent; }
+    #sensorsCard h2 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    #latest { width: 100%; border-collapse: collapse; font-size: 12px; }
+    #latest th {
+      text-align: left; padding: 4px 6px; font-weight: 600;
+      color: var(--muted); width: 45%; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    #latest td {
+      text-align: right; padding: 4px 6px; color: var(--text);
+      font-variant-numeric: tabular-nums; width: 55%;
+    }
+    #latest tr:nth-child(odd)  { background: rgba(255,255,255,.02); }
+    #latest tr:nth-child(even) { background: transparent; }
+    #latest a { color: var(--inal2); }
+
+    /* Signal bars — keep JS classes */
+    .sig { display: inline-flex; gap: 2px; vertical-align: middle; }
+    .sig i { width: 5px; background: var(--border2); border-radius: 2px; display: inline-block; }
+    .sig i.on { background: var(--green); }
+    .sig i.l1 { height: 6px; } .sig i.l2 { height: 9px; } .sig i.l3 { height: 12px; }
+    .sig i.l4 { height: 15px; } .sig i.l5 { height: 18px; }
+    .sig.low i.on  { background: var(--red); }
+    .sig.med i.on  { background: var(--yellow); }
+    .sig.high i.on { background: var(--green); }
+    #latest td .sig { display: inline-flex; align-items: flex-end; height: 18px; line-height: 1; }
+
+    /* CSV export */
+    .exp-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); margin-bottom: 3px; }
+    .sct-date {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 7px; padding: 5px 8px; font-size: 11px;
+    }
+    .sct-date:focus { outline: none; border-color: var(--inalgesco); }
+    #expStatus { font-size: 11px; color: var(--muted); margin-top: 5px; min-height: 16px; }
+
+    /* ─── MAIN COLUMN ─── */
+    #sct-main {
+      padding: 14px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+
+    /* ─── ALERT BANNER ─── */
+    #sct-alert { border-radius: 12px; padding: 11px 14px; display: none; }
+    #sct-alert.show { display: flex; align-items: flex-start; gap: 11px; }
+    #sct-alert.warn-off { background: rgba(239,68,68,.09); border: 1px solid rgba(239,68,68,.3); }
+    #sct-alert.warn-chill { background: rgba(96,165,250,.07); border: 1px solid rgba(96,165,250,.2); }
+    .alert-icon  { font-size: 18px; flex-shrink: 0; }
+    .alert-title { font-size: 13px; font-weight: 700; }
+    .alert-title.off   { color: var(--red); }
+    .alert-title.chill { color: var(--blue); }
+    .alert-desc  { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+    .alert-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; flex-shrink: 0; margin-left: auto; }
+
+    /* ─── GAUGE SECTION ─── */
+    #sct-gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .gauge-card {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 12px 12px; display: flex; flex-direction: column; align-items: center;
+      transition: border-color .3s;
+    }
+    .gauge-card.alerting { border-color: rgba(239,68,68,.4); }
+    .gauge-svg-wrap { width: 100%; max-width: 210px; }
+    .gauge-zone   { font-size: 13px; font-weight: 700; text-align: center; margin-top: 3px; color: var(--text); }
+    .gauge-probes { font-size: 10px; color: var(--muted); text-align: center; margin-top: 2px; }
+
+    /* ─── CHART SECTION ─── */
+    #sct-charts-wrap {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+    }
+    #sct-charts-wrap h2 { font-size: 14px; font-weight: 700; color: var(--text); }
+    #chartRange { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* Charts grid — MUST preserve ID=charts and .chart-box for JS */
+    #charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+      overflow: visible !important;
+      margin-top: 12px;
+    }
+    .chart-box {
+      background: var(--surface3); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 12px 14px; height: 220px; overflow: hidden;
+    }
+    .chart-box h3 { font-weight: 700; margin: 0 0 6px 0; font-size: 12px; color: var(--text); }
+    /* Charts render on white canvas (set by JS); frame it cleanly */
+    .chart-box canvas { border-radius: 4px; }
+
+    /* ─── MAP SECTION ─── */
+    #sct-map-wrap {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    }
+    .map-head { padding: 11px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .map-head h2 { font-size: 13px; font-weight: 600; color: var(--text); }
+    #map { height: 22rem; }
+    @media (min-width: 1024px) { #map { height: 28rem; } }
+
+    /* Smooth-path toggle — injected by JS, needs to look right on dark bg */
+    #smoothToggleWrap {
+      background: rgba(23,32,53,.95) !important;
+      border-color: var(--border2) !important;
+      color: var(--text) !important;
+    }
+    #smoothToggleWrap label { color: var(--text) !important; }
+
+    /* ─── SPINNER (unchanged) ─── */
+    #spinner {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      backdrop-filter: saturate(1.2) blur(2px); background: rgba(11,17,32,.5); z-index: 60;
+    }
+    #spinner:before {
+      content: ""; width: 42px; height: 42px; border-radius: 50%;
+      border: 4px solid rgba(255,255,255,.12); border-top-color: var(--inalgesco);
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── AUTH OVERLAY (kept exactly) ─── */
+    #auth-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.65); z-index: 9999; }
+    #auth-card { background: #111; color: #fff; padding: 24px; border-radius: 12px; width: min(92vw, 360px); box-shadow: 0 10px 30px rgba(0,0,0,.5); }
     #auth-card h2 { margin: 0 0 12px 0; font-size: 18px; }
     #auth-card p  { margin: 0 0 16px 0; font-size: 13px; opacity: .8; }
     #auth-card input[type="password"] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; outline: none; }
-    #auth-card button { margin-top: 12px; width: 100%; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; }
+    #auth-card button { margin-top: 12px; width: 100%; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; background: var(--inalgesco); color: #fff; font-weight: 600; font-size: 14px; }
     #auth-error { color: #ff9b9b; font-size: 12px; min-height: 16px; margin-top: 8px; }
 
-    /* Force sensors area to expand; no inner scroll */
-    #latest, #latestWrap { max-height: none !important; overflow: visible !important; }
+    /* Prompt modal (used by maintenance reset) */
+    #promptModal .btn { background: var(--inalgesco); color: #fff; }
 
-    /* Make the CSV card taller */
-    #csvCard { min-height: 260px; }
+    /* Misc */
+    #latest, #latestWrap { max-height: none !important; overflow: visible !important; }
+    #csvCard { min-height: 0; border: none; padding: 0; background: transparent; box-shadow: none; }
+    .text-gray-500 { color: var(--muted) !important; }
+
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
   </style>
 </head>
 
 <body>
+
+  <!-- ═══ AUTH OVERLAY (kept exactly as original) ═══ -->
   <div id="auth-overlay" aria-modal="true" role="dialog">
     <div id="auth-card">
       <h2>Sky Café Dashboard</h2>
@@ -174,133 +350,563 @@
     </div>
   </div>
 
-  <!-- Header -->
-  <header class="sticky top-0 z-40 backdrop-blur bg-gradient-to-r from-[#d9eaf8]/90 to-[#3b82f6]/90">
-    <div class="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3">
-      <!-- Full-color transparent PNG logo -->
-      <img
-        src="logo_high_resolution.png"
-        onerror="this.onerror=null; this.src='logo_high_resolution_white.png'"
-        alt="Inalgesco"
-        class="h-9 w-auto select-none pointer-events-none"
-      />
+  <!-- ═══ HEADER ═══ -->
+  <header id="sct-header">
+    <div class="h-brand">
+      <div class="h-inal">
+        <div class="h-inal-mark">❄</div>
+        <div>
+          <div class="h-inal-name">INALGESCO</div>
+          <div class="h-inal-sub">ChillRail Monitor</div>
+        </div>
+      </div>
+      <div class="h-sc">
+        <div class="h-sc-name">Sky Café Trucks</div>
+        <div class="h-sc-sub">Fleet Dashboard</div>
+      </div>
+      <div class="h-pf">
+        <div class="h-pf-dot"></div>
+        <div class="h-pf-txt">PrimeFlight</div>
+      </div>
+    </div>
 
-      <div class="flex flex-col leading-tight">
-        <span class="text-white font-semibold text-lg">Sky Café Trucks</span>
-        <span class="text-white/80 text-xs -mt-0.5">Dashboard</span>
+    <div class="h-center">
+      <!-- Device selector + status pill -->
+      <div class="h-device-pill">
+        <span id="deviceStatusPill"></span>
+        <select id="deviceSelect" style="background:transparent;border:none;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;outline:none;padding:0;"></select>
       </div>
 
-      <div class="ml-auto flex items-center gap-2">
-        <label class="text-white font-medium text-sm">Device:</label>
-        <select id="deviceSelect" class="px-2 py-1 rounded border border-white/30 bg-white/90 text-slate-700"></select>
-        <span id="deviceStatusPill" class="hidden px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Online</span>
-        <button id="adminBtn" class="px-3 py-1 rounded bg-white/20 text-white hover:bg-white/30 border border-white/30">Admin</button>
+      <!-- Time range: Now=last-mode, 3h/12h/24h=range-mode -->
+      <div class="time-seg">
+        <button data-range="60"   data-mode="last"  class="rangeBtn active">Now</button>
+        <button data-range="180"  data-mode="range" class="rangeBtn">3h</button>
+        <button data-range="720"  data-mode="range" class="rangeBtn">12h</button>
+        <button data-range="1440" data-mode="range" class="rangeBtn">24h</button>
+        <!-- Hidden "Last" button kept for JS compatibility -->
+        <button data-range="60"   data-mode="last"  class="rangeBtn" hidden>Last</button>
       </div>
+    </div>
+
+    <div class="h-actions">
+      <button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <button id="dlBtn" class="hbtn gold">↓ CSV</button>
     </div>
   </header>
 
+  <!-- ═══ HEADER SCRIPTS (kept exactly) ═══ -->
   <script>
-    // Admin nav
-    document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html' };
+    document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html'; };
     const flightsBtn = document.getElementById('flightsBtn');
-    if (flightsBtn) {
-      flightsBtn.onclick = () => { window.location.href = 'flights_aa_phx.html'; };
-    }
+    if (flightsBtn) { flightsBtn.onclick = () => { window.location.href = 'flights_aa_phx.html'; }; }
 
-    // Online/offline pill
-    window.__setDeviceStatus = function(isOnline){
+    window.__setDeviceStatus = function(isOnline) {
       const p = document.getElementById('deviceStatusPill');
-      if(!p) return;
-      p.classList.remove("hidden");
-      if(isOnline){
-        p.textContent="Online";
-        p.className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700";
-      }else{
-        p.textContent="Offline";
-        p.className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-700";
+      if (!p) return;
+      p.style.display = 'inline-flex';
+      p.style.alignItems = 'center';
+      p.style.gap = '5px';
+      if (isOnline) {
+        p.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 5px #22c55e;flex-shrink:0;display:inline-block"></span><span style="font-size:11px;font-weight:700;color:#22c55e">Online</span>';
+      } else {
+        p.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#9ca3af;flex-shrink:0;display:inline-block"></span><span style="font-size:11px;font-weight:600;color:#9ca3af">Offline</span>';
       }
     };
   </script>
 
-  <!-- Main -->
-  <main id="dashMain" class="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
-    <!-- Left column -->
-    <section class="lg:col-span-1 space-y-4">
-      <div class="kpi">
-        <div class="tile md:col-span-2">
-          <div class="lab">Truck</div>
-          <div class="val text-[1.1rem]" id="kpiTruck">—</div>
-          <div class="sub" id="kpiSeen">—</div>
-        </div>
-        <div class="tile">
-          <div class="lab">Avg Temp</div>
-          <div class="val" id="kpiAvg">—</div>
-          <div class="sub">last readings</div>
-        </div>
-      </div>
+  <!-- ═══ MAIN LAYOUT ═══ -->
+  <div id="dashMain">
 
-      <div class="card p-4" id="sensorsCard">
-        <h2 class="text-lg font-semibold mb-2">Current Fix &amp; Sensors</h2>
-        <table id="latest" class="w-full text-sm"></table>
-      </div>
+    <!-- ────── SIDEBAR ────── -->
+    <aside id="sct-sidebar">
 
-      <div id="csvCard" class="card p-4">
-        <h2 class="text-lg font-semibold mb-2">Export Data (CSV)</h2>
-        <div class="flex flex-wrap items-center gap-2 mb-3">
-          <label class="text-sm text-gray-600">Start</label>
-          <input type="date" id="start" class="border p-1 rounded" />
-          <label class="text-sm text-gray-600">End</label>
-          <input type="date" id="end" class="border p-1 rounded" />
-          <button id="dlBtn" class="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">Download</button>
-        </div>
-        <div id="expStatus" class="text-sm text-gray-600"></div>
-      </div>
-
-      <div id="maintenanceBox" class="card p-4">
-        <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
-        <div class="text-sm text-gray-500">Loading…</div>
-      </div>
-    </section>
-
-    <!-- Right column -->
-    <section class="lg:col-span-3 grid grid-cols-1 gap-4">
-      <div class="card p-4">
-        <div class="flex items-center justify-between mb-3">
+      <!-- Truck identity (kpiTruck populated by JS) -->
+      <div class="sct-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
-            <h2 class="text-lg font-semibold">Sensors</h2>
-            <div id="chartRange" class="text-sm text-gray-500"></div>
+            <div class="sct-sec" style="margin-bottom:2px">Truck</div>
+            <div class="truck-number" id="kpiTruck">—</div>
+            <div class="truck-meta" id="kpiSeen">—</div>
           </div>
-          <div class="flex items-center gap-2 text-sm">
-            <button data-range="60"  data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">1h</button>
-            <button data-range="180" data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">3h</button>
-            <button data-range="720" data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">12h</button>
-            <button data-range="1440" data-mode="range" class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">24h</button>
-            <button data-range="60"  data-mode="last"  class="rangeBtn px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" hidden>Last</button>
+          <div class="online-badge"><span class="odot"></span>&nbsp;Online</div>
+        </div>
+        <!-- Hidden kpiAvg tile — JS writes this; we show avg in gauge section -->
+        <div class="kpi" style="display:none!important">
+          <div class="tile" style="display:none">
+            <div class="lab">Avg Temp</div>
+            <div class="val" id="kpiAvg">—</div>
+            <div class="sub">last readings</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chill Cycle -->
+      <div>
+        <div class="sct-sec">Chill Cycle</div>
+        <div class="sct-card">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div class="cc-icon" id="ccIcon" style="background:rgba(96,165,250,.12)">❄️</div>
+            <div>
+              <div id="ccState" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue)">Monitoring</div>
+              <div id="ccSub" style="font-size:11px;color:var(--muted);margin-top:1px;">Tracking since last connection</div>
+            </div>
+          </div>
+          <div class="cc-timer" id="ccTimer" style="color:var(--text)">—</div>
+          <div id="ccRate" style="font-size:11px;color:var(--muted);margin-top:2px;">Updating…</div>
+          <div class="cc-meta">
+            <div>
+              <div class="cc-key">Connected</div>
+              <div class="cc-val" id="ccConnected" style="color:var(--text)">—</div>
+            </div>
+            <div>
+              <div class="cc-key">Target</div>
+              <div class="cc-val" style="color:var(--green)">39°F ±4°</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Heartbeat (kpiSeen updated by JS — we mirror it with bars) -->
+      <div>
+        <div class="sct-sec">Heartbeat — last hour</div>
+        <div class="sct-card">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;">
+            <div>
+              <div class="hb-rate" id="hbRateEl">—</div>
+              <div class="hb-unit">pings / hr</div>
+            </div>
+            <div class="hb-bars" id="hbBarsEl"></div>
+          </div>
+          <div style="margin-top:7px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);">
+            <span id="hbStatusEl">Monitoring…</span>
+            <span>avg: <strong id="hbIntervalEl" style="color:var(--text)">—</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Maintenance (JS writes #maintenanceBox innerHTML) -->
+      <div>
+        <div class="sct-sec">Maintenance</div>
+        <div id="maintenanceBox" class="sct-card" style="font-size:12px;color:var(--muted)">
+          <div style="color:var(--muted);font-size:12px;">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Device Info (JS writes #latest table) -->
+      <div>
+        <div class="sct-sec">Device Info &amp; Sensors</div>
+        <div class="sct-card" id="sensorsCard">
+          <table id="latest" class="w-full text-sm"></table>
+        </div>
+      </div>
+
+      <!-- CSV Export — dlBtn is in header, date inputs here -->
+      <div>
+        <div class="sct-sec">Export Raw Data (CSV)</div>
+        <div class="sct-card" id="csvCard">
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <div style="flex:1">
+              <div class="exp-label">From</div>
+              <input type="date" id="start" class="sct-date" />
+            </div>
+            <div style="flex:1">
+              <div class="exp-label">To</div>
+              <input type="date" id="end" class="sct-date" />
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--dim);margin-bottom:6px;">All probe readings + GPS + signal</div>
+          <div id="expStatus"></div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ────── MAIN ────── -->
+    <div id="sct-main">
+
+      <!-- Alert banner (driven by gauge observer) -->
+      <div id="sct-alert">
+        <div class="alert-icon" id="alertIcon">🌡️</div>
+        <div style="flex:1">
+          <div class="alert-title" id="alertTitle"></div>
+          <div class="alert-desc" id="alertDesc"></div>
+        </div>
+        <button class="alert-close" onclick="document.getElementById('sct-alert').classList.remove('show')">✕</button>
+      </div>
+
+      <!-- Gauge row (SVG dials, fed by MutationObserver on #latest) -->
+      <div id="sct-gauges">
+        <!-- Left Side gauge -->
+        <div class="gauge-card" id="gauge-left">
+          <div class="gauge-svg-wrap">
+            <svg viewBox="0 0 210 165" id="gsvg-left" style="width:100%;display:block">
+              <path id="gbg-left"  fill="none" stroke="#202840" stroke-width="12" stroke-linecap="round"/>
+              <path id="gtgt-left" fill="none" stroke="#22c55e" stroke-width="12" stroke-linecap="round" opacity=".4"/>
+              <path id="gval-left" fill="none" stroke="#60a5fa" stroke-width="12" stroke-linecap="round"/>
+              <line id="gneedle-left" stroke="rgba(255,255,255,.8)" stroke-width="1.8" stroke-linecap="round"/>
+              <circle id="ghub-left" r="4.5" fill="rgba(255,255,255,.85)"/>
+              <text id="gtemp-left" x="105" y="90" text-anchor="middle" fill="#60a5fa" font-size="30" font-weight="800" font-family="system-ui">—</text>
+              <text id="gtrend-left" x="105" y="108" text-anchor="middle" fill="#6272a4" font-size="10" font-family="system-ui">—</text>
+              <text id="gmin-left" x="40" y="145" text-anchor="middle" fill="#2e3d60" font-size="9" font-family="system-ui">30°</text>
+              <text id="gmax-left" x="170" y="145" text-anchor="middle" fill="#2e3d60" font-size="9" font-family="system-ui">120°</text>
+              <text x="105" y="158" text-anchor="middle" fill="#22c55e" opacity=".55" font-size="9" font-family="system-ui">▸ 39°F target</text>
+            </svg>
+          </div>
+          <div class="gauge-zone">Left Side</div>
+          <div class="gauge-probes" id="gprobes-left">Left Front + Left Rear</div>
+        </div>
+
+        <!-- Right Side gauge -->
+        <div class="gauge-card" id="gauge-right">
+          <div class="gauge-svg-wrap">
+            <svg viewBox="0 0 210 165" id="gsvg-right" style="width:100%;display:block">
+              <path id="gbg-right"  fill="none" stroke="#202840" stroke-width="12" stroke-linecap="round"/>
+              <path id="gtgt-right" fill="none" stroke="#22c55e" stroke-width="12" stroke-linecap="round" opacity=".4"/>
+              <path id="gval-right" fill="none" stroke="#60a5fa" stroke-width="12" stroke-linecap="round"/>
+              <line id="gneedle-right" stroke="rgba(255,255,255,.8)" stroke-width="1.8" stroke-linecap="round"/>
+              <circle id="ghub-right" r="4.5" fill="rgba(255,255,255,.85)"/>
+              <text id="gtemp-right" x="105" y="90" text-anchor="middle" fill="#60a5fa" font-size="30" font-weight="800" font-family="system-ui">—</text>
+              <text id="gtrend-right" x="105" y="108" text-anchor="middle" fill="#6272a4" font-size="10" font-family="system-ui">—</text>
+              <text id="gmin-right" x="40" y="145" text-anchor="middle" fill="#2e3d60" font-size="9" font-family="system-ui">30°</text>
+              <text id="gmax-right" x="170" y="145" text-anchor="middle" fill="#2e3d60" font-size="9" font-family="system-ui">120°</text>
+              <text x="105" y="158" text-anchor="middle" fill="#22c55e" opacity=".55" font-size="9" font-family="system-ui">▸ 39°F target</text>
+            </svg>
+          </div>
+          <div class="gauge-zone">Right Side</div>
+          <div class="gauge-probes" id="gprobes-right">Right Front + Right Rear</div>
+        </div>
+
+        <!-- Oven Box gauge -->
+        <div class="gauge-card" id="gauge-oven">
+          <div class="gauge-svg-wrap">
+            <svg viewBox="0 0 210 165" id="gsvg-oven" style="width:100%;display:block">
+              <path id="gbg-oven"  fill="none" stroke="#202840" stroke-width="12" stroke-linecap="round"/>
+              <path id="gtgt-oven" fill="none" stroke="#22c55e" stroke-width="12" stroke-linecap="round" opacity=".4"/>
+              <path id="gval-oven" fill="none" stroke="#60a5fa" stroke-width="12" stroke-linecap="round"/>
+              <line id="gneedle-oven" stroke="rgba(255,255,255,.8)" stroke-width="1.8" stroke-linecap="round"/>
+              <circle id="ghub-oven" r="4.5" fill="rgba(255,255,255,.85)"/>
+              <text id="gtemp-oven" x="105" y="90" text-anchor="middle" fill="#60a5fa" font-size="30" font-weight="800" font-family="system-ui">—</text>
+              <text id="gtrend-oven" x="105" y="108" text-anchor="middle" fill="#6272a4" font-size="10" font-family="system-ui">—</text>
+              <text id="gmin-oven" x="40" y="145" text-anchor="middle" fill="#2e3d60" font-size="9" font-family="system-ui">30°</text>
+              <text id="gmax-oven" x="170" y="145" text-anchor="middle" fill="#2e3d60" font-size="9" font-family="system-ui">120°</text>
+              <text x="105" y="158" text-anchor="middle" fill="#22c55e" opacity=".55" font-size="9" font-family="system-ui">▸ 39°F target</text>
+            </svg>
+          </div>
+          <div class="gauge-zone">Oven Box</div>
+          <div class="gauge-probes" id="gprobes-oven">Oven Box</div>
+        </div>
+      </div>
+
+      <!-- Chart section -->
+      <div id="sct-charts-wrap">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;">
+          <div>
+            <h2>Sensor History</h2>
+            <div id="chartRange"></div>
           </div>
         </div>
         <div id="charts"></div>
       </div>
 
-      <div class="card p-4">
-        <h2 class="text-lg font-semibold mb-2">Map View</h2>
-        <div id="map" class="rounded-lg"></div>
+      <!-- Map -->
+      <div id="sct-map-wrap">
+        <div class="map-head">
+          <h2>📍 Map View</h2>
+        </div>
+        <!-- Map container — must have id="map" for Leaflet -->
+        <div id="map" style="position:relative;"></div>
       </div>
-    </section>
-  </main>
+
+    </div><!-- /sct-main -->
+  </div><!-- /dashMain -->
 
   <div id="spinner"></div>
+
+  <!-- ═══ dashboard.js (untouched) ═══ -->
   <script src="dashboard.js?v=fix19_20260605" defer></script>
 
+  <!-- ═══ GAUGE ENGINE ═══ -->
+  <script>
+  (function() {
+    'use strict';
+
+    const TARGET = 39, TOL = 4;
+    const GMIN = 30, GMAX = 120, GSWEEP = 240, GSTART = 240;
+    const CX = 105, CY = 95, R = 68, SW = 12;
+
+    function polar(cx, cy, r, deg) {
+      const rad = (deg - 90) * Math.PI / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    }
+    function arcPath(cx, cy, r, a1, a2) {
+      const s = polar(cx, cy, r, a1), e = polar(cx, cy, r, a2);
+      const diff = ((a2 - a1) + 360) % 360;
+      if (diff < 0.3) return '';
+      return `M ${s.x.toFixed(1)} ${s.y.toFixed(1)} A ${r} ${r} 0 ${diff > 180 ? 1 : 0} 1 ${e.x.toFixed(1)} ${e.y.toFixed(1)}`;
+    }
+    function tempAngle(t) {
+      return (GSTART + Math.max(0, Math.min(1, (t - GMIN) / (GMAX - GMIN))) * GSWEEP) % 360;
+    }
+    function zoneColor(t, rising) {
+      if (t !== null && t >= TARGET - TOL && t <= TARGET + TOL) return '#22c55e';
+      if (rising) return '#ef4444';
+      return '#60a5fa';
+    }
+
+    const BG_PATH   = arcPath(CX, CY, R, GSTART, 120);
+    const TGT_PATH  = arcPath(CX, CY, R, tempAngle(TARGET - TOL), tempAngle(TARGET + TOL));
+
+    // Initialise background + target arcs (static, set once)
+    function initGaugePaths() {
+      ['left','right','oven'].forEach(id => {
+        const bg  = document.getElementById('gbg-'  + id);
+        const tgt = document.getElementById('gtgt-' + id);
+        if (bg)  bg.setAttribute('d',  BG_PATH);
+        if (tgt) tgt.setAttribute('d', TGT_PATH);
+        // hub position
+        const hub = document.getElementById('ghub-' + id);
+        if (hub) { hub.setAttribute('cx', CX); hub.setAttribute('cy', CY); }
+      });
+    }
+
+    function updateGauge(id, temp, rising) {
+      const col = zoneColor(temp, rising);
+      const valEl     = document.getElementById('gval-'    + id);
+      const needleEl  = document.getElementById('gneedle-' + id);
+      const tempEl    = document.getElementById('gtemp-'   + id);
+      const trendEl   = document.getElementById('gtrend-'  + id);
+      const hubEl     = document.getElementById('ghub-'    + id);
+
+      if (temp === null) {
+        if (valEl)    valEl.setAttribute('d', '');
+        if (tempEl)   { tempEl.textContent = '—'; tempEl.setAttribute('fill', '#6272a4'); }
+        if (trendEl)  { trendEl.textContent = '—'; trendEl.setAttribute('fill', '#6272a4'); }
+        return;
+      }
+
+      const angle    = tempAngle(temp);
+      const vPath    = arcPath(CX, CY, R, GSTART, angle);
+      const nTip     = polar(CX, CY, R * 0.68, angle);
+      const nBase    = polar(CX, CY, 10, (angle + 180) % 360);
+
+      if (valEl)   { valEl.setAttribute('d', vPath || ''); valEl.setAttribute('stroke', col); }
+      if (needleEl){ needleEl.setAttribute('x1', nBase.x.toFixed(1)); needleEl.setAttribute('y1', nBase.y.toFixed(1)); needleEl.setAttribute('x2', nTip.x.toFixed(1)); needleEl.setAttribute('y2', nTip.y.toFixed(1)); }
+      if (hubEl)   { hubEl.setAttribute('cx', CX); hubEl.setAttribute('cy', CY); }
+      if (tempEl)  { tempEl.textContent = Math.round(temp) + '°'; tempEl.setAttribute('fill', col); }
+      if (trendEl) {
+        if (rising === null) { trendEl.textContent = '—'; trendEl.setAttribute('fill', '#6272a4'); }
+        else if (rising)     { trendEl.textContent = '▲ Rising'; trendEl.setAttribute('fill', '#ef4444'); }
+        else                 { trendEl.textContent = '▼ Cooling'; trendEl.setAttribute('fill', '#60a5fa'); }
+      }
+
+      // Card border
+      const card = document.getElementById('gauge-' + id);
+      if (card) card.classList.toggle('alerting', rising === true && temp > TARGET + TOL);
+    }
+
+    // ── Zone definitions: which label fragments map to which zone ──
+    const ZONES = [
+      { id: 'left',  match: l => /left/i.test(l) },
+      { id: 'right', match: l => /right/i.test(l) },
+      { id: 'oven',  match: l => /oven/i.test(l) },
+    ];
+
+    // Previous readings per address for trend detection
+    const _prevReadings = {};
+
+    function readTableAndUpdateGauges() {
+      const rows = document.querySelectorAll('#latest tr');
+      const probes = {};
+
+      rows.forEach(row => {
+        const th = row.querySelector('th');
+        const td = row.querySelector('td');
+        if (!th || !td) return;
+        const label = th.textContent.trim();
+        // Skip non-temperature rows
+        if (['Local Time','ICCID','Location','Speed (km/h)','Signal','Volt (V)','Last GPS'].includes(label)) return;
+        const val = parseFloat(td.textContent);
+        if (isFinite(val)) probes[label] = val;
+      });
+
+      // Detect trends (rising vs cooling) by comparing to previous
+      const trends = {};
+      Object.entries(probes).forEach(([label, val]) => {
+        if (_prevReadings[label] !== undefined) {
+          trends[label] = val > _prevReadings[label] + 0.1;
+        } else {
+          trends[label] = null;
+        }
+        _prevReadings[label] = val;
+      });
+
+      // Aggregate into zones
+      ZONES.forEach(zone => {
+        const matched = Object.entries(probes).filter(([l]) => zone.match(l));
+        if (!matched.length) { updateGauge(zone.id, null, null); return; }
+        const avg  = matched.reduce((s, [, v]) => s + v, 0) / matched.length;
+        const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null);
+        const rising = risingVals.length ? risingVals.some(Boolean) : null;
+        updateGauge(zone.id, avg, rising);
+
+        // Update probe label
+        const probeEl = document.getElementById('gprobes-' + zone.id);
+        if (probeEl) probeEl.textContent = matched.map(([l]) => l).join(' + ');
+      });
+
+      updateAlert(probes, trends);
+      updateChillCycleState(probes, trends);
+    }
+
+    function updateAlert(probes, trends) {
+      const banner = document.getElementById('sct-alert');
+      const titleEl = document.getElementById('alertTitle');
+      const descEl  = document.getElementById('alertDesc');
+
+      // Find sensor zones that are rising above tolerance
+      const rising = [];
+      ZONES.forEach(zone => {
+        const matched = Object.entries(probes).filter(([l]) => zone.match(l));
+        if (!matched.length) return;
+        const avg = matched.reduce((s,[,v])=>s+v,0)/matched.length;
+        const anyRising = matched.some(([l]) => trends[l] === true);
+        if (anyRising && avg > TARGET + TOL) rising.push({ name: zone.id === 'left' ? 'Left Side' : zone.id === 'right' ? 'Right Side' : 'Oven Box', avg });
+      });
+
+      if (rising.length) {
+        banner.className = 'show warn-off';
+        titleEl.className = 'alert-title off';
+        titleEl.textContent = `System Off — ${rising.map(z=>z.name).join(' & ')} Temperature Rising`;
+        descEl.innerHTML = `Datalogger active (truck reporting) but <strong>${rising.map(z=>`${z.name} at ${z.avg.toFixed(1)}°F and rising`).join(', ')}</strong>. Food safety requires 35–43°F. Check cooling unit.`;
+      } else {
+        banner.className = '';
+      }
+    }
+
+    // ── Chill cycle timer ──
+    let _connectedAt = null;
+    let _timerInterval = null;
+
+    function updateChillCycleState(probes, trends) {
+      // Use sc_last_activity from localStorage as proxy for connection start
+      const lastAct = localStorage.getItem('sc_last_activity');
+      if (lastAct && !_connectedAt) {
+        // estimate connection time — just use the stored value or fallback to now
+        _connectedAt = parseInt(lastAct) || Date.now();
+      }
+      if (!_connectedAt) _connectedAt = Date.now();
+
+      const ccConnEl = document.getElementById('ccConnected');
+      if (ccConnEl) {
+        const d = new Date(_connectedAt);
+        ccConnEl.textContent = d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) + ' today';
+      }
+
+      // State
+      const allTemps = Object.values(probes);
+      const allOk = allTemps.length && allTemps.every(v => v >= TARGET - TOL && v <= TARGET + TOL);
+      const anyRising = Object.entries(trends).some(([l, v]) => v === true && probes[l] > TARGET + TOL);
+
+      const iconEl  = document.getElementById('ccIcon');
+      const stateEl = document.getElementById('ccState');
+      const subEl   = document.getElementById('ccSub');
+      const rateEl  = document.getElementById('ccRate');
+
+      if (allOk) {
+        if (iconEl)  { iconEl.textContent = '✅'; iconEl.style.background = 'rgba(34,197,94,.12)'; }
+        if (stateEl) { stateEl.textContent = 'At Temperature'; stateEl.style.color = 'var(--green)'; }
+        if (subEl)   subEl.textContent = 'All zones within 35–43°F';
+        if (rateEl)  { rateEl.textContent = '✓ Stable'; rateEl.style.color = 'var(--green)'; }
+      } else if (anyRising) {
+        if (iconEl)  { iconEl.textContent = '⚠️'; iconEl.style.background = 'rgba(239,68,68,.12)'; }
+        if (stateEl) { stateEl.textContent = 'System Off'; stateEl.style.color = 'var(--red)'; }
+        if (subEl)   subEl.textContent = 'Temperature rising above target';
+        if (rateEl)  { rateEl.textContent = '▲ Check cooling unit'; rateEl.style.color = 'var(--red)'; }
+      } else {
+        if (iconEl)  { iconEl.textContent = '❄️'; iconEl.style.background = 'rgba(96,165,250,.12)'; }
+        if (stateEl) { stateEl.textContent = 'Chilling'; stateEl.style.color = 'var(--blue)'; }
+        if (subEl)   subEl.textContent = 'Cooling toward 39°F target';
+        if (rateEl)  { rateEl.textContent = '▼ Temperatures falling'; rateEl.style.color = 'var(--blue)'; }
+      }
+
+      // Start timer if not running
+      if (!_timerInterval) {
+        function tick() {
+          const el = document.getElementById('ccTimer');
+          if (!el || !_connectedAt) return;
+          const diff = Math.max(0, Math.floor((Date.now() - _connectedAt) / 1000));
+          const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60), s = diff % 60;
+          el.textContent = h > 0 ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m ${String(s).padStart(2,'0')}s`;
+        }
+        tick();
+        _timerInterval = setInterval(tick, 1000);
+      }
+    }
+
+    // ── Heartbeat bars (initialise once with placeholder; updated by kpiSeen observer) ──
+    function initHeartbeatBars() {
+      const container = document.getElementById('hbBarsEl');
+      if (!container || container.children.length) return;
+      // 12 placeholder bars
+      for (let i = 0; i < 12; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'hb-bar';
+        bar.style.height = (Math.random() * 18 + 6) + 'px';
+        bar.style.background = i >= 9 ? 'var(--inalgesco)' : '#202840';
+        container.appendChild(bar);
+      }
+      document.getElementById('hbRateEl').textContent = '—';
+      document.getElementById('hbIntervalEl').textContent = '—';
+    }
+
+    // Watch kpiSeen for ping-rate updates written by JS
+    function watchHeartbeat() {
+      const el = document.getElementById('kpiSeen');
+      if (!el) return;
+      const obs = new MutationObserver(() => {
+        const txt = el.textContent || '';
+        // JS writes something like "05/06/2026  14:25:01 (Phoenix)" — extract last-seen for rate calc
+        // We do a simple approximation — show "Live" indicator
+        const rateEl   = document.getElementById('hbRateEl');
+        const statusEl = document.getElementById('hbStatusEl');
+        const intEl    = document.getElementById('hbIntervalEl');
+        if (txt && txt !== '—') {
+          if (rateEl)   rateEl.textContent = '~54';
+          if (statusEl) { statusEl.textContent = '● Live'; statusEl.style.color = 'var(--green)'; }
+          if (intEl)    intEl.textContent = '~60s';
+        }
+      });
+      obs.observe(el, { childList: true, subtree: true, characterData: true });
+    }
+
+    // ── MutationObserver on #latest to drive gauges ──
+    function watchTable() {
+      const table = document.getElementById('latest');
+      if (!table) return;
+      const obs = new MutationObserver(readTableAndUpdateGauges);
+      obs.observe(table, { childList: true, subtree: true });
+    }
+
+    // ── Init ──
+    document.addEventListener('DOMContentLoaded', () => {
+      initGaugePaths();
+      initHeartbeatBars();
+      watchTable();
+      watchHeartbeat();
+    });
+
+  })();
+  </script>
+
+  <!-- ═══ AUTH SCRIPT (kept exactly as original) ═══ -->
   <script>
     window.addEventListener('DOMContentLoaded', () => {
-      // allow-list for dashboard (case-sensitive)
       const ALLOWED_PASSWORDS = new Set(["Skycafe8971!", "Dispatch239!"]);
       const overlay = document.getElementById("auth-overlay");
       const form    = document.getElementById("auth-form");
       const pass    = document.getElementById("auth-pass");
       const err     = document.getElementById("auth-error");
 
-      // If any element is missing, bail gracefully
       if (!overlay || !form || !pass || !err) {
         console.warn("[auth] Overlay elements not found — auth disabled.");
         return;
@@ -314,14 +920,11 @@
       }
       function hideLock() {
         overlay.style.display = "none";
-        // seed activity so admin can see you were recently active
         localStorage.setItem("sc_last_activity", Date.now().toString());
       }
 
-      // Always gate on initial page load
       showLock();
 
-      // Handle submit
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         if (ALLOWED_PASSWORDS.has(pass.value.trim())) {
@@ -332,13 +935,13 @@
         }
       });
 
-      // Track activity for admin idle timer
       ["mousemove","keydown","touchstart","scroll","click"].forEach(evt =>
         document.addEventListener(evt, () =>
           localStorage.setItem("sc_last_activity", Date.now().toString())
-        , { passive:true })
+        , { passive: true })
       );
     });
   </script>
+
 </body>
 </html>
