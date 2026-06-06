@@ -263,27 +263,16 @@
 
     /* ─── CHART SECTION ─── */
     #sct-charts-wrap {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
     }
-    #sct-charts-wrap h2 { font-size: 14px; font-weight: 700; color: var(--text); }
-    #chartRange { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-    /* Charts grid — MUST preserve ID=charts and .chart-box for JS */
-    #charts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1rem;
-      overflow: visible !important;
-      margin-top: 12px;
-    }
-    .chart-box {
-      background: var(--surface3); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px 12px 14px; height: 220px; overflow: hidden;
-    }
-    .chart-box h3 { font-weight: 700; margin: 0 0 6px 0; font-size: 12px; color: var(--text); }
-    /* Charts render on white canvas (set by JS); frame it cleanly */
-    .chart-box canvas { border-radius: 4px; }
-
+    #sct-charts-wrap h2 { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+    #chartRange { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    /* Single avg chart only */
+    #charts { display: block; margin-top: 14px; }
+    .chart-box { display: none; background: transparent; border: none; border-radius: 0; padding: 0; height: 280px; overflow: hidden; }
+    .chart-box:first-child { display: block; }
+    .chart-box h3 { font-weight: 600; margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .chart-box canvas { border-radius: 6px; }
     /* ─── MAP SECTION ─── */
     #sct-map-wrap {
       background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
@@ -601,7 +590,7 @@
       <div id="sct-charts-wrap">
         <div style="display:flex;align-items:baseline;justify-content:space-between;">
           <div>
-            <h2>Sensor History</h2>
+            <h2>ChillRail History</h2>
             <div id="chartRange"></div>
           </div>
         </div>
