@@ -788,58 +788,43 @@
     let _timerInterval = null;
 
     function updateChillCycleState(probes, trends) {
-      // Use sc_last_activity from localStorage as proxy for connection start
-      const lastAct = localStorage.getItem('sc_last_activity');
-      if (lastAct && !_connectedAt) {
-        // estimate connection time — just use the stored value or fallback to now
-        _connectedAt = parseInt(lastAct) || Date.now();
-      }
-      if (!_connectedAt) _connectedAt = Date.now();
+      // Rolling buffer -- tracks average non-oven temp over time
+      if (!updateChillCycleState._buf) updateChillCycleState._buf = [];
+      const buf = updateChillCycleState._buf;
 
-      const ccConnEl = document.getElementById('ccConnected');
-      if (ccConnEl) {
-        const d = new Date(_connectedAt);
-        ccConnEl.textContent = d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) + ' today';
-      }
+      // Add current average (exclude oven box)
+      const temps = (probes || [])
+        .filter(p => p && typeof p.temp === 'number' && !isNaN(p.temp) && !/oven/i.test(p.label || ''))
+        .map(p => p.temp);
+      if (temps.length) buf.push({ t: Date.now(), v: temps.reduce((a,b)=>a+b,0)/temps.length });
 
-      // State
-      const allTemps = Object.values(probes);
-      const allOk = allTemps.length && allTemps.every(v => v >= TARGET - TOL && v <= TARGET + TOL);
-      const anyRising = Object.entries(trends).some(([l, v]) => v === true && probes[l] > TARGET + TOL);
+      // Trim to last 30 min
+      const cutoff = Date.now() - 30*60*1000;
+      while (buf.length && buf[0].t < cutoff) buf.shift();
 
-      const iconEl  = document.getElementById('ccIcon');
-      const stateEl = document.getElementById('ccState');
-      const subEl   = document.getElementById('ccSub');
-      const rateEl  = document.getElementById('ccRate');
-
-      if (allOk) {
-        if (iconEl)  { iconEl.textContent = '✅'; iconEl.style.background = 'rgba(34,197,94,.12)'; }
-        if (stateEl) { stateEl.textContent = 'At Temperature'; stateEl.style.color = 'var(--green)'; }
-        if (subEl)   subEl.textContent = 'All zones within 35–43°F';
-        if (rateEl)  { rateEl.textContent = '✓ Stable'; rateEl.style.color = 'var(--green)'; }
-      } else if (anyRising) {
-        if (iconEl)  { iconEl.textContent = '⚠️'; iconEl.style.background = 'rgba(239,68,68,.12)'; }
-        if (stateEl) { stateEl.textContent = 'System Off'; stateEl.style.color = 'var(--red)'; }
-        if (subEl)   subEl.textContent = 'Temperature rising above target';
-        if (rateEl)  { rateEl.textContent = '▲ Check cooling unit'; rateEl.style.color = 'var(--red)'; }
-      } else {
-        if (iconEl)  { iconEl.textContent = '❄️'; iconEl.style.background = 'rgba(96,165,250,.12)'; }
-        if (stateEl) { stateEl.textContent = 'Chilling'; stateEl.style.color = 'var(--blue)'; }
-        if (subEl)   subEl.textContent = 'Cooling toward 39°F target';
-        if (rateEl)  { rateEl.textContent = '▼ Temperatures falling'; rateEl.style.color = 'var(--blue)'; }
-      }
-
-      // Start timer if not running
-      if (!_timerInterval) {
-        function tick() {
-          const el = document.getElementById('ccTimer');
-          if (!el || !_connectedAt) return;
-          const diff = Math.max(0, Math.floor((Date.now() - _connectedAt) / 1000));
-          const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60), s = diff % 60;
-          el.textContent = h > 0 ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m ${String(s).padStart(2,'0')}s`;
+      // Cooling requires: >=5 min sustained data, >=3 samples, rate >= 0.3degC/min
+      let isCooling = false;
+      if (buf.length >= 3) {
+        const oldest = buf[0], newest = buf[buf.length-1];
+        const durMs = newest.t - oldest.t;
+        if (durMs >= 5*60*1000) {
+          const drop = oldest.v - newest.v;
+          isCooling = drop > 0 && (drop / (durMs/60000)) >= 0.3;
         }
-        tick();
-        _timerInterval = setInterval(tick, 1000);
+      }
+
+      const ccIconEl  = document.getElementById('ccIcon');
+      const ccStateEl = document.getElementById('ccState');
+      const ccSubEl   = document.getElementById('ccSub');
+
+      if (isCooling) {
+        if (ccIconEl)  { ccIconEl.style.background = 'rgba(96,165,250,.15)'; ccIconEl.textContent = '\u2744\ufe0f'; }
+        if (ccStateEl) { ccStateEl.textContent = 'Cooling'; ccStateEl.style.color = 'var(--blue)'; }
+        if (ccSubEl)   ccSubEl.textContent = 'Temperature falling steadily';
+      } else {
+        if (ccIconEl)  { ccIconEl.style.background = 'rgba(98,114,164,.1)'; ccIconEl.textContent = '\u2764\ufe0f'; }
+        if (ccStateEl) { ccStateEl.textContent = 'Monitoring'; ccStateEl.style.color = 'var(--muted)'; }
+        if (ccSubEl)   ccSubEl.textContent = 'Tracking since last connection';
       }
     }
 
@@ -861,22 +846,61 @@
 
     // Watch kpiSeen for ping-rate updates written by JS
     function watchHeartbeat() {
-      const el = document.getElementById('kpiSeen');
-      if (!el) return;
-      const obs = new MutationObserver(() => {
-        const txt = el.textContent || '';
-        // JS writes something like "05/06/2026  14:25:01 (Phoenix)" — extract last-seen for rate calc
-        // We do a simple approximation — show "Live" indicator
-        const rateEl   = document.getElementById('hbRateEl');
-        const statusEl = document.getElementById('hbStatusEl');
-        const intEl    = document.getElementById('hbIntervalEl');
-        if (txt && txt !== '—') {
-          if (rateEl)   rateEl.textContent = '~54';
-          if (statusEl) { statusEl.textContent = '● Live'; statusEl.style.color = 'var(--green)'; }
-          if (intEl)    intEl.textContent = '~60s';
-        }
-      });
-      obs.observe(el, { childList: true, subtree: true, characterData: true });
+      const hbRateEl     = document.getElementById('hbRateEl');
+      const hbBarsEl     = document.getElementById('hbBarsEl');
+      const hbStatusEl   = document.getElementById('hbStatusEl');
+      const hbIntervalEl = document.getElementById('hbIntervalEl');
+
+      // Only show heartbeat for online trucks
+      const deviceSel = document.getElementById('deviceSelect');
+      const selText = deviceSel ? (deviceSel.selectedOptions[0]?.text || '') : '';
+      const isLive = !/offline/i.test(selText);
+
+      if (!isLive) {
+        if (hbRateEl)     hbRateEl.textContent = '\u2014';
+        if (hbIntervalEl) hbIntervalEl.textContent = '\u2014';
+        if (hbStatusEl)   hbStatusEl.textContent = 'Offline';
+        if (hbBarsEl)     hbBarsEl.innerHTML = '';
+        return;
+      }
+
+      // Count pings in last hour from heartbeat variable history
+      // Use the window.__hbTimestamps if available (set by dashboard.js)
+      const stamps = window.__hbTimestamps || [];
+      const now = Date.now();
+      const recentStamps = stamps.filter(t => t >= now - 60*60*1000);
+      const pingsPerHour = recentStamps.length;
+
+      if (hbRateEl) hbRateEl.textContent = pingsPerHour > 0 ? String(pingsPerHour) : '\u2014';
+
+      // Average interval
+      if (hbIntervalEl && recentStamps.length >= 2) {
+        const sorted = [...recentStamps].sort((a,b)=>a-b);
+        const gaps = [];
+        for(let i=1;i<sorted.length;i++) gaps.push(sorted[i]-sorted[i-1]);
+        const avgGapSec = Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length/1000);
+        hbIntervalEl.textContent = avgGapSec + 's';
+      } else if (hbIntervalEl) {
+        hbIntervalEl.textContent = '\u2014';
+      }
+
+      if (hbStatusEl) hbStatusEl.textContent = pingsPerHour > 0 ? 'Live' : 'Monitoring\u2026';
+
+      // Draw bars (12 x 5-min buckets = last hour)
+      if (hbBarsEl) {
+        const buckets = new Array(12).fill(0);
+        recentStamps.forEach(t => {
+          const minAgo = (now - t) / 60000;
+          const bucket = Math.min(11, Math.floor(minAgo / 5));
+          buckets[11 - bucket]++;
+        });
+        const maxB = Math.max(1, ...buckets);
+        hbBarsEl.innerHTML = buckets.map(b => {
+          const h = Math.max(4, Math.round((b/maxB)*24));
+          const col = b > 0 ? 'var(--inalgesco)' : 'var(--border2)';
+          return '<i style="width:7px;border-radius:2px;height:'+h+'px;background:'+col+';display:inline-block"></i>';
+        }).join('');
+      }
     }
 
     // ── MutationObserver on #latest to drive gauges ──
