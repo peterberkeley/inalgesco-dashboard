@@ -901,7 +901,7 @@
         if (ccStateEl) { ccStateEl.textContent='Cooling'; ccStateEl.style.color='var(--blue)'; }
         if (ccSubEl)   ccSubEl.textContent = rem<=0 ? 'At target temperature' : 'Target in '+m+'m '+s+'s';
       } else {
-        if (ccIconEl)  { ccIconEl.style.background='rgba(98,114,164,.1)'; ccIconEl.textContent='\u2764\ufe0f'; }
+        if (ccIconEl)  { ccIconEl.style.background='rgba(98,114,164,.1)'; ccIconEl.textContent='\U0001f321\ufe0f'; }
         if (ccStateEl) { ccStateEl.textContent='Monitoring'; ccStateEl.style.color='var(--muted)'; }
         if (ccSubEl)   ccSubEl.textContent='Tracking since last connection';
       }
