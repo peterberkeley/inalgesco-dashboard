@@ -986,7 +986,7 @@ function initCharts(SENSORS){
 
     const ctx = box.querySelector("canvas").getContext("2d");
     // Keep canvas background white; dataset will not fill
-    ctx.canvas.style.backgroundColor = "#ffffff";
+    ctx.canvas.style.backgroundColor = "transparent";
 
     s.chart = new Chart(ctx,{
       type:"line",
