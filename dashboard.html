@@ -266,7 +266,7 @@
     #sct-charts-wrap {
       background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
     }
-    #sct-charts-wrap h2 { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+    #sct-charts-wrap h2 { font-size: 15px; font-weight: 700; color: var(--muted); letter-spacing: -.01em; }
     #chartRange { font-size: 11px; color: var(--muted); margin-top: 2px; }
     /* Single avg chart only */
     #charts { display: block; margin-top: 14px; }
@@ -280,7 +280,7 @@
       background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
     }
     .map-head { padding: 11px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-    .map-head h2 { font-size: 13px; font-weight: 600; color: var(--text); }
+    .map-head h2 { font-size: 13px; font-weight: 600; color: var(--muted); }
     #map { height: 22rem; }
     @media (min-width: 1024px) { #map { height: 28rem; } }
 
@@ -330,6 +330,7 @@
     #charts canvas { background: transparent !important; }
 
     /* Maintenance — force dark card background; inner flex rows transparent */
+    #maintenanceBox h2 { color: var(--muted) !important; font-size: 11px !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: .09em !important; }
     #maintenanceBox {
       background: var(--surface2) !important;
       background-color: var(--surface2) !important;
@@ -430,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.8</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.9</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -677,7 +678,7 @@
   <div id="spinner"></div>
 
   <!-- ═══ dashboard.js (untouched) ═══ -->
-  <script src="dashboard.js?v=v138_20260608" defer></script>
+  <script src="dashboard.js?v=v139_20260608" defer></script>
 
   <!-- ═══ GAUGE ENGINE ═══ -->
   <script>
