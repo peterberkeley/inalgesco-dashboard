@@ -324,18 +324,56 @@
     ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-    /* ─── DARK THEME ENFORCEMENT (V13.7) ─── */
+    /* ─── DARK THEME ENFORCEMENT (V13.8) ─── */
 
-    /* Chart.js canvas — transparent so parent surface2 card shows through */
+    /* Chart canvas transparent — parent surface2 card shows through */
     #charts canvas { background: transparent !important; }
 
-    /* Maintenance box — keep card's surface2 bg; only inner flex divs transparent */
-    #maintenanceBox > div { background: transparent !important; background-color: transparent !important; }
+    /* Maintenance — force dark card background; inner flex rows transparent */
+    #maintenanceBox {
+      background: var(--surface2) !important;
+      background-color: var(--surface2) !important;
+      color: var(--text) !important;
+    }
+    #maintenanceBox > div,
+    #maintenanceBox .space-y-4,
+    #maintenanceBox .space-y-4 > div { background: transparent !important; }
 
-    /* Map — dark tile-loading background */
+    /* Map — dark behind tile-load */
     #sct-map-wrap { background: var(--surface2) !important; }
-    #map          { background: #0b1120 !important; }
-    .leaflet-container { background: #0b1120 !important; }
+    #map, .leaflet-container { background: #0b1120 !important; }
+    /* CartoDB Dark Matter tile labels are light — keep as-is */
+
+    /* ─── BUTTON COLOUR UNIFICATION → Inalgesco Blue ─── */
+    /* Green Map button */
+    #headerMapBtn {
+      background: var(--inalgesco) !important;
+      border-color: var(--inalgesco) !important;
+      color: #fff !important;
+    }
+    #headerMapBtn:hover {
+      background: var(--inal2) !important;
+      border-color: var(--inal2) !important;
+    }
+    /* Gold / orange CSV button */
+    #dlBtn {
+      background: var(--inalgesco) !important;
+      border-color: var(--inalgesco) !important;
+      color: #fff !important;
+    }
+    #dlBtn:hover {
+      background: var(--inal2) !important;
+      border-color: var(--inal2) !important;
+    }
+    /* Maintenance Reset buttons (written by JS with bg-blue-500) */
+    #maintenanceBox button {
+      background: var(--inalgesco) !important;
+      border-color: var(--inalgesco) !important;
+      color: #fff !important;
+    }
+    #maintenanceBox button:hover {
+      background: var(--inal2) !important;
+    }
   </style>
 </head>
 
@@ -392,8 +430,8 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.7</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
-      <button id="headerMapBtn" class="hbtn" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700;">Map</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.8</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
 
@@ -529,7 +567,7 @@
               <input type="date" id="end" class="sct-date" />
             </div>
           </div>
-          <button id="dlBtn" class="hbtn gold" style="width:100%;margin-bottom:6px;">↓ Download CSV</button>
+          <button id="dlBtn" class="hbtn" style="width:100%;margin-bottom:6px;">↓ Download CSV</button>
           <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">All probe readings + GPS + signal</div>
           <div id="expStatus"></div>
         </div>
@@ -639,7 +677,7 @@
   <div id="spinner"></div>
 
   <!-- ═══ dashboard.js (untouched) ═══ -->
-  <script src="dashboard.js?v=fix25_20260605" defer></script>
+  <script src="dashboard.js?v=v138_20260608" defer></script>
 
   <!-- ═══ GAUGE ENGINE ═══ -->
   <script>
