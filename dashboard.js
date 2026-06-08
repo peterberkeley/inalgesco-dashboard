@@ -430,12 +430,19 @@ function buildDeviceDropdownFromConfig(sensorMap){
     .sort(([a],[b]) => parseInt(a.replace("skycafe-",""),10)-parseInt(b.replace("skycafe-",""),10));
 
   entries.forEach(([dev,obj])=>{
-    const isOnline = (now - (obj.last_seen||0)) < ONLINE_WINDOW_SEC;
-    const dot = isOnline ? "🟢" : "⚪️";
+    // Use __deviceMap as authoritative last_seen source (v2 API heartbeats)
+    const _ls  = (window.__deviceMap && window.__deviceMap[dev] && window.__deviceMap[dev].last_seen)
+                 || (obj.last_seen || 0);
+    const _age = now - _ls;
+    const isOnline = _age < ONLINE_WINDOW_SEC;
+    const dot = isOnline ? "\uD83D\uDFE2" : "\u26AA\uFE0F";
     const opt = document.createElement("option");
     opt.value = dev;
     const displayLabel = getDisplayName(dev);
-    opt.text  = (function(){var _sa=now-(obj.last_seen||0);return isOnline?(dot+' '+displayLabel+' ('+Math.max(0,Math.round(_sa/60))+'m)'):(dot+' '+displayLabel+' '+((_sa>86400)?'(>24h)':'('+Math.round(_sa/3600)+'h)'));}());
+    const _tl = isOnline
+      ? "("+Math.max(0,Math.round(_age/60))+"m)"
+      : _age > 86400 ? "(>24h)" : "("+Math.round(_age/3600)+"h)";
+    opt.text  = dot+" "+displayLabel+" "+_tl;
     sel.appendChild(opt);
   });
 
@@ -446,7 +453,7 @@ function buildDeviceDropdownFromConfig(sensorMap){
   }
   if(!foundPrev){
     for(let i=0; i<sel.options.length; i++){
-      if (sel.options[i].text.includes("Online")){ sel.selectedIndex = i; foundPrev=true; break; }
+      if (sel.options[i].text.includes("\uD83D\uDFE2")){ sel.selectedIndex = i; foundPrev=true; break; }
     }
   }
   if(!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
@@ -3306,7 +3313,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
       }
       if (!foundPrev){
         for (let i=0;i<sel.options.length;i++){
-          if (sel.options[i].text.includes("Online")){ sel.selectedIndex = i; foundPrev = true; break; }
+          if (sel.options[i].text.includes("\uD83D\uDFE2")){ sel.selectedIndex = i; foundPrev = true; break; }
         }
       }
       if (!foundPrev && sel.options.length>0) sel.selectedIndex = 0;
