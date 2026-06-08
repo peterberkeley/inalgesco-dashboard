@@ -2038,7 +2038,7 @@ function drawLive(data, SENSORS){
   const sensorRows = SENSORS
   .filter(s => s.address && s.id !== 'avg' && s.label !== 'Chillrail Avg')
   .filter(s => readings && readings[s.address] != null)        // hide empty rows
-  .map(s => [ s.label, fmt(readings[s.address] + (s.calibration || 0), 1) ]);
+  .map(s => [ s.label, fmt(readings[s.address] + (s.calibration || 0), 1), true ]); // true = hidden (gauge engine reads via DOM, not visible in Device Info)
 
 
      // --- Location link: prefer fresh lat/lon, else fall back to last-known ---
@@ -2108,9 +2108,10 @@ const tz = data.tz || UI_TZ;
   rows.push(...sensorRows);
 
   document.getElementById("latest").innerHTML =
-    rows.map(([lab,val]) => {
+    rows.map(([lab,val,hidden]) => {
       const wrap = (lab === "Local Time") ? ' style="white-space:normal"' : '';
-      return `<tr><th>${lab}</th><td${wrap}>${val}</td></tr>`;
+      const hide = hidden ? ' style="display:none"' : '';
+      return `<tr${hide}><th>${lab}</th><td${wrap}>${val}</td></tr>`;
     }).join("");
 
   // --- Place map pin with full fallback logic (debounced) ---
@@ -3795,18 +3796,16 @@ function installAllTrucksMapUI(){
   mapBtn.id = 'mapBtn';
   mapBtn.textContent = 'Map';
 
-  if (adminBtn) {
-    // Copy class list to match Admin styling exactly
-    mapBtn.className = adminBtn.className || '';
-    // Insert right after Admin
+  // Style to match header buttons
+  mapBtn.className = (adminBtn && adminBtn.className) ? adminBtn.className : 'hbtn';
+  // Place in the slot next to the PrimeFlight logo
+  const mapSlot = document.getElementById('mapBtnSlot');
+  if (mapSlot) {
+    mapSlot.appendChild(mapBtn);
+  } else if (adminBtn) {
     adminBtn.insertAdjacentElement('afterend', mapBtn);
   } else {
-    // Fallback styling (close to your Admin style if not found)
-    mapBtn.className = 'bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded';
-    // Try to place in a sensible header container; else append to body
-    const headerHost = document.querySelector('#header, .header, #topbar, .topbar') || document.body;
-    headerHost.appendChild(mapBtn);
-    console.warn('[Map] Admin button not found; placed Map button in header/body fallback.');
+    document.body.appendChild(mapBtn);
   }
 
   // 2) Create the full-screen overlay (once)
