@@ -443,14 +443,17 @@ function buildDeviceDropdownFromConfig(sensorMap){
     // Seed from last_seen so uptime reflects actual activity, not just page-load time
     const _lsKey = "onlineSince_"+dev;
     if (isOnline) {
-      if (!localStorage.getItem(_lsKey)) {
-        // Use last_seen as the floor — truck was definitely online then
+      const _stored = localStorage.getItem(_lsKey);
+      if (!_stored) {
+        // First detection — seed from last_seen so timer reflects real activity
+        localStorage.setItem(_lsKey, String(_ls || now));
+      } else if (parseInt(_stored,10) > now) {
+        // Corrupt / future value — reset
         localStorage.setItem(_lsKey, String(_ls || now));
       }
-    } else if (_age > 300) {
-      // Only wipe online-since after 5+ min offline (avoids mid-fetch glitch resetting counter)
-      localStorage.removeItem(_lsKey);
     }
+    // Never remove onlineSince here — mid-fetch flicker causes false offline.
+    // The 60s ticker handles genuine offline clearing.
     const _tl = isOnline
       ? (function(){
           const _since = parseInt(localStorage.getItem(_lsKey)||String(_ls||now),10);
@@ -478,7 +481,7 @@ function buildDeviceDropdownFromConfig(sensorMap){
 // ensure global visibility in Safari/strict modes
 window.buildDeviceDropdownFromConfig = buildDeviceDropdownFromConfig;
 
-// Refresh online uptime labels every 60 seconds
+// Refresh online uptime labels every 60 seconds; clear stale onlineSince for genuinely offline trucks
 setInterval(function(){
   const sel = document.getElementById('deviceSelect');
   if (!sel) return;
@@ -486,13 +489,18 @@ setInterval(function(){
   Array.from(sel.options).forEach(function(opt){
     const dev = opt.value;
     const lsKey = 'onlineSince_'+dev;
+    const isOnlineOpt = opt.text.indexOf('\uD83D\uDFE2') >= 0; // green dot
+    if (!isOnlineOpt) {
+      // Truck is offline — clear onlineSince so next session starts fresh
+      localStorage.removeItem(lsKey);
+      return;
+    }
     const since = localStorage.getItem(lsKey);
-    if (!since) return; // offline — leave as-is
+    if (!since) return;
     const up = Math.max(0, nowSec - parseInt(since, 10));
     const h = Math.floor(up/3600), m = Math.floor((up%3600)/60);
     const uptimeLbl = h>0 ? '(\u2191'+h+'h '+m+'m)' : '(\u2191'+m+'m)';
-    // Replace the trailing (...) in the option text
-    opt.text = opt.text.replace(/\(↑[^)]*\)|\(↑\d+m\)$/, uptimeLbl);
+    opt.text = opt.text.replace(/\(↑[^)]*\)/, uptimeLbl);
   });
 }, 60000);
 
@@ -3434,7 +3442,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
           var _lsKey="onlineSince_"+dev;
           var _lsSeed=(window.__deviceMap&&window.__deviceMap[dev]&&window.__deviceMap[dev].last_seen)||(obj&&obj.last_seen)||_n;
           if(isOnline){if(!localStorage.getItem(_lsKey))localStorage.setItem(_lsKey,String(_lsSeed));}
-          else if(_sa>300){localStorage.removeItem(_lsKey);}
+          // Never remove here — ticker handles genuine offline clearing
           var _tl=isOnline?(function(){
             var _since=parseInt(localStorage.getItem(_lsKey)||String(_n),10);
             var _up=Math.max(0,_n-_since);
