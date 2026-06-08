@@ -447,7 +447,8 @@ function buildDeviceDropdownFromConfig(sensorMap){
         // Use last_seen as the floor — truck was definitely online then
         localStorage.setItem(_lsKey, String(_ls || now));
       }
-    } else {
+    } else if (_age > 300) {
+      // Only wipe online-since after 5+ min offline (avoids mid-fetch glitch resetting counter)
       localStorage.removeItem(_lsKey);
     }
     const _tl = isOnline
@@ -491,7 +492,7 @@ setInterval(function(){
     const h = Math.floor(up/3600), m = Math.floor((up%3600)/60);
     const uptimeLbl = h>0 ? '(\u2191'+h+'h '+m+'m)' : '(\u2191'+m+'m)';
     // Replace the trailing (...) in the option text
-    opt.text = opt.text.replace(/\(\u2191[^)]*\)|\(\d+m\)$/, uptimeLbl);
+    opt.text = opt.text.replace(/\(↑[^)]*\)|\(↑\d+m\)$/, uptimeLbl);
   });
 }, 60000);
 
@@ -3433,7 +3434,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
           var _lsKey="onlineSince_"+dev;
           var _lsSeed=(window.__deviceMap&&window.__deviceMap[dev]&&window.__deviceMap[dev].last_seen)||(obj&&obj.last_seen)||_n;
           if(isOnline){if(!localStorage.getItem(_lsKey))localStorage.setItem(_lsKey,String(_lsSeed));}
-          else{localStorage.removeItem(_lsKey);}
+          else if(_sa>300){localStorage.removeItem(_lsKey);}
           var _tl=isOnline?(function(){
             var _since=parseInt(localStorage.getItem(_lsKey)||String(_n),10);
             var _up=Math.max(0,_n-_since);
