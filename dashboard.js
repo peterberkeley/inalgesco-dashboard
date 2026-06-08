@@ -2221,6 +2221,8 @@ function getMaintState(truckLabel){
 }
 
 async function saveMaintState(truckLabel, maintObj){
+  // Re-fetch so probe labels set via admin are never overwritten by maintenance writes
+  await fetchSensorMapMapping();
   sensorMapConfig[truckLabel] = sensorMapConfig[truckLabel] || {};
   Object.assign(sensorMapConfig[truckLabel], maintObj);
   await fetch('https://industrial.api.ubidots.com/api/v1.6/devices/config/sensor_map/values?token='+UBIDOTS_ACCOUNT_TOKEN, {
