@@ -379,7 +379,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.3</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.4</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700;">Map</button>
     </div>
   </header>
@@ -904,7 +904,7 @@
         if (ccStateEl) { ccStateEl.textContent='Cooling'; ccStateEl.style.color='var(--blue)'; }
         if (ccSubEl)   ccSubEl.textContent = rem<=0 ? 'At target temperature' : 'Target in '+m+'m '+s+'s';
       } else {
-        if (ccIconEl)  { ccIconEl.style.background='rgba(98,114,164,.1)'; ccIconEl.textContent='👁️'; }
+        if (ccIconEl)  { ccIconEl.style.background='rgba(98,114,164,.1)'; ccIconEl.textContent='🔍'; }
         if (ccStateEl) { ccStateEl.textContent='Monitoring'; ccStateEl.style.color='var(--muted)'; }
         if (ccSubEl)   ccSubEl.textContent='Tracking since last connection';
       }
