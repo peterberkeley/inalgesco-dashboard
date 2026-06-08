@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V14.4</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V14.5</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -821,7 +821,8 @@
       const currentDevice = document.getElementById('deviceSelect')?.value || '';
       if(currentDevice !== __lastDevice){
         __lastDevice = currentDevice;
-        __probeStates = {};   // clear cooling state for new truck
+        __probeStates = {};        // clear cooling state for new truck
+        window.__trendHistory = {}; // clear trend history for new truck
       }
 
       const rows = document.querySelectorAll('#latest tr');
@@ -836,10 +837,26 @@
         if (isFinite(val)) probes[label] = val;
       });
 
-      // Trend arrows use actual values
+      // Trend arrows — rolling window of last 5 readings to avoid noise flips
+      if (!window.__trendHistory) window.__trendHistory = {};
       const trends = {};
       Object.entries(probes).forEach(([label, val]) => {
-        trends[label] = (_prevReadings[label] !== undefined) ? val > _prevReadings[label] + 0.1 : null;
+        if (!window.__trendHistory[label]) window.__trendHistory[label] = [];
+        window.__trendHistory[label].push(val);
+        if (window.__trendHistory[label].length > 5) window.__trendHistory[label].shift();
+        const hist = window.__trendHistory[label];
+        if (hist.length >= 3) {
+          // Compare average of latest 2 vs average of oldest 2 in window
+          const recent = (hist[hist.length-1] + hist[hist.length-2]) / 2;
+          const older  = (hist[0] + hist[1]) / 2;
+          if      (recent > older + 0.4) trends[label] = true;   // rising
+          else if (recent < older - 0.4) trends[label] = false;  // cooling
+          else                            trends[label] = null;   // stable
+        } else {
+          trends[label] = (_prevReadings[label] !== undefined)
+            ? (val > _prevReadings[label] + 0.4 ? true : val < _prevReadings[label] - 0.4 ? false : null)
+            : null;
+        }
         _prevReadings[label] = val;
       });
 
