@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.3</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.4</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -835,31 +835,29 @@
         window.__coolHistory = [];
         window.__avgHistorySeeded = false;
       }
-      // Seed __avgHistory from chart historical data on first run per truck
+      // Seed __avgHistory + __coolHistory from chart history — retry each cycle until chart has data
       if (!window.__avgHistorySeeded) {
-        window.__avgHistorySeeded = true;
         try {
           const _c = Object.values(Chart.instances)[0];
-          if (_c && _c.data.labels.length > 1) {
+          if (_c && _c.data.labels.length > 5) {
             const _now = new Date();
             const _dateStr = _now.toDateString();
             const _nowMs = _now.getTime();
             window.__avgHistory = _c.data.labels.map(function(lbl, i) {
-              const parts = lbl.split(':');
-              const h = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
-              // Build timestamp: use today's date; if hour > current hour, assume yesterday
               let t = new Date(_dateStr + ' ' + lbl + ':00').getTime();
-              if (t > _nowMs + 2*60*1000) t -= 86400000; // yesterday
+              if (t > _nowMs + 2*60*1000) t -= 86400000;
               return { t: t, v: _c.data.datasets[0].data[i] };
             }).filter(function(x){ return typeof x.v === 'number' && !isNaN(x.v); });
+            // Build __coolHistory: true=cooling, false=not cooling, null=unknown
+            const _chData = _c.data.datasets[0].data;
+            window.__coolHistory = _chData.map(function(v, i) {
+              if (i < 5 || typeof v !== 'number') return null;
+              const delta = v - _chData[i - 5];
+              return delta <= -1.5 ? true : delta >= 2.0 ? false : null;
+            });
+            window.__avgHistorySeeded = true;
+            _c.update('none'); // force chart to re-render segments with seeded coolHistory
           }
-          // Also build __coolHistory from chart data (5-pt ≈ 5-min delta)
-          const _chData = _c.data.datasets[0].data;
-          window.__coolHistory = _chData.map(function(v, i) {
-            if (i < 5 || typeof v !== 'number') return null;
-            const delta = v - _chData[i - 5];
-            return delta <= -1.5 ? true : delta >= 2.0 ? false : null;
-          });
         } catch(e) {}
       }
 
@@ -938,7 +936,7 @@
         if (!matched.length) { updateGauge(zone.id, null, null); return; }
         const avg  = matched.reduce((s, [, v]) => s + v, 0) / matched.length;
         const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null && v !== 'warmup');
-        const allWarmup  = matched.every(([l]) => trends[l] === 'warmup' || trends[l] === null) && risingVals.length === 0;
+        const allWarmup  = matched.some(([l]) => trends[l] === 'warmup') && matched.every(([l]) => trends[l] === 'warmup' || trends[l] === null) && risingVals.length === 0;
         const rising     = allWarmup ? 'warmup' : (risingVals.length ? risingVals.some(Boolean) : null);
         updateGauge(zone.id, avg, rising);
         const probeEl = document.getElementById('gprobes-' + zone.id);
