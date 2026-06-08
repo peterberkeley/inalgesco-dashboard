@@ -3302,7 +3302,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
         const isOnline = (nowSecForBuild - (obj.last_seen || 0)) < ONLINE_WINDOW_SEC;
         const opt = document.createElement("option");
         opt.value = dev;
-        opt.text  = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[dev]&&window.__deviceMap[dev].last_seen)||(obj&&obj.last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(dev)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+        opt.text  = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[dev]&&window.__deviceMap[dev].last_seen)||(obj&&obj.last_seen)||0);return (isOnline?"\uD83D\uDFE2":"\u26AA\uFE0F")+" "+getDisplayName(dev)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
         sel.appendChild(opt);
       }
 
@@ -3361,7 +3361,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
     }
 
     const ageOk = bestTs && (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
-    opt.text = (function(){var _n=Math.floor(Date.now()/1000),_hb=bestTs?Math.floor(bestTs/1000):0,_ls=(window.__deviceMap&&window.__deviceMap[label]&&window.__deviceMap[label].last_seen)||(sensorMap[label]&&sensorMap[label].last_seen)||0,_sa=_hb>0?(_n-_hb):(_n-_ls);return (ageOk?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(ageOk?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+    opt.text = (function(){var _n=Math.floor(Date.now()/1000),_hb=bestTs?Math.floor(bestTs/1000):0,_ls=(window.__deviceMap&&window.__deviceMap[label]&&window.__deviceMap[label].last_seen)||(sensorMap[label]&&sensorMap[label].last_seen)||0,_sa=_hb>0?(_n-_hb):(_n-_ls);return (ageOk?"\uD83D\uDFE2":"\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(ageOk?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
   } catch (e) {
     console.warn("dropdown re-check failed for", label, e);
   }
@@ -3459,7 +3459,7 @@ console.log('[lastSeen]', {
     const dd = document.getElementById("deviceSelect");
     if (dd && dd.selectedIndex >= 0) {
       const opt = dd.options[dd.selectedIndex];
-      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[deviceLabel]&&window.__deviceMap[deviceLabel].last_seen)||(sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(deviceLabel)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[deviceLabel]&&window.__deviceMap[deviceLabel].last_seen)||(sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||0);return (isOnline?"\uD83D\uDFE2":"\u26AA\uFE0F")+" "+getDisplayName(deviceLabel)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
     }
    // Update KPI “last updated” using lastSeenSec (localized to Phoenix)
 {
