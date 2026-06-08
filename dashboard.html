@@ -324,30 +324,18 @@
     ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-    /* ─── DARK THEME ENFORCEMENT (V13.6) ─── */
+    /* ─── DARK THEME ENFORCEMENT (V13.7) ─── */
 
-    /* Chart.js canvas — transparent so surface2 shows through */
+    /* Chart.js canvas — transparent so parent surface2 card shows through */
     #charts canvas { background: transparent !important; }
 
-    /* Maintenance box — JS writes Tailwind-classed HTML; force dark */
-    #maintenanceBox,
-    #maintenanceBox > div,
-    #maintenanceBox .rounded,
-    #maintenanceBox .rounded-lg,
-    #maintenanceBox .rounded-xl,
-    #maintenanceBox .bg-white,
-    #maintenanceBox [class*="bg-white"],
-    #maintenanceBox [class*="bg-gray"] {
-      background: transparent !important;
-      background-color: transparent !important;
-    }
+    /* Maintenance box — keep card's surface2 bg; only inner flex divs transparent */
+    #maintenanceBox > div { background: transparent !important; background-color: transparent !important; }
 
-    /* Map container — ensure dark background behind Leaflet tiles */
-    #sct-map-wrap,
-    #map { background: var(--surface2) !important; }
-
-    /* Leaflet default white bg override */
-    .leaflet-container { background: var(--surface2) !important; }
+    /* Map — dark tile-loading background */
+    #sct-map-wrap { background: var(--surface2) !important; }
+    #map          { background: #0b1120 !important; }
+    .leaflet-container { background: #0b1120 !important; }
   </style>
 </head>
 
@@ -404,7 +392,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.6</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.7</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700;">Map</button>
     </div>
   </header>
