@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.2</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.3</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -678,7 +678,7 @@
   <div id="spinner"></div>
 
   <!-- ═══ dashboard.js (untouched) ═══ -->
-  <script src="dashboard.js?v=v149_20260608" defer></script>
+  <script src="dashboard.js?v=v153_20260608" defer></script>
 
   <!-- ═══ GAUGE ENGINE ═══ -->
   <script>
@@ -832,6 +832,7 @@
         window.__trendBuf = {};
         window.__trendRun = {};
         window.__avgHistory = [];
+        window.__coolHistory = [];
         window.__avgHistorySeeded = false;
       }
       // Seed __avgHistory from chart historical data on first run per truck
@@ -852,6 +853,13 @@
               return { t: t, v: _c.data.datasets[0].data[i] };
             }).filter(function(x){ return typeof x.v === 'number' && !isNaN(x.v); });
           }
+          // Also build __coolHistory from chart data (5-pt ≈ 5-min delta)
+          const _chData = _c.data.datasets[0].data;
+          window.__coolHistory = _chData.map(function(v, i) {
+            if (i < 5 || typeof v !== 'number') return null;
+            const delta = v - _chData[i - 5];
+            return delta <= -1.5 ? true : delta >= 2.0 ? false : null;
+          });
         } catch(e) {}
       }
 
@@ -937,19 +945,8 @@
         if (probeEl) probeEl.textContent = matched.map(([l]) => l).join(' + ');
       });
 
-      // Update chart line colour: blue when cooling, red when system off
-      (function(){
-        const _anyCooling = Object.values(trends).some(t => t === false);
-        const _allWarmup  = Object.values(trends).every(t => t === 'warmup' || t === null);
-        const _col = _anyCooling ? '#1e72d8' : _allWarmup ? '#6272a4' : '#ef4444';
-        const _charts = Object.values(Chart.instances);
-        const _c = _charts[0]; if (!_c) return;
-        if (_c.data.datasets[0].borderColor !== _col) {
-          _c.data.datasets[0].borderColor = _col;
-          _c.data.datasets[0].pointBackgroundColor = _col;
-          _c.update('none');
-        }
-      }());
+      // __systemCooling tracked for __coolHistory (segment colouring handled by Chart.js segment option)
+      window.__systemCooling = Object.values(trends).some(t => t === false);
 
       // Alerts and chill-cycle timer use actual (raw) values
       updateAlert(probes, trends);
@@ -973,6 +970,11 @@
         if(!window.__avgHistory) window.__avgHistory=[];
         window.__avgHistory.push({t:Date.now(),v:avg});
         window.__avgHistory=window.__avgHistory.filter(function(x){return x.t>=Date.now()-30*60*1000;});
+        // Track cooling state per chart point for segment colouring
+        if(!window.__coolHistory) window.__coolHistory=[];
+        var _cs=window.__systemCooling;
+        window.__coolHistory.push(_cs===true?true:_cs===false?false:null);
+        while(window.__coolHistory.length>290) window.__coolHistory.shift();
         var r = document.getElementById('chartRange');
         if(r && c.data.labels.length>1) r.textContent = c.data.labels[0]+'--'+lbl;
       }());
