@@ -195,7 +195,7 @@
     #maintenanceBox { color: var(--muted); font-size: 12px; }
 
     /* Device info table — JS writes #latest; we render it in sidebar */
-    #sensorsCard { border: none; padding: 0; background: transparent; }
+    /* #sensorsCard inherits .sct-card — no overrides */
     #sensorsCard h2 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
     #latest { width: 100%; border-collapse: collapse; font-size: 12px; }
     #latest th {
@@ -318,7 +318,7 @@
 
     /* Misc */
     #latest, #latestWrap { max-height: none !important; overflow: visible !important; }
-    #csvCard { min-height: 0; border: none; padding: 0; background: transparent; box-shadow: none; }
+    /* #csvCard inherits .sct-card — no overrides */
     .text-gray-500 { color: var(--muted) !important; }
 
     ::-webkit-scrollbar { width: 3px; }
@@ -379,7 +379,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.4</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V13.5</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700;">Map</button>
     </div>
   </header>
@@ -418,10 +418,11 @@
     <aside id="sct-sidebar">
 
       <!-- Truck identity (kpiTruck populated by JS) -->
-      <div class="sct-card">
+      <div>
+        <div class="sct-sec">Truck</div>
+        <div class="sct-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
-            <div class="sct-sec" style="margin-bottom:2px">Truck</div>
             <div class="truck-number" id="kpiTruck">—</div>
             <div class="truck-meta" id="kpiSeen">—</div>
           </div>
@@ -434,6 +435,7 @@
             <div class="val" id="kpiAvg">—</div>
             <div class="sub">last readings</div>
           </div>
+        </div>
         </div>
       </div>
 
