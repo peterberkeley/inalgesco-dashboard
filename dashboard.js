@@ -2207,7 +2207,6 @@ const tz = data.tz || UI_TZ;
   // Fire-and-forget: snaps to nearest road (when moving) then places marker
   snapToRoadAndPlace(target, tooltipNote, Number(speed) || 0).catch(() => {});
 }
-}
 
 /* =================== Maintenance =================== */
 const MAINTENANCE_DEFAULTS = { filterDays:60, serviceDays:365, lastDecrementDate:null };
