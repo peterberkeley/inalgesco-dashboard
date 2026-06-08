@@ -3607,7 +3607,25 @@ console.log('[lastSeen]', {
     const dd = document.getElementById("deviceSelect");
     if (dd && dd.selectedIndex >= 0) {
       const opt = dd.options[dd.selectedIndex];
-      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[deviceLabel]&&window.__deviceMap[deviceLabel].last_seen)||(sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||0);return (isOnline?"\uD83D\uDFE2":"\u26AA\uFE0F")+" "+getDisplayName(deviceLabel)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+      opt.text = (function(){
+        var _n=Math.floor(Date.now()/1000);
+        var _sa=_n-((window.__deviceMap&&window.__deviceMap[deviceLabel]&&window.__deviceMap[deviceLabel].last_seen)||(sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||0);
+        var _lsKey='onlineSince_'+deviceLabel;
+        var _tl;
+        if(isOnline){
+          if(!localStorage.getItem(_lsKey)){
+            var _seed=(window.__deviceMap&&window.__deviceMap[deviceLabel]&&window.__deviceMap[deviceLabel].last_seen)||(sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||_n;
+            localStorage.setItem(_lsKey,String(_seed));
+          }
+          var _since=parseInt(localStorage.getItem(_lsKey),10);
+          var _up=Math.max(0,_n-_since);
+          var _h=Math.floor(_up/3600),_m=Math.floor((_up%3600)/60);
+          _tl=_h>0?'(\u2191'+_h+'h '+_m+'m)':'(\u2191'+_m+'m)';
+        } else {
+          _tl=_sa>86400?'(>24h)':'('+Math.round(_sa/3600)+'h)';
+        }
+        return (isOnline?"\uD83D\uDFE2":"\u26AA\uFE0F")+" "+getDisplayName(deviceLabel)+" "+_tl;
+      }());
     }
    // Update KPI “last updated” using lastSeenSec (localized to Phoenix)
 {
