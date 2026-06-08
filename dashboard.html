@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.1</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.2</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -828,9 +828,31 @@
       const currentDevice = document.getElementById('deviceSelect')?.value || '';
       if(currentDevice !== __lastDevice){
         __lastDevice = currentDevice;
-        __probeStates = {};   // clear cooling state for new truck
-        window.__trendBuf = {};   // clear trend buffer for new truck
-        window.__trendRun = {};   // clear consecutive-drop counters for new truck
+        __probeStates = {};
+        window.__trendBuf = {};
+        window.__trendRun = {};
+        window.__avgHistory = [];
+        window.__avgHistorySeeded = false;
+      }
+      // Seed __avgHistory from chart historical data on first run per truck
+      if (!window.__avgHistorySeeded) {
+        window.__avgHistorySeeded = true;
+        try {
+          const _c = Object.values(Chart.instances)[0];
+          if (_c && _c.data.labels.length > 1) {
+            const _now = new Date();
+            const _dateStr = _now.toDateString();
+            const _nowMs = _now.getTime();
+            window.__avgHistory = _c.data.labels.map(function(lbl, i) {
+              const parts = lbl.split(':');
+              const h = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+              // Build timestamp: use today's date; if hour > current hour, assume yesterday
+              let t = new Date(_dateStr + ' ' + lbl + ':00').getTime();
+              if (t > _nowMs + 2*60*1000) t -= 86400000; // yesterday
+              return { t: t, v: _c.data.datasets[0].data[i] };
+            }).filter(function(x){ return typeof x.v === 'number' && !isNaN(x.v); });
+          }
+        } catch(e) {}
       }
 
       const rows = document.querySelectorAll('#latest tr');
@@ -869,9 +891,15 @@
           else if (_step >=  0.2) window.__trendRun[label] = 0;
         }
 
-        // ── 5-min delta ──
+        // ── 5-min delta: prefer trendBuf, fall back to avgHistory delta ──
         const _fiveRef = window.__trendBuf[label].find(s => s.t >= _trendNow - 5*60*1000);
-        const _fiveDelta = _fiveRef ? val - _fiveRef.v : null;
+        let _fiveDelta = _fiveRef ? val - _fiveRef.v : null;
+        if (_fiveDelta === null && window.__avgHistory && window.__avgHistory.length > 1) {
+          // Use the change in the all-probe average as a proxy for this probe's trend
+          const _avgRef = window.__avgHistory.find(s => s.t >= _trendNow - 5*60*1000);
+          const _avgNow = window.__avgHistory[window.__avgHistory.length - 1];
+          if (_avgRef && _avgNow) _fiveDelta = _avgNow.v - _avgRef.v;
+        }
 
         // ── decisions ──
         const _notRising   = _fiveDelta === null || _fiveDelta <= 1.5;
@@ -941,6 +969,10 @@
         c.data.datasets[0].data.push(avg);
         while(c.data.labels.length>290){ c.data.labels.shift(); c.data.datasets[0].data.shift(); }
         c.update('none');
+        // Maintain timestamped avg history for trend detection
+        if(!window.__avgHistory) window.__avgHistory=[];
+        window.__avgHistory.push({t:Date.now(),v:avg});
+        window.__avgHistory=window.__avgHistory.filter(function(x){return x.t>=Date.now()-30*60*1000;});
         var r = document.getElementById('chartRange');
         if(r && c.data.labels.length>1) r.textContent = c.data.labels[0]+'--'+lbl;
       }());
