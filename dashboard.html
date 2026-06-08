@@ -379,7 +379,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V11.2</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V11.3</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="dlBtn" class="hbtn gold">↓ CSV</button>
     </div>
   </header>
@@ -809,12 +809,6 @@
         var avg = Math.round(vals.reduce(function(a,b){return a+b;},0)/vals.length*10)/10;
         var charts = Object.values(Chart.instances);
         var c = charts[0]; if(!c) return;
-        // Clear pre-loaded historical data when truck changes or on first live update
-        if(window.__liveChartInst !== c){
-          window.__liveChartInst = c;
-          c.data.labels = [];
-          c.data.datasets[0].data = [];
-        }
         var n = new Date();
         var lbl = n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
         if(c.data.labels[c.data.labels.length-1]===lbl) return;
