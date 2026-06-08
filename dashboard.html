@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.0</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.1</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -799,6 +799,9 @@
         if (rising === false) {
           trendEl.textContent = '▼ Cooling';
           trendEl.setAttribute('fill', '#60a5fa');
+        } else if (rising === 'warmup') {
+          trendEl.textContent = '—';
+          trendEl.setAttribute('fill', '#364165');
         } else {
           trendEl.textContent = 'System not turned on';
           trendEl.setAttribute('fill', '#6272a4');
@@ -875,10 +878,12 @@
         const _gate1       = window.__trendRun[label] >= 5;           // fast: 5 consec drops
         const _gate2       = _fiveDelta !== null && _fiveDelta <= -1.5; // sustained: -1.5°F/5min
         const _rising      = _fiveDelta !== null && _fiveDelta >= 2.0;
+        const _warmup      = _fiveDelta === null && !_gate1;           // no 5-min data yet
 
-        if      ((_gate1 || _gate2) && _notRising) trends[label] = false; // ▼ Cooling
-        else if (_rising)                           trends[label] = true;  // ▲ Rising
-        else                                        trends[label] = null;  // stable
+        if      ((_gate1 || _gate2) && _notRising) trends[label] = false;    // ▼ Cooling
+        else if (_rising)                           trends[label] = true;     // ▲ Rising
+        else if (_warmup)                           trends[label] = 'warmup'; // still gathering data
+        else                                        trends[label] = null;     // stable / system off
 
         _prevReadings[label] = val;
       });
@@ -896,8 +901,9 @@
         const matched = Object.entries(adjustedProbes).filter(([l]) => zone.match(l));
         if (!matched.length) { updateGauge(zone.id, null, null); return; }
         const avg  = matched.reduce((s, [, v]) => s + v, 0) / matched.length;
-        const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null);
-        const rising = risingVals.length ? risingVals.some(Boolean) : null;
+        const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null && v !== 'warmup');
+        const allWarmup  = matched.every(([l]) => trends[l] === 'warmup' || trends[l] === null) && risingVals.length === 0;
+        const rising     = allWarmup ? 'warmup' : (risingVals.length ? risingVals.some(Boolean) : null);
         updateGauge(zone.id, avg, rising);
         const probeEl = document.getElementById('gprobes-' + zone.id);
         if (probeEl) probeEl.textContent = matched.map(([l]) => l).join(' + ');
@@ -906,7 +912,8 @@
       // Update chart line colour: blue when cooling, red when system off
       (function(){
         const _anyCooling = Object.values(trends).some(t => t === false);
-        const _col = _anyCooling ? '#1e72d8' : '#ef4444';
+        const _allWarmup  = Object.values(trends).every(t => t === 'warmup' || t === null);
+        const _col = _anyCooling ? '#1e72d8' : _allWarmup ? '#6272a4' : '#ef4444';
         const _charts = Object.values(Chart.instances);
         const _c = _charts[0]; if (!_c) return;
         if (_c.data.datasets[0].borderColor !== _col) {
