@@ -2331,15 +2331,14 @@ async function renderMaintenanceBox(truckLabel, deviceID){
   if(!box){ onReady(()=>renderMaintenanceBox(truckLabel,deviceID)); return; }
   const state = await checkAndUpdateMaintCounters(truckLabel, deviceID);
   box.innerHTML = `
-    <h2 class="text-lg font-semibold mb-2">Maintenance Status</h2>
-    <div class="space-y-4">
-      <div class="flex justify-between items-center">
-        <span><strong>Filter Replacement:</strong> ${state.filterDays} day${state.filterDays===1?"":"s"} to go</span>
-        <button id="resetFilterBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">Reset</button>
+    <div style="display:flex;flex-direction:column;gap:0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+        <span style="color:var(--text);font-size:12px;"><strong style="font-weight:600;">Filter Replacement:</strong> ${state.filterDays} day${state.filterDays===1?"":"s"} to go</span>
+        <button id="resetFilterBtn" style="background:var(--inalgesco);border:none;color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;margin-left:8px;">Reset</button>
       </div>
-      <div class="flex justify-between items-center">
-        <span><strong>Annual Service:</strong> ${state.serviceDays} day${state.serviceDays===1?"":"s"} to go</span>
-        <button id="resetServiceBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded">Reset</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">
+        <span style="color:var(--text);font-size:12px;"><strong style="font-weight:600;">Annual Service:</strong> ${state.serviceDays} day${state.serviceDays===1?"":"s"} to go</span>
+        <button id="resetServiceBtn" style="background:var(--inalgesco);border:none;color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;margin-left:8px;">Reset</button>
       </div>
     </div>`;
   document.getElementById("resetFilterBtn").onclick = () =>
