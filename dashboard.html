@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V14.6</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V14.7</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -822,6 +822,7 @@
       if(currentDevice !== __lastDevice){
         __lastDevice = currentDevice;
         __probeStates = {};   // clear cooling state for new truck
+        window.__trendBuf = {};   // clear trend buffer for new truck
       }
 
       const rows = document.querySelectorAll('#latest tr');
@@ -836,12 +837,26 @@
         if (isFinite(val)) probes[label] = val;
       });
 
-      // Trend arrows — last 2 readings, ≥0.5°F threshold to filter noise
+      // Trend arrows — compare current reading vs reading from ~3 min ago
+      // Stores timestamped buffer per probe; needs ≥1°F shift over 3 min to change state
+      if (!window.__trendBuf) window.__trendBuf = {};
+      const _trendNow = Date.now();
       const trends = {};
       Object.entries(probes).forEach(([label, val]) => {
-        if (_prevReadings[label] !== undefined) {
-          const delta = val - _prevReadings[label];
-          trends[label] = delta > 0.5 ? true : delta < -0.5 ? false : null;
+        if (!window.__trendBuf[label]) window.__trendBuf[label] = [];
+        window.__trendBuf[label].push({ t: _trendNow, v: val });
+        // Keep last 10 minutes of samples
+        window.__trendBuf[label] = window.__trendBuf[label].filter(s => s.t >= _trendNow - 10*60*1000);
+        // Find the reading closest to 3 minutes ago
+        const _target = _trendNow - 3*60*1000;
+        const _older = window.__trendBuf[label].reduce((best, s) =>
+          Math.abs(s.t - _target) < Math.abs(best.t - _target) ? s : best,
+          window.__trendBuf[label][0]
+        );
+        // Only compute trend if the reference reading is at least 90s old (avoid startup noise)
+        if (_older && (_trendNow - _older.t) >= 90*1000) {
+          const delta = val - _older.v;
+          trends[label] = delta > 1.0 ? true : delta < -1.0 ? false : null;
         } else {
           trends[label] = null;
         }
