@@ -1037,14 +1037,24 @@ function initCharts(SENSORS){
         labels:[],
         datasets:[{
   data:[],
-  borderColor:'#ef4444', // starts red; turns blue when cooling detected
-  borderWidth:3,
+  borderColor:'#6272a4',
+  borderWidth:2,
   fill:false,
   backgroundColor:'transparent',
-  // parsing:false,  // ← remove this line
-  pointRadius:2,            // TEMP: make dots visible while testing
-  pointHoverRadius:4,
-  spanGaps:true
+  pointRadius:3,
+  pointHoverRadius:5,
+  pointBackgroundColor:'#ffffff',
+  pointBorderColor:'rgba(255,255,255,0.7)',
+  pointBorderWidth:1,
+  spanGaps:true,
+  segment:{
+    borderColor:function(ctx){
+      var idx=ctx.p1DataIndex;
+      var hist=window.__coolHistory;
+      if(!hist||idx===undefined||idx>=hist.length||hist[idx]===null) return '#6272a4';
+      return hist[idx]?'#1e72d8':'#ef4444';
+    }
+  }
 }]
       },
       options:{
