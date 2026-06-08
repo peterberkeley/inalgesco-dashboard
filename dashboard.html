@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V14.9</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V15.0</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -843,10 +843,12 @@
       });
 
       // Trend arrows — dual-gate rule:
-      // COOLING: Gate 1 = 3 consecutive drops ≥0.3°F each (~36s); Gate 2 = 5-min net ≤ +0.5°F
+      // COOLING: Gate 1 (fast)      = 5 consecutive drops ≥0.2°F each (~30s, 1°F total)
+      //          Gate 2 (sustained) = 5-min net drop ≥ 1.5°F
+      //          Either gate fires cooling, but guard: 5-min net NOT ≥ +1.5°F (not rising)
       // RISING:  5-min net ≥ +2°F
       if (!window.__trendBuf)  window.__trendBuf  = {};
-      if (!window.__trendRun)  window.__trendRun  = {};  // consecutive-drop counter
+      if (!window.__trendRun)  window.__trendRun  = {};
       const _trendNow = Date.now();
       const trends = {};
       Object.entries(probes).forEach(([label, val]) => {
@@ -855,32 +857,28 @@
         window.__trendBuf[label].push({ t: _trendNow, v: val });
         window.__trendBuf[label] = window.__trendBuf[label].filter(s => s.t >= _trendNow - 10*60*1000);
 
-        // ── consecutive-drop counter ──
+        // ── consecutive-drop counter (resets on any rise ≥0.2°F) ──
         if (!window.__trendRun[label]) window.__trendRun[label] = 0;
         const _prev = _prevReadings[label];
         if (_prev !== undefined) {
           const _step = val - _prev;
-          if (_step <= -0.3) {
-            window.__trendRun[label] = Math.min(window.__trendRun[label] + 1, 10);
-          } else if (_step >= 0.3) {
-            window.__trendRun[label] = 0;   // any rise resets the run
-          }
-          // steps between -0.3 and +0.3 leave the counter unchanged (noise hold)
+          if      (_step <= -0.2) window.__trendRun[label] = Math.min(window.__trendRun[label] + 1, 20);
+          else if (_step >=  0.2) window.__trendRun[label] = 0;
         }
 
-        // ── 5-min direction ──
-        const _fiveTarget = _trendNow - 5*60*1000;
-        const _fiveRef = window.__trendBuf[label].find(s => s.t >= _fiveTarget);
+        // ── 5-min delta ──
+        const _fiveRef = window.__trendBuf[label].find(s => s.t >= _trendNow - 5*60*1000);
         const _fiveDelta = _fiveRef ? val - _fiveRef.v : null;
 
-        // ── gate decisions ──
-        const _gate1cooling = window.__trendRun[label] >= 3;
-        const _gate2cooling = _fiveDelta === null || _fiveDelta <= 0.5;  // not strongly rising
-        const _rising       = _fiveDelta !== null && _fiveDelta >= 2.0;
+        // ── decisions ──
+        const _notRising   = _fiveDelta === null || _fiveDelta <= 1.5;
+        const _gate1       = window.__trendRun[label] >= 5;           // fast: 5 consec drops
+        const _gate2       = _fiveDelta !== null && _fiveDelta <= -1.5; // sustained: -1.5°F/5min
+        const _rising      = _fiveDelta !== null && _fiveDelta >= 2.0;
 
-        if      (_gate1cooling && _gate2cooling) trends[label] = false;  // ▼ Cooling
-        else if (_rising)                        trends[label] = true;   // ▲ Rising
-        else                                     trends[label] = null;   // stable
+        if      ((_gate1 || _gate2) && _notRising) trends[label] = false; // ▼ Cooling
+        else if (_rising)                           trends[label] = true;  // ▲ Rising
+        else                                        trends[label] = null;  // stable
 
         _prevReadings[label] = val;
       });
