@@ -2176,6 +2176,34 @@ if (shouldMove) {
   // cache
   window.__lastMapTarget = target;
   window.__lastMapZoom = map.getZoom();
+
+  // OSRM road-snap: if driving, asynchronously nudge marker to nearest road.
+  // Runs after initial raw placement so the UI feels instant.
+  // Skipped when parked (speed<5), using fallback GPS, or if snap is >80m (bad fix).
+  if (haveFresh && (Number(speed) || 0) >= 5) {
+    (async () => {
+      var _ctrl = new AbortController();
+      var _tmr  = setTimeout(function(){ _ctrl.abort(); }, 3000);
+      try {
+        var _r = await fetch(
+          'https://router.project-osrm.org/nearest/v1/driving/' + target[1] + ',' + target[0] + '?number=1',
+          { signal: _ctrl.signal }
+        );
+        if (_r.ok) {
+          var _j  = await _r.json();
+          var _wp = _j && _j.waypoints && _j.waypoints[0];
+          if (_wp && Array.isArray(_wp.location) && _wp.distance < 80) {
+            var _snapped = [_wp.location[1], _wp.location[0]];
+            if (marker && typeof marker.setLatLng === 'function') {
+              marker.setLatLng(_snapped);
+              window.__lastMapTarget = _snapped;
+            }
+          }
+        }
+      } catch(_e) { /* timeout or network error — keep raw position */ }
+      finally { clearTimeout(_tmr); }
+    })();
+  }
 } else {
   // No meaningful move → just keep marker where it was (no setView)
   // (Minor tooltip refresh if state changed)
