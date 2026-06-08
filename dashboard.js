@@ -440,15 +440,19 @@ function buildDeviceDropdownFromConfig(sensorMap){
     opt.value = dev;
     const displayLabel = getDisplayName(dev);
     // Track online-since in localStorage for uptime display
+    // Seed from last_seen so uptime reflects actual activity, not just page-load time
     const _lsKey = "onlineSince_"+dev;
     if (isOnline) {
-      if (!localStorage.getItem(_lsKey)) localStorage.setItem(_lsKey, String(now));
+      if (!localStorage.getItem(_lsKey)) {
+        // Use last_seen as the floor — truck was definitely online then
+        localStorage.setItem(_lsKey, String(_ls || now));
+      }
     } else {
       localStorage.removeItem(_lsKey);
     }
     const _tl = isOnline
       ? (function(){
-          const _since = parseInt(localStorage.getItem(_lsKey)||String(now),10);
+          const _since = parseInt(localStorage.getItem(_lsKey)||String(_ls||now),10);
           const _up = Math.max(0, now - _since);
           const _h = Math.floor(_up/3600), _m = Math.floor((_up%3600)/60);
           return _h>0 ? "(\u2191"+_h+"h "+_m+"m)" : "(\u2191"+_m+"m)";
@@ -472,6 +476,24 @@ function buildDeviceDropdownFromConfig(sensorMap){
 }
 // ensure global visibility in Safari/strict modes
 window.buildDeviceDropdownFromConfig = buildDeviceDropdownFromConfig;
+
+// Refresh online uptime labels every 60 seconds
+setInterval(function(){
+  const sel = document.getElementById('deviceSelect');
+  if (!sel) return;
+  const nowSec = Math.floor(Date.now()/1000);
+  Array.from(sel.options).forEach(function(opt){
+    const dev = opt.value;
+    const lsKey = 'onlineSince_'+dev;
+    const since = localStorage.getItem(lsKey);
+    if (!since) return; // offline — leave as-is
+    const up = Math.max(0, nowSec - parseInt(since, 10));
+    const h = Math.floor(up/3600), m = Math.floor((up%3600)/60);
+    const uptimeLbl = h>0 ? '(\u2191'+h+'h '+m+'m)' : '(\u2191'+m+'m)';
+    // Replace the trailing (...) in the option text
+    opt.text = opt.text.replace(/\(\u2191[^)]*\)|\(\d+m\)$/, uptimeLbl);
+  });
+}, 60000);
 
 /* =================== Variables & values (authoritative v2 inventory + v1 dots) =================== */
 async function fetchDeviceVariablesV2(deviceID){
@@ -3409,7 +3431,8 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
           var _n=Math.floor(Date.now()/1000);
           var _sa=_n-((window.__deviceMap&&window.__deviceMap[dev]&&window.__deviceMap[dev].last_seen)||(obj&&obj.last_seen)||0);
           var _lsKey="onlineSince_"+dev;
-          if(isOnline){if(!localStorage.getItem(_lsKey))localStorage.setItem(_lsKey,String(_n));}
+          var _lsSeed=(window.__deviceMap&&window.__deviceMap[dev]&&window.__deviceMap[dev].last_seen)||(obj&&obj.last_seen)||_n;
+          if(isOnline){if(!localStorage.getItem(_lsKey))localStorage.setItem(_lsKey,String(_lsSeed));}
           else{localStorage.removeItem(_lsKey);}
           var _tl=isOnline?(function(){
             var _since=parseInt(localStorage.getItem(_lsKey)||String(_n),10);
