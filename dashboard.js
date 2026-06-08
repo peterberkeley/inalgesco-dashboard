@@ -1377,7 +1377,7 @@ async function updateCharts(deviceID, SENSORS){
           }
         }
       }
-      const _autoOff = /oven/i.test(s.label) ? 0 : (computedOffsets.get(s.address) || 0);  // skip auto-offset for oven probe
+      _autoOff = /oven/i.test(s.label) ? 0 : (computedOffsets.get(s.address) || 0);  // skip auto-offset for oven probe
       const adjRdings = _autoOff !== 0
         ? applyConditionalOffset(rawRdings, _autoOff) : rawRdings;
       const data = adjRdings.map(r => {
