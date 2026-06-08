@@ -622,7 +622,9 @@
       statusEl.textContent = "Fetching probe data...";
 
       const truckCfg   = fullMapData[selectedDeviceLabel] || {};
-      const probeAddrs = Object.keys(truckCfg).filter(k => /^[0-9a-fA-F]{16}$/.test(k));
+      const probeAddrs = Object.keys(truckCfg).filter(k =>
+        /^[0-9a-fA-F]{16}$/.test(k) && !/oven/i.test((truckCfg[k]?.label || ''))  // skip oven probe
+      );
 
       if (probeAddrs.length === 0) {
         statusEl.textContent = "No probe addresses mapped — save sensor labels first.";
