@@ -1971,7 +1971,16 @@ function initMap(){
   // Create the Leaflet map once
   if (!(map && typeof map.addLayer === 'function' && typeof map.setView === 'function')) {
     map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+    // Satellite base (ESRI World Imagery — free, no API key)
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution: 'Tiles © Esri', maxZoom: 19 }
+    ).addTo(map);
+    // Label overlay so road names stay readable
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+      { attribution: '', maxZoom: 19, opacity: 0.8 }
+    ).addTo(map);
   }
   // Ensure a marker exists
   if (!(marker && typeof marker.setLatLng === 'function')) {
