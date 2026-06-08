@@ -379,7 +379,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V11.1</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V11.2</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="dlBtn" class="hbtn gold">↓ CSV</button>
     </div>
   </header>
@@ -1020,12 +1020,26 @@
         localStorage.setItem("sc_last_activity", Date.now().toString());
       }
 
+      // Skip lock if this is the post-login cache-clear reload
+      if (sessionStorage.getItem('sc_fresh_login') === '1') {
+        sessionStorage.removeItem('sc_fresh_login');
+        localStorage.setItem('sc_last_activity', Date.now().toString());
+        return;
+      }
       showLock();
 
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         if (ALLOWED_PASSWORDS.has(pass.value.trim())) {
-          hideLock();
+          // Clear browser + SW caches then hard-reload for fresh content
+          sessionStorage.setItem('sc_fresh_login', '1');
+          localStorage.setItem('sc_last_activity', Date.now().toString());
+          if ('caches' in window) {
+            caches.keys().then(ns => Promise.all(ns.map(n => caches.delete(n))))
+                         .finally(() => location.reload(true));
+          } else {
+            location.reload(true);
+          }
         } else {
           err.textContent = "Incorrect password";
           pass.select();
