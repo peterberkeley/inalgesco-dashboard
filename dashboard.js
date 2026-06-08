@@ -3302,7 +3302,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
         const isOnline = (nowSecForBuild - (obj.last_seen || 0)) < ONLINE_WINDOW_SEC;
         const opt = document.createElement("option");
         opt.value = dev;
-        opt.text  = (function(){var _n=Math.floor(Date.now()/1000),_dm3305=window.__deviceMap&&(window.__deviceMap[label]||window.__deviceMap[dev&&dev.label]||{}),_sa=_n-((_dm3305.last_seen)||(dev&&dev.last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(dev)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+        opt.text  = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[label]&&window.__deviceMap[label].last_seen)||(dev&&dev.last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(dev)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
         sel.appendChild(opt);
       }
 
@@ -3344,7 +3344,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
 
     // No heartbeat vars -> keep Offline and stop re-check for this device
     if (hb.length === 0) {
-      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_dm3347=(window.__deviceMap&&window.__deviceMap[label])||{},_sa=_n-((_dm3347.last_seen)||(sensorMap[label]&&sensorMap[label].last_seen)||0);return ("\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(false?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[label]&&window.__deviceMap[label].last_seen)||(sensorMap[label]&&sensorMap[label].last_seen)||0);return ("\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(false?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
       return;
     }
 
@@ -3459,7 +3459,7 @@ console.log('[lastSeen]', {
     const dd = document.getElementById("deviceSelect");
     if (dd && dd.selectedIndex >= 0) {
       const opt = dd.options[dd.selectedIndex];
-      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_dm3462=(window.__deviceMap&&window.__deviceMap[deviceLabel])||{},_sa=_n-((_dm3462.last_seen)||(sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(deviceLabel)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((window.__deviceMap&&window.__deviceMap[deviceLabel]&&window.__deviceMap[deviceLabel].last_seen)||(sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(deviceLabel)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
     }
    // Update KPI “last updated” using lastSeenSec (localized to Phoenix)
 {
