@@ -3361,7 +3361,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
     }
 
     const ageOk = bestTs && (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
-    opt.text = (function(){var _n=Math.floor(Date.now()/1000),_hb=bestTs?Math.floor(bestTs/1000):0,_ls=(sensorMap[label]&&sensorMap[label].last_seen)||0,_sa=_hb>0?(_n-_hb):(_n-_ls);return (ageOk?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(ageOk?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
+    opt.text = (function(){var _n=Math.floor(Date.now()/1000),_hb=bestTs?Math.floor(bestTs/1000):0,_ls=(window.__deviceMap&&window.__deviceMap[label]&&window.__deviceMap[label].last_seen)||(sensorMap[label]&&sensorMap[label].last_seen)||0,_sa=_hb>0?(_n-_hb):(_n-_ls);return (ageOk?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(ageOk?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
   } catch (e) {
     console.warn("dropdown re-check failed for", label, e);
   }
