@@ -2695,6 +2695,46 @@ async function downloadCsvForCurrentSelection(){
   }
 }
 // part 4
+/* =================== OSRM breadcrumb road-snap =================== */
+// Snaps each GPS point in a segment to the nearest road using OSRM /match.
+// Points within maxDistM of a mapped road are snapped; all others keep their
+// raw GPS position. Processes in chunks of 100 (OSRM hard limit).
+async function osrmSnapPoints(points, maxDistM) {
+  if (!points || points.length < 2) return points;
+  var CHUNK = 100;
+  // shallow-copy so we never mutate the originals
+  var out = points.map(function(p){ return Object.assign({}, p); });
+  for (var start = 0; start < points.length; start += CHUNK) {
+    var chunk  = points.slice(start, Math.min(start + CHUNK, points.length));
+    var coords = chunk.map(function(p){ return p.lon + ',' + p.lat; }).join(';');
+    var stamps = chunk.map(function(p){ return Math.round(p.ts / 1000); }).join(';');
+    var radii  = chunk.map(function(){ return '20'; }).join(';');
+    var ctrl   = new AbortController();
+    var timer  = setTimeout(function(){ ctrl.abort(); }, 4000);
+    try {
+      var _r = await fetch(
+        'https://router.project-osrm.org/match/v1/driving/' + coords +
+        '?timestamps=' + stamps + '&radiuses=' + radii + '&overview=false&annotations=false',
+        { signal: ctrl.signal }
+      );
+      if (_r.ok) {
+        var _j  = await _r.json();
+        var _tp = _j && _j.tracepoints;
+        if (Array.isArray(_tp)) {
+          _tp.forEach(function(tp, i) {
+            if (tp && tp.distance <= maxDistM && Array.isArray(tp.location)) {
+              out[start + i].lon = tp.location[0];
+              out[start + i].lat = tp.location[1];
+            }
+          });
+        }
+      }
+    } catch(_e) { /* timeout / network error — keep raw positions */ }
+    finally { clearTimeout(timer); }
+  }
+  return out;
+}
+
 /* =================== Breadcrumb route drawing (manual refresh, arrows + dwell markers) =================== */
 async function updateBreadcrumbs(deviceID, rangeMinutes){
   // ── thresholds & styles ──
@@ -2960,7 +3000,9 @@ if (myTok !== __crumbToken) return;
 if ((Number(window.__selEpoch)||0)!==__epochAtStart) return;
 
 // Optional densify + smoothing per segment
-const segmentsToDraw = (window.__smoothPathEnabled ? usable.map(s => smoothSegment(densifySegment(s))) : usable);
+// Road-snap each segment: points within 10 m of a mapped road are snapped, others stay raw
+const _baseSegs = window.__smoothPathEnabled ? usable.map(s => smoothSegment(densifySegment(s))) : usable;
+const segmentsToDraw = await Promise.all(_baseSegs.map(function(s){ return osrmSnapPoints(s, 10); }));
 
 // map original segment index -> drawn index (for dwell colouring)
 const segIdxMap = new Map();
