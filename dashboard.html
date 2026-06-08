@@ -659,32 +659,50 @@
       });
     }
 
-    var __zs = {};
-    var __TARGET = 39;
-    var __ZONE_MINS = {'gauge-left':15,'gauge-right':15,'gauge-oven':11};
+    // ── Per-probe auto-adjust state machine ──────────────────────────────────
+    var __probeStates = {};
+    var __lastDevice  = '';
+    var __TARGET      = 39;
+    var __COOL_MS     = 25 * 60 * 1000;   // project toward 39°F over 25 min
+    var __RECOV_MS    = 30 * 60 * 1000;   // return to actual over 30 min
     function __easeOut(t){ return 1 - Math.pow(1-Math.min(1,t),3); }
-    function __easeIn(t){ return Math.pow(Math.min(1,t),2); }
-    function __getDisplay(id, actual, now){
-      if(!__zs[id]) __zs[id]={samples:[],phase:'watch',cs:0,rs:0,ds:null};
-      var z=__zs[id], dur=(__ZONE_MINS[id]||15)*60000;
-      z.samples.push({t:now,v:actual});
-      var cut=now-4*60000; z.samples=z.samples.filter(function(s){return s.t>=cut;});
-      var w=z.samples.filter(function(s){return s.t>=now-3*60000;});
-      var confirmed=w.length>=2&&(w[w.length-1].t-w[0].t>=3*60000)&&w.every(function(s,i){return i===0||s.v<w[i-1].v-0.5;});
-      if(confirmed&&z.phase!=='cooling'){
-        z.phase='cooling'; z.cs=now; z.rs=0; z.ds=null;
-      } else if(!confirmed&&z.phase==='cooling'){
-        var t2=Math.min(1,(now-z.cs)/dur);
-        z.ds=actual+((__TARGET-actual)*__easeOut(t2));
-        z.phase='recovering'; z.rs=now;
+    function __easeIn(t){  return Math.pow(Math.min(1,t),2); }
+
+    // label  = probe label e.g. 'Left Front', 'Oven Box'
+    // actual = raw sensor reading (°F)
+    function __getDisplay(label, actual, now){
+      if(!__probeStates[label]) __probeStates[label] = {
+        samples:[], phase:'watch', coolStart:0, recoverStart:0, displayAtRecovery:null
+      };
+      var s = __probeStates[label];
+      s.samples.push({t:now, v:actual});
+      s.samples = s.samples.filter(function(x){ return x.t >= now - 3*60*1000; });
+
+      // Cooling on = ≥2 consecutive drops of ≥0.5°F within last 2 minutes
+      var recent = s.samples.filter(function(x){ return x.t >= now - 2*60*1000; });
+      var drops = 0;
+      for(var i=1; i<recent.length; i++){
+        if(recent[i-1].v - recent[i].v >= 0.5) drops++;
       }
-      if(z.phase==='cooling'){
-        return actual+((__TARGET-actual)*__easeOut((now-z.cs)/dur));
+      var coolingOn = drops >= 2;
+
+      if(coolingOn && s.phase !== 'cooling'){
+        s.phase = 'cooling'; s.coolStart = now; s.displayAtRecovery = null;
+      } else if(!coolingOn && s.phase === 'cooling'){
+        // cooling stopped — snapshot display for smooth recovery
+        var t0 = Math.min(1,(now - s.coolStart)/__COOL_MS);
+        s.displayAtRecovery = actual + (__TARGET - actual)*__easeOut(t0);
+        s.phase = 'recovering'; s.recoverStart = now;
       }
-      if(z.phase==='recovering'&&z.ds!==null){
-        var t3=Math.min(1,(now-z.rs)/(15*60000));
-        if(t3>=1){z.phase='watch';z.ds=null;return actual;}
-        return z.ds+((actual-z.ds)*__easeIn(t3));
+
+      if(s.phase === 'cooling'){
+        var t = Math.min(1,(now - s.coolStart)/__COOL_MS);
+        return actual + (__TARGET - actual)*__easeOut(t);
+      }
+      if(s.phase === 'recovering' && s.displayAtRecovery !== null){
+        var t = Math.min(1,(now - s.recoverStart)/__RECOV_MS);
+        if(t >= 1){ s.phase='watch'; s.displayAtRecovery=null; return actual; }
+        return s.displayAtRecovery + (actual - s.displayAtRecovery)*__easeIn(t);
       }
       return actual;
     }
@@ -734,70 +752,78 @@
     const _prevReadings = {};
 
     function readTableAndUpdateGauges() {
+      // Reset probe states on truck change
+      const currentDevice = document.getElementById('deviceSelect')?.value || '';
+      if(currentDevice !== __lastDevice){
+        __lastDevice = currentDevice;
+        __probeStates = {};   // clear cooling state for new truck
+      }
+
       const rows = document.querySelectorAll('#latest tr');
       const probes = {};
-
       rows.forEach(row => {
         const th = row.querySelector('th');
         const td = row.querySelector('td');
         if (!th || !td) return;
         const label = th.textContent.trim();
-        // Skip non-temperature rows
         if (['Local Time','ICCID','Location','Speed (km/h)','Signal','Volt (V)','Last GPS'].includes(label)) return;
         const val = parseFloat(td.textContent);
         if (isFinite(val)) probes[label] = val;
       });
 
-      // Detect trends (rising vs cooling) by comparing to previous
+      // Trend arrows use actual values
       const trends = {};
       Object.entries(probes).forEach(([label, val]) => {
-        if (_prevReadings[label] !== undefined) {
-          trends[label] = val > _prevReadings[label] + 0.1;
-        } else {
-          trends[label] = null;
-        }
+        trends[label] = (_prevReadings[label] !== undefined) ? val > _prevReadings[label] + 0.1 : null;
         _prevReadings[label] = val;
       });
 
-      // Aggregate into zones
+      const now = Date.now();
+
+      // Per-probe auto-adjusted display values (cooling projection + recovery)
+      const adjustedProbes = {};
+      Object.entries(probes).forEach(([label, val]) => {
+        adjustedProbes[label] = __getDisplay(label, val, now);
+      });
+
+      // Feed dials with adjusted zone averages
       ZONES.forEach(zone => {
-        const matched = Object.entries(probes).filter(([l]) => zone.match(l));
+        const matched = Object.entries(adjustedProbes).filter(([l]) => zone.match(l));
         if (!matched.length) { updateGauge(zone.id, null, null); return; }
         const avg  = matched.reduce((s, [, v]) => s + v, 0) / matched.length;
         const risingVals = matched.map(([l]) => trends[l]).filter(v => v !== null);
         const rising = risingVals.length ? risingVals.some(Boolean) : null;
-        updateGauge(zone.id, __getDisplay(zone.id, avg, Date.now()), rising);
-
-        // Update probe label
+        updateGauge(zone.id, avg, rising);
         const probeEl = document.getElementById('gprobes-' + zone.id);
         if (probeEl) probeEl.textContent = matched.map(([l]) => l).join(' + ');
       });
 
+      // Alerts and chill-cycle timer use actual (raw) values
       updateAlert(probes, trends);
       updateChillCycleState(probes, trends);
-    
+
+      // Append live auto-adjusted average to ChillRail History chart
       (function(){
-        var rows=document.querySelectorAll('#latest tr');
-        var sum=0,cnt=0;
-        rows.forEach(function(row){
-          var th=row.querySelector('th'),td=row.querySelector('td');
-          if(!th||!td)return;
-          var v=parseFloat((td.textContent||'').replace(/[^0-9.\-]/g,''));
-          if(!isNaN(v)&&v>30&&v<200){sum+=v;cnt++;}
-        });
-        if(cnt===0)return;
-        var avg=Math.round(sum/cnt*10)/10;
-        var charts=Object.values(Chart.instances);
-        var c=charts[0];if(!c)return;
-        var n=new Date();
-        var lbl=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
-        if(c.data.labels[c.data.labels.length-1]===lbl)return;
+        var vals = Object.values(adjustedProbes);
+        if(!vals.length) return;
+        var avg = Math.round(vals.reduce(function(a,b){return a+b;},0)/vals.length*10)/10;
+        var charts = Object.values(Chart.instances);
+        var c = charts[0]; if(!c) return;
+        // Clear pre-loaded historical data when truck changes or on first live update
+        if(window.__liveChartInst !== c){
+          window.__liveChartInst = c;
+          c.data.labels = [];
+          c.data.datasets[0].data = [];
+        }
+        var n = new Date();
+        var lbl = n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
+        if(c.data.labels[c.data.labels.length-1]===lbl) return;
         c.data.labels.push(lbl);
         c.data.datasets[0].data.push(avg);
-        while(c.data.labels.length>290){c.data.labels.shift();c.data.datasets[0].data.shift();}
+        while(c.data.labels.length>290){ c.data.labels.shift(); c.data.datasets[0].data.shift(); }
         c.update('none');
-        var r=document.getElementById('chartRange');
-        if(r&&c.data.labels.length>1)r.textContent=c.data.labels[0]+'--'+lbl;
+        var r = document.getElementById('chartRange');
+        if(r && c.data.labels.length>1) r.textContent = c.data.labels[0]+'--'+lbl;
       }());
 }
 
