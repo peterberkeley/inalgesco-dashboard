@@ -1971,7 +1971,7 @@ function initMap(){
   // Create the Leaflet map once
   if (!(map && typeof map.addLayer === 'function' && typeof map.setView === 'function')) {
     map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
   }
   // Ensure a marker exists
   if (!(marker && typeof marker.setLatLng === 'function')) {
@@ -3851,7 +3851,7 @@ async function openMapAll(){
   // Lazily create the Leaflet map instance for the overlay
   if (!(mapAll && typeof mapAll.addLayer === 'function')) {
   mapAll = L.map('mapAll').setView([33.4377, -112.0276], 10);  // Center on Phoenix
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(mapAll);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapAll);
     mapAllLayerGroup = L.layerGroup().addTo(mapAll);
   } else {
     mapAllLayerGroup.clearLayers();
