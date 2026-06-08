@@ -2233,51 +2233,67 @@ async function saveMaintState(truckLabel, maintObj){
   });
 }
 
+async function countOperationDays(deviceID, fromDate, toDate){
+  // Count distinct calendar days with actual sensor data between fromDate and toDate (inclusive).
+  // Makes one lightweight Ubidots call per day (page_size=1) so it's accurate without
+  // pulling thousands of data points.
+  try {
+    await ensureVarCache(deviceID);
+    const probe = SENSORS.find(s => s.address);
+    if (!probe) return 0;
+    let varId = getVarIdCI(deviceID, probe.address);
+    if (!varId) varId = await resolveVarIdStrict(deviceID, probe.address);
+    if (!varId) return 0;
+    const from = new Date(fromDate);
+    const to   = new Date(toDate);
+    let count = 0;
+    const d = new Date(from);
+    while (d <= to) {
+      const startMs = d.getTime();
+      const endMs   = startMs + 86400000 - 1;
+      try {
+        const r = await fetch(
+          `${UBIDOTS_V1}/variables/${encodeURIComponent(varId)}/values/?page_size=1&start=${startMs}&end=${endMs}&token=${encodeURIComponent(UBIDOTS_ACCOUNT_TOKEN)}`
+        );
+        if (r.ok) {
+          const j = await r.json();
+          if ((j?.results || []).length > 0) count++;
+        }
+      } catch(e){ /* skip day on error */ }
+      d.setDate(d.getDate() + 1);
+    }
+    return count;
+  } catch(e){
+    console.warn('countOperationDays error:', e);
+    return 0;
+  }
+}
+
 async function checkAndUpdateMaintCounters(truckLabel, deviceID){
   const state = getMaintState(truckLabel);
   const today = (new Date()).toISOString().slice(0,10);
   if (state.lastDecrementDate === today) return state;
 
-  let hasActivity = false;
-
-  // FAST PATH: one bulk call for all last values
-  try{
-    const bulk = await fetchDeviceLastValuesV2(deviceID);
-    if (bulk) {
-      for (const s of SENSORS) {
-        if (!s.address) continue;
-        const o = bulk[s.address];
-        const ts = o?.timestamp || null;
-        if (ts) {
-          if (new Date(ts).toISOString().slice(0,10) === today) { hasActivity = true; break; }
-        }
-      }
-    } else {
-      // Fallback to per-variable (rare)
-      for (const s of SENSORS){
-        if(!s.address) continue;
-        const vals = await fetchUbidotsVar(deviceID, s.address, 1);
-        const ts = vals?.[0]?.timestamp || null;
-        if (ts && new Date(ts).toISOString().slice(0,10) === today) { hasActivity = true; break; }
-      }
-    }
-  } catch(e){
-    console.warn('maint bulk check failed, falling back:', e);
-    // Fallback to per-variable
-    for (const s of SENSORS){
-      if(!s.address) continue;
-      const vals = await fetchUbidotsVar(deviceID, s.address, 1);
-      const ts = vals?.[0]?.timestamp || null;
-      if (ts && new Date(ts).toISOString().slice(0,10) === today) { hasActivity = true; break; }
-    }
-  }
-
-  if (hasActivity) {
-    if (state.filterDays>0)  state.filterDays--;
-    if (state.serviceDays>0) state.serviceDays--;
+  if (!state.lastDecrementDate) {
+    // First time seen — initialise anchor without decrementing
     state.lastDecrementDate = today;
     await saveMaintState(truckLabel, state);
+    return state;
   }
+
+  // Catch-up: count every day with actual truck data since lastDecrementDate
+  const nextDay = new Date(new Date(state.lastDecrementDate).getTime() + 86400000)
+                    .toISOString().slice(0,10);
+  if (nextDay > today) return state; // already up to date
+
+  const opDays = await countOperationDays(deviceID, nextDay, today);
+  if (opDays > 0) {
+    state.filterDays  = Math.max(0, state.filterDays  - opDays);
+    state.serviceDays = Math.max(0, state.serviceDays - opDays);
+  }
+  // Always advance the anchor so we never re-query the same window
+  state.lastDecrementDate = today;
+  await saveMaintState(truckLabel, state);
   return state;
 }
 
