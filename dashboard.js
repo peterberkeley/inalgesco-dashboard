@@ -1038,7 +1038,7 @@ function initCharts(SENSORS){
         datasets:[{
   data:[],
   borderColor:'#6272a4',
-  borderWidth:2,
+  borderWidth:4,
   fill:false,
   backgroundColor:'transparent',
   pointRadius:3,
