@@ -380,14 +380,21 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V12.8</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
-      <button id="dlBtn" class="hbtn gold">↓ CSV</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V12.9</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <button id="headerMapBtn" class="hbtn" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700;">🗺 Map</button>
     </div>
   </header>
 
   <!-- ═══ HEADER SCRIPTS (kept exactly) ═══ -->
   <script>
     document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html'; };
+    document.addEventListener('DOMContentLoaded', function() {
+      var hMapBtn = document.getElementById('headerMapBtn');
+      if (hMapBtn) hMapBtn.onclick = function() {
+        var mapBtn = document.getElementById('mapBtn');
+        if (mapBtn) mapBtn.click();
+      };
+    });
     const flightsBtn = document.getElementById('flightsBtn');
     if (flightsBtn) { flightsBtn.onclick = () => { window.location.href = 'flights_aa_phx.html'; }; }
 
@@ -505,7 +512,8 @@
               <input type="date" id="end" class="sct-date" />
             </div>
           </div>
-          <div style="font-size:10px;color:var(--dim);margin-bottom:6px;">All probe readings + GPS + signal</div>
+          <button id="dlBtn" class="hbtn gold" style="width:100%;margin-bottom:6px;">↓ Download CSV</button>
+          <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">All probe readings + GPS + signal</div>
           <div id="expStatus"></div>
         </div>
       </div>
