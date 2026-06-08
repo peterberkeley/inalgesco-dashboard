@@ -1377,7 +1377,7 @@ async function updateCharts(deviceID, SENSORS){
           }
         }
       }
-      computedOffsets.set(s.address, _autoOff);
+      const _autoOff = /oven/i.test(s.label) ? 0 : (computedOffsets.get(s.address) || 0);  // skip auto-offset for oven probe
       const adjRdings = _autoOff !== 0
         ? applyConditionalOffset(rawRdings, _autoOff) : rawRdings;
       const data = adjRdings.map(r => {
@@ -1407,6 +1407,7 @@ async function updateCharts(deviceID, SENSORS){
       const series = [];
       for (const s of SENSORS){
         if (!s.address) continue;
+        if (/oven/i.test(s.label)) continue;  // exclude oven probe from fleet average
         const arr = seriesByAddr.get(s.address) || [];
         if (!arr.length) continue;
         const rawRdings2 = arr.map(r => ({ ts: r.timestamp, v: parseFloat(r.value) }));
@@ -2009,6 +2010,7 @@ function drawLive(data, SENSORS){
   if (ts === undefined) ts = Date.now();
 
   const temps = SENSORS
+    .filter(s => !/oven/i.test(s.label))
     .map(s => (s.address && readings[s.address]!=null) ? (readings[s.address] + (s.calibration||0)) : null)
     .filter(v=>v!=null && isFinite(v));
   const avg = temps.length ? (temps.reduce((a,b)=>a+b,0)/temps.length) : null;
