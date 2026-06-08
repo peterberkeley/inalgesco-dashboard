@@ -3796,17 +3796,9 @@ function installAllTrucksMapUI(){
   mapBtn.id = 'mapBtn';
   mapBtn.textContent = 'Map';
 
-  // Style to match header buttons
-  mapBtn.className = (adminBtn && adminBtn.className) ? adminBtn.className : 'hbtn';
-  // Place in the slot next to the PrimeFlight logo
-  const mapSlot = document.getElementById('mapBtnSlot');
-  if (mapSlot) {
-    mapSlot.appendChild(mapBtn);
-  } else if (adminBtn) {
-    adminBtn.insertAdjacentElement('afterend', mapBtn);
-  } else {
-    document.body.appendChild(mapBtn);
-  }
+  // mapBtn stays hidden — headerMapBtn (green, top-right) delegates to it
+  mapBtn.style.display = 'none';
+  document.body.appendChild(mapBtn);
 
   // 2) Create the full-screen overlay (once)
 if (!document.getElementById('mapAllOverlay')) {
