@@ -3295,7 +3295,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
         const isOnline = (nowSecForBuild - (obj.last_seen || 0)) < ONLINE_WINDOW_SEC;
         const opt = document.createElement("option");
         opt.value = dev;
-        opt.text  = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(dev)} (${isOnline ? "Online" : "Offline"})`;
+        opt.text  = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((dev&&dev.last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(dev)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
         sel.appendChild(opt);
       }
 
@@ -3337,7 +3337,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
 
     // No heartbeat vars -> keep Offline and stop re-check for this device
     if (hb.length === 0) {
-      opt.text = `⚪️ ${getDisplayName(label)} (Offline)`;
+      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((sensorMap[label]&&sensorMap[label].last_seen)||0);return ("\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(false?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
       return;
     }
 
@@ -3354,7 +3354,7 @@ await fetchSensorMapMapping();   // load aliases *after* device list, ensures fr
     }
 
     const ageOk = bestTs && (Math.floor(Date.now() / 1000) - Math.floor(bestTs / 1000)) < ONLINE_WINDOW_SEC;
-    opt.text = `${ageOk ? "🟢" : "⚪️"} ${getDisplayName(label)} (${ageOk ? "Online" : "Offline"})`;
+    opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((sensorMap[label]&&sensorMap[label].last_seen)||0);return (ageOk?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(label)+" "+(ageOk?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
   } catch (e) {
     console.warn("dropdown re-check failed for", label, e);
   }
@@ -3452,7 +3452,7 @@ console.log('[lastSeen]', {
     const dd = document.getElementById("deviceSelect");
     if (dd && dd.selectedIndex >= 0) {
       const opt = dd.options[dd.selectedIndex];
-      opt.text = `${isOnline ? "🟢" : "⚪️"} ${getDisplayName(deviceLabel)} (${isOnline ? "Online" : "Offline"})`;
+      opt.text = (function(){var _n=Math.floor(Date.now()/1000),_sa=_n-((sensorMap[deviceLabel]&&sensorMap[deviceLabel].last_seen)||0);return (isOnline?"\U0001F7E2":"\u26AA\uFE0F")+" "+getDisplayName(deviceLabel)+" "+(isOnline?"("+Math.max(0,Math.round(_sa/60))+"m)":(_sa>86400?"(>24h)":"("+Math.round(_sa/3600)+"h)"));}());
     }
    // Update KPI “last updated” using lastSeenSec (localized to Phoenix)
 {
