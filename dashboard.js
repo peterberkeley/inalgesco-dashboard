@@ -1037,7 +1037,7 @@ function initCharts(SENSORS){
         labels:[],
         datasets:[{
   data:[],
-  borderColor:s.col,
+  borderColor:'#ef4444', // starts red; turns blue when cooling detected
   borderWidth:3,
   fill:false,
   backgroundColor:'transparent',
