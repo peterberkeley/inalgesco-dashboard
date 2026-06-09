@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.3</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.4</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -678,7 +678,7 @@
   <div id="spinner"></div>
 
   <!-- ═══ dashboard.js (untouched) ═══ -->
-  <script src="dashboard.js?v=v163_20260609" defer></script>
+  <script src="dashboard.js?v=v164_20260609" defer></script>
 
   <!-- ═══ GAUGE ENGINE ═══ -->
   <script>
@@ -1089,9 +1089,9 @@
       const hbStatusEl   = document.getElementById('hbStatusEl');
       const hbIntervalEl = document.getElementById('hbIntervalEl');
 
-      // Only show for online trucks
-      const sel = document.getElementById('deviceSelect');
-      const isLive = sel ? !/offline/i.test(sel.selectedOptions[0]?.text || '') : false;
+      // Only show for online trucks — use shared flag set by updateAll() pill block
+      // (option text never contains the word "offline", so regex test was always true)
+      const isLive = window.__isOnline === true;
 
       if (!isLive) {
         if (hbRateEl)     hbRateEl.textContent = '--';
