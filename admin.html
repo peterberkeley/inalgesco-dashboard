@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html><!-- Admin V1.0 -->
 <html lang="en" data-theme="light">
 <head>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -62,10 +62,14 @@
       <input id="adminPass" type="password" placeholder="Enter password" class="mb-2 p-2 rounded border" />
       <button id="unlockBtn" class="btn">Unlock</button>
       <div id="authError" class="error mt-2"></div>
+      <div style="margin-top:24px;font-size:11px;color:#94a3b8">Admin V1.0</div>
     </div>
 
     <div id="adminPage" style="display:none;">
-      <h1 class="text-2xl font-bold mb-2 text-blue-700">SkyCafé Sensor Mapping Admin</h1>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <h1 class="text-2xl font-bold text-blue-700" style="margin:0">SkyCafé Sensor Mapping Admin</h1>
+        <span style="font-size:11px;color:#94a3b8;font-weight:600;padding:3px 8px;border:1px solid #e2e8f0;border-radius:4px">Admin V1.0</span>
+      </div>
       <p class="mb-4 text-gray-600">
         Assign location names and calibration to each sensor per truck.<br>
         <b>Save</b> after edits to update Ubidots for all users.<br>
