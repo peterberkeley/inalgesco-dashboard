@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.4</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.5</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -460,6 +460,21 @@
       } else {
         p.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#9ca3af;flex-shrink:0;display:inline-block"></span><span style="font-size:11px;font-weight:600;color:#9ca3af">Offline</span>';
       }
+      // Also update sidebar badge (hardcoded HTML — must be kept in sync)
+      const sb = document.getElementById('sidebarOnlineBadge');
+      if (sb) {
+        if (isOnline) {
+          sb.style.background = 'rgba(34,197,94,.1)';
+          sb.style.border = '1px solid rgba(34,197,94,.22)';
+          sb.style.color = 'var(--green)';
+          sb.innerHTML = '<span class="odot"></span>&nbsp;Online';
+        } else {
+          sb.style.background = 'rgba(156,163,175,.1)';
+          sb.style.border = '1px solid rgba(156,163,175,.22)';
+          sb.style.color = '#9ca3af';
+          sb.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#9ca3af;display:inline-block;flex-shrink:0"></span>&nbsp;Offline';
+        }
+      }
     };
   </script>
 
@@ -478,7 +493,7 @@
             <div class="truck-number" id="kpiTruck">—</div>
             <div class="truck-meta" id="kpiSeen">—</div>
           </div>
-          <div class="online-badge"><span class="odot"></span>&nbsp;Online</div>
+          <div class="online-badge" id="sidebarOnlineBadge"><span class="odot"></span>&nbsp;Online</div>
         </div>
         <!-- Hidden kpiAvg tile — JS writes this; we show avg in gauge section -->
         <div class="kpi" style="display:none!important">
