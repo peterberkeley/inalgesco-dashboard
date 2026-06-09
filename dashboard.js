@@ -1618,8 +1618,13 @@ async function poll(deviceID, SENSORS){
     // Compute the required time window
     let endTimeMs, startTimeMs;
     if (selectedRangeMode === 'now') {
-      endTimeMs   = Date.now();
-      startTimeMs = endTimeMs - (selectedRangeMinutes * 60 * 1000);
+      // If device data is older than the view window (offline truck), anchor to last known data
+      const _winMs = selectedRangeMinutes * 60 * 1000;
+      const _nowMs = Date.now();
+      const _tLastData = tsList.length ? Math.max(...tsList) : 0;
+      // Use last data timestamp as anchor if it predates the current window
+      endTimeMs   = (_tLastData > 0 && _tLastData < _nowMs - _winMs) ? _tLastData : _nowMs;
+      startTimeMs = endTimeMs - _winMs;
     } else {
     // 'last' mode: use unified anchor (v2 bulk first, then v1.6 parallel)
     const tLast = await computeLastAnchorMs(deviceID, SENSORS);
