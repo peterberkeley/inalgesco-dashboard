@@ -3574,61 +3574,28 @@ const { deviceLabel, deviceID } = __resolveSelectedDevice(sensorMap);
 console.debug('[device binding]', { selected: document.getElementById('deviceSelect')?.value, deviceLabel, deviceID });
 
 
-    // 5) Pill Online logic:
-    //    Use Devices v2 last_seen; if stale/missing, FALLBACK to gps/signal/volt (v1.6 values) within the same 5-min window.
+    // 5) Pill Online logic: use the freshest timestamp from the actual data we just fetched.
+    //    tsList was built above from all bulk values (signal/volt/gps/sensors).
+    //    This is ground-truth — if everything is >5 min old the truck IS offline.
     const nowSec = Math.floor(Date.now() / 1000);
-    let lastSeenSec = sensorMap[deviceLabel]?.last_seen || 0;
-    const stale = !lastSeenSec || (nowSec - lastSeenSec) > ONLINE_WINDOW_SEC;
+    const nowMs  = Date.now();
 
-    if (stale && deviceID) {
-      try {
-        await ensureVarCache(deviceID);  // fills variableCache[deviceID]: label -> varId
-      const labelsToCheck = pickHeartbeatLabels(deviceID, deviceLabel);
-        let bestTs = 0;
-        for (const lab of labelsToCheck) {
-          const varId = variableCache[deviceID]?.[lab];
-          if (!varId) continue;
-         const vs = await fetch(`${UBIDOTS_V1}/variables/${varId}/values/?page_size=1&token=${UBIDOTS_ACCOUNT_TOKEN}`);
-          if (!vs.ok) continue;
-          const vr = await vs.json();
-          const ts = vr?.results?.[0]?.timestamp || 0;   // v1.6 values endpoint
-          if (ts > bestTs) bestTs = ts;
-        }
-        if (bestTs) lastSeenSec = Math.floor(bestTs / 1000);
-      } catch (e) {
-        console.error("last_seen fallback (gps/signal/volt) failed:", e);
-      }
-    }
-    // DEBUG: final lastSeenSec used for KPI (London)
-console.log('[lastSeen]', {
-  deviceLabel,
-  lastSeenSec,
-  london: lastSeenSec
-    ? new Date(lastSeenSec * 1000).toLocaleString('en-GB', { timeZone: 'Europe/London' })
-    : null,
-  nowSec,
-  ageSec: lastSeenSec ? (nowSec - lastSeenSec) : null,
-  from: stale ? 'fallback(v1.6 values)' : 'devices v2'
-});
+    // Best timestamp from data we already have (tsList built from bulk values above)
+    let bestDataMs = tsList.length ? Math.max(...tsList) : 0;
 
-// DEBUG: final lastSeenSec used for KPI (London time)
-console.log('[lastSeen]', {
-  deviceLabel,
-  lastSeenSec,
-  london: lastSeenSec ? new Date(lastSeenSec * 1000)
-    .toLocaleString('en-GB', { timeZone: 'Europe/London' }) : null,
-  nowSec,
-  ageSec: lastSeenSec ? (nowSec - lastSeenSec) : null,
-  onlineWindow: ONLINE_WINDOW_SEC
-});
+    // Also check Devices v2 last_seen as a cross-reference
+    const v2LastSeenMs = (sensorMap[deviceLabel]?.last_seen || 0) * 1000;
+    const lastSeenMs   = Math.max(bestDataMs, v2LastSeenMs);
+    const lastSeenSec  = Math.floor(lastSeenMs / 1000);
 
-    const isOnline = (nowSec - (lastSeenSec || 0)) < ONLINE_WINDOW_SEC;
+    const isOnline = (nowMs - lastSeenMs) < (ONLINE_WINDOW_SEC * 1000);
 
     // Pill + tooltip
     if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
     const pill = document.getElementById("deviceStatusPill");
     if (pill) {
-      const seen = lastSeenSec ? new Date(lastSeenSec * 1000) : null;pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: UI_TZ })}` : "";
+      const seen = lastSeenSec ? new Date(lastSeenSec * 1000) : null;
+      pill.title = seen ? `Last activity: ${seen.toLocaleString('en-GB', { timeZone: UI_TZ })}` : "";
     }
 
     // Update the SELECTED dropdown option text to match the pill
