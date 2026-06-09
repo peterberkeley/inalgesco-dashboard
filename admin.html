@@ -123,7 +123,46 @@
         <p>For help: <a href="mailto:support@sky-cafe.com" class="underline">support@sky-cafe.com</a></p>
       </div>
     </div>
-  </div>
+  
+      <!-- ── Activity Log ── -->
+      <div style="margin-top:32px;border-top:1px solid #e2e8f0;padding-top:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="margin:0;font-size:15px;font-weight:700;color:#1e293b">
+            📋 User Activity Log — SkyCafe Staff
+          </h3>
+          <div style="display:flex;gap:8px">
+            <button onclick="loadActivity()" id="actRefreshBtn"
+              style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600">
+              ↻ Refresh
+            </button>
+            <button onclick="downloadActivityCSV()"
+              style="background:#22c55e;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:700">
+              ⬇ Download CSV
+            </button>
+          </div>
+        </div>
+        <div id="activityStatus" style="font-size:12px;color:#64748b;margin-bottom:8px"></div>
+        <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:8px">
+          <table id="activityTable" style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#f8fafc;color:#64748b;text-align:left">
+                <th style="padding:8px 12px;white-space:nowrap;font-weight:600;border-bottom:1px solid #e2e8f0">Date / Time (Phoenix)</th>
+                <th style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0">User</th>
+                <th style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0">Action</th>
+                <th style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0">Truck</th>
+                <th style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0">Duration</th>
+                <th style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0">Session</th>
+              </tr>
+            </thead>
+            <tbody id="activityTbody">
+              <tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8">
+                Click Refresh to load activity
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
   <script>
     // ===== CONFIG =====
@@ -159,6 +198,7 @@
         document.getElementById("lockscreen").style.display = "none";
         document.getElementById("adminPage").style.display = "";
         await loadInitialData();
+        loadActivity();
       } else {
         document.getElementById("authError").textContent = "Incorrect password.";
       }
@@ -706,125 +746,79 @@
     }
 
   
+  
     // ════ ACTIVITY LOG ════
     const ACT_LOG_URL = 'https://industrial.api.ubidots.com/api/v1.6/variables/6a2860e0e4e17b2bde24cdf6/values/?page_size=500&token=BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK';
-    const UI_TZ_ACT   = 'America/Phoenix';
+    const UI_TZ_ADMIN = 'America/Phoenix';
 
     async function loadActivity() {
       const statusEl = document.getElementById('activityStatus');
       const tbody    = document.getElementById('activityTbody');
+      if (!statusEl || !tbody) return;
       statusEl.textContent = 'Loading…';
       try {
         const r = await fetch(ACT_LOG_URL);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
-        const rows = (data.results || []).reverse(); // oldest first
+        const rows = (data.results || []).slice().reverse();
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#6272a4">No activity recorded yet</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8">No activity recorded yet</td></tr>';
           statusEl.textContent = '0 events';
           return;
         }
+        const ACTION_COL = {
+          session_start:'#16a34a', session_end:'#dc2626',
+          truck_select:'#2563eb', truck_view:'#7c3aed',
+          mode_switch:'#d97706', map_open:'#0891b2'
+        };
+        function fmtDur(s) {
+          if (!s || s <= 0) return '—';
+          return s >= 60 ? Math.floor(s/60)+'m '+(s%60)+'s' : s+'s';
+        }
         tbody.innerHTML = rows.map(function(row) {
-          const ctx  = row.context || {};
-          const ts   = row.timestamp ? new Date(row.timestamp) : new Date(row.value * 1000);
-          const dtStr = ts.toLocaleString('en-GB', { timeZone: UI_TZ_ACT, hour12: false,
-            year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+          const ctx = row.context || {};
+          const ts  = new Date(row.timestamp || row.value * 1000);
+          const dtStr = ts.toLocaleString('en-GB', {
+            timeZone: UI_TZ_ADMIN, hour12:false,
+            year:'numeric', month:'2-digit', day:'2-digit',
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+          });
           const action = ctx.action || '—';
-          const truck  = ctx.truck  || '—';
-          const user   = ctx.user   || '—';
-          const sid    = (ctx.session || '—').slice(-8); // last 8 chars
-          const dur    = ctx.duration_sec > 0
-            ? (ctx.duration_sec >= 60 ? Math.floor(ctx.duration_sec/60)+'m '+
-               (ctx.duration_sec%60)+'s' : ctx.duration_sec+'s')
-            : (ctx.final_duration_sec > 0
-              ? Math.floor(ctx.final_duration_sec/60)+'m '+(ctx.final_duration_sec%60)+'s' : '—');
-          const actionColor = {
-            session_start:'#22c55e', session_end:'#ef4444',
-            truck_select:'#60a5fa', truck_view:'#a78bfa',
-            mode_switch:'#f59e0b', map_open:'#34d399'
-          }[action] || '#9ca3af';
-          return '<tr style="border-bottom:1px solid #1a1f33">' +
-            '<td style="padding:6px 10px;white-space:nowrap;color:#9ca3af">' + dtStr + '</td>' +
-            '<td style="padding:6px 10px">' + user + '</td>' +
-            '<td style="padding:6px 10px"><span style="background:' + actionColor + '22;color:' +
-              actionColor + ';border-radius:4px;padding:1px 7px;font-size:11px">' + action + '</span></td>' +
-            '<td style="padding:6px 10px">' + truck + '</td>' +
-            '<td style="padding:6px 10px;color:#9ca3af">' + dur + '</td>' +
-            '<td style="padding:6px 10px;color:#6272a4;font-family:monospace">' + sid + '</td>' +
+          const col    = ACTION_COL[action] || '#64748b';
+          const dur    = fmtDur(ctx.duration_sec || ctx.final_duration_sec);
+          const sid    = (ctx.session || '—').split('-').pop().slice(-6);
+          return '<tr style="border-bottom:1px solid #f1f5f9">' +
+            '<td style="padding:7px 12px;white-space:nowrap;color:#475569;font-size:11px">' + dtStr + '</td>' +
+            '<td style="padding:7px 12px;font-weight:600">' + (ctx.user||'—') + '</td>' +
+            '<td style="padding:7px 12px"><span style="background:' + col + '18;color:' + col +
+              ';border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600">' + action + '</span></td>' +
+            '<td style="padding:7px 12px">' + (ctx.truck||'—') + '</td>' +
+            '<td style="padding:7px 12px;color:#64748b">' + dur + '</td>' +
+            '<td style="padding:7px 12px;color:#94a3b8;font-family:monospace;font-size:11px">…' + sid + '</td>' +
             '</tr>';
         }).join('');
-        statusEl.textContent = rows.length + ' events — last updated ' +
-          new Date().toLocaleTimeString('en-GB', {timeZone: UI_TZ_ACT});
+        statusEl.textContent = rows.length + ' events · last loaded ' +
+          new Date().toLocaleTimeString('en-GB', {timeZone: UI_TZ_ADMIN});
       } catch(e) {
-        statusEl.textContent = 'Error: ' + e.message;
+        statusEl.textContent = 'Error loading activity: ' + e.message;
       }
     }
 
     function downloadActivityCSV() {
-      const rows = Array.from(document.querySelectorAll('#activityTbody tr'));
-      const lines = ['Date/Time,User,Action,Truck,Duration,Session'];
+      const rows  = Array.from(document.querySelectorAll('#activityTbody tr'));
+      const lines = ['Date/Time (Phoenix),User,Action,Truck,Duration,Session'];
       rows.forEach(function(tr) {
         const cells = Array.from(tr.querySelectorAll('td'))
           .map(td => '"' + (td.textContent||'').trim().replace(/"/g,'""') + '"');
         if (cells.length > 1) lines.push(cells.join(','));
       });
       const blob = new Blob([lines.join('\n')], {type:'text/csv'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
       a.download = 'skycafe_activity_' + new Date().toISOString().slice(0,10) + '.csv';
       a.click();
     }
 
-    // Auto-load when admin is unlocked
-    const _origUnlock = window._adminUnlocked;
-    window._adminUnlocked = function() {
-      if (_origUnlock) _origUnlock();
-      loadActivity();
-    };
-
   </script>
-
-
-  <!-- ════ ACTIVITY LOG ════ -->
-  <div id="activitySection" style="margin:32px auto;max-width:960px;padding:0 16px">
-    <div style="background:#1e2130;border:1px solid #2d3250;border-radius:10px;padding:20px 24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <h3 style="margin:0;color:#e2e8f0;font-size:15px;font-weight:700">
-          📋 User Activity Log — SkyCafe Staff
-        </h3>
-        <div style="display:flex;gap:8px">
-          <button onclick="loadActivity()" id="actRefreshBtn"
-            style="background:#3b4268;color:#e2e8f0;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px">
-            ↻ Refresh
-          </button>
-          <button onclick="downloadActivityCSV()" id="actDownloadBtn"
-            style="background:#22c55e;color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:700">
-            ⬇ Download CSV
-          </button>
-        </div>
-      </div>
-      <div id="activityStatus" style="font-size:12px;color:#9ca3af;margin-bottom:10px"></div>
-      <div style="overflow-x:auto">
-        <table id="activityTable" style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead>
-            <tr style="color:#9ca3af;border-bottom:1px solid #2d3250;text-align:left">
-              <th style="padding:6px 10px;white-space:nowrap">Date / Time (Phoenix)</th>
-              <th style="padding:6px 10px">User</th>
-              <th style="padding:6px 10px">Action</th>
-              <th style="padding:6px 10px">Truck</th>
-              <th style="padding:6px 10px">Duration</th>
-              <th style="padding:6px 10px">Session ID</th>
-            </tr>
-          </thead>
-          <tbody id="activityTbody" style="color:#e2e8f0">
-            <tr><td colspan="6" style="padding:20px;text-align:center;color:#6272a4">
-              Click Refresh to load activity log
-            </td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
 </body>
 </html>
