@@ -3590,6 +3590,7 @@ console.debug('[device binding]', { selected: document.getElementById('deviceSel
     const lastSeenMs   = lastSeenSec * 1000;
 
     const isOnline = (nowMs - lastSeenMs) < (ONLINE_WINDOW_SEC * 1000);
+    window.__isOnline = isOnline; // shared flag for watchHeartbeat() and other UI
 
     // Pill + tooltip
     if (window.__setDeviceStatus) window.__setDeviceStatus(isOnline);
