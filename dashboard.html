@@ -431,7 +431,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.5</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.6</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -970,7 +970,10 @@
 
       // Append live auto-adjusted average to ChillRail History chart
       (function(){
-        var vals = Object.values(adjustedProbes);
+        // Exclude Oven Box from average — consistent with dashboard.js chart series
+        var vals = Object.entries(adjustedProbes)
+          .filter(function(e){ return !/oven/i.test(e[0]); })
+          .map(function(e){ return e[1]; });
         if(!vals.length) return;
         var avg = Math.round(vals.reduce(function(a,b){return a+b;},0)/vals.length*10)/10;
         var charts = Object.values(Chart.instances);
