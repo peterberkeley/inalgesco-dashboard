@@ -386,6 +386,7 @@
       <h2>Sky Café Dashboard</h2>
       <p>Please enter the dashboard password to continue.</p>
       <form id="auth-form">
+        <input id="auth-user" type="text" autocomplete="username" placeholder="Username (optional)" style="margin-bottom:8px" />
         <input id="auth-pass" type="password" inputmode="text" autocomplete="current-password" placeholder="Password" required />
         <div id="auth-error"></div>
         <button type="submit">Unlock</button>
@@ -431,7 +432,7 @@
     </div>
 
     <div class="h-actions">
-      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.6</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
+      <span id="versionBadge" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;opacity:.75;align-self:center;margin-right:6px;">V16.7</span><button id="adminBtn" class="hbtn">⚙ Admin</button>
       <button id="headerMapBtn" class="hbtn" style="font-weight:700;">Map</button>
     </div>
   </header>
@@ -1173,10 +1174,19 @@
   <!-- ═══ AUTH SCRIPT (kept exactly as original) ═══ -->
   <script>
     window.addEventListener('DOMContentLoaded', () => {
-      const ALLOWED_PASSWORDS = new Set(["Skycafe8971!", "Dispatch239!"]);
+      // ── Credentials: {username (optional) -> {password, identity, track}} ──
+      const NAMED_CREDS = {
+        'peter': { password: '123456', identity: 'Peter (Owner)', track: false }
+      };
+      const PASSWORD_MAP = {
+        'Skycafe8971!': { identity: 'SkyCafe Staff', track: true  },
+        'Dispatch239!': { identity: 'Dispatch',      track: false }
+      };
+
       const overlay = document.getElementById("auth-overlay");
       const form    = document.getElementById("auth-form");
       const pass    = document.getElementById("auth-pass");
+      const userFld = document.getElementById("auth-user");
       const err     = document.getElementById("auth-error");
 
       if (!overlay || !form || !pass || !err) {
@@ -1186,13 +1196,10 @@
 
       function showLock(msg) {
         overlay.style.display = "flex";
-        err.textContent = msg ? msg : "";
+        err.textContent = msg || "";
         pass.value = "";
+        if (userFld) userFld.value = "";
         pass.focus();
-      }
-      function hideLock() {
-        overlay.style.display = "none";
-        localStorage.setItem("sc_last_activity", Date.now().toString());
       }
 
       // Skip lock if this is the post-login cache-clear reload
@@ -1205,9 +1212,24 @@
 
       form.addEventListener("submit", (e) => {
         e.preventDefault();
-        if (ALLOWED_PASSWORDS.has(pass.value.trim())) {
-          // Clear browser + SW caches then hard-reload for fresh content
+        const usr = (userFld ? userFld.value.trim().toLowerCase() : '');
+        const pwd = pass.value.trim();
+        let cred = null;
+
+        if (usr && NAMED_CREDS[usr]) {
+          // Named login: username + password must match
+          if (NAMED_CREDS[usr].password === pwd) cred = NAMED_CREDS[usr];
+        } else {
+          // Password-only login (username blank or unrecognised)
+          if (PASSWORD_MAP[pwd]) cred = PASSWORD_MAP[pwd];
+        }
+
+        if (cred) {
           sessionStorage.setItem('sc_fresh_login', '1');
+          sessionStorage.setItem('sc_user_identity', cred.identity);
+          sessionStorage.setItem('sc_track', cred.track ? '1' : '0');
+          sessionStorage.setItem('sc_session_id',
+            cred.identity.replace(/\s+/g,'-') + '-' + Date.now().toString(36));
           localStorage.setItem('sc_last_activity', Date.now().toString());
           if ('caches' in window) {
             caches.keys().then(ns => Promise.all(ns.map(n => caches.delete(n))))
@@ -1216,17 +1238,104 @@
             location.reload(true);
           }
         } else {
-          err.textContent = "Incorrect password";
+          err.textContent = "Incorrect username or password";
           pass.select();
         }
       });
 
       ["mousemove","keydown","touchstart","scroll","click"].forEach(evt =>
         document.addEventListener(evt, () =>
-          localStorage.setItem("sc_last_activity", Date.now().toString())
-        , { passive: true })
+          localStorage.setItem("sc_last_activity", Date.now().toString()),
+          { passive: true }
+        )
       );
     });
+  </script>
+
+
+  <!-- ── Activity Tracking (records SkyCafe Staff sessions to Ubidots) ── -->
+  <script>
+  (function(){
+    const _LOG_VAR  = '6a2860e0e4e17b2bde24cdf6';
+    const _UBI_TOK  = 'BBUS-6Lyp5vsdbVgar8xvI2VW13hBE6TqOK';
+    const _LOG_URL  = 'https://industrial.api.ubidots.com/api/v1.6/variables/' + _LOG_VAR + '/values/?token=' + _UBI_TOK;
+
+    function _shouldTrack(){
+      return sessionStorage.getItem('sc_track') === '1';
+    }
+    function _user(){ return sessionStorage.getItem('sc_user_identity') || 'Unknown'; }
+    function _sid(){  return sessionStorage.getItem('sc_session_id')   || 'unknown'; }
+
+    // Fire-and-forget POST to Ubidots; uses sendBeacon on unload (no custom headers needed — token in URL)
+    function _log(action, extras){
+      if (!_shouldTrack()) return;
+      const body = JSON.stringify({
+        value: Math.round(Date.now() / 1000),
+        context: Object.assign({ user: _user(), action: action, session: _sid() }, extras || {})
+      });
+      try {
+        if (action === 'session_end' && navigator.sendBeacon) {
+          navigator.sendBeacon(_LOG_URL, new Blob([body], {type:'application/json'}));
+        } else {
+          fetch(_LOG_URL, { method:'POST', keepalive:true,
+            headers:{'Content-Type':'application/json'}, body }).catch(()=>{});
+        }
+      } catch(e) {}
+    }
+
+    // ── Log login (runs after post-login reload) ──
+    if (_shouldTrack() && !sessionStorage.getItem('_sc_login_logged')) {
+      sessionStorage.setItem('_sc_login_logged', '1');
+      _log('session_start', { ts_in: Math.round(Date.now()/1000) });
+    }
+
+    // ── Track truck selection ──
+    let _curTruck = null, _truckSince = null;
+    document.addEventListener('DOMContentLoaded', function() {
+      const sel = document.getElementById('deviceSelect');
+      if (!sel) return;
+
+      function _onTruckChange() {
+        const now = Date.now();
+        const newTruck = sel.options[sel.selectedIndex]
+          ? (sel.options[sel.selectedIndex].text || sel.value).replace(/^[^a-zA-Z0-9]*/,'').trim()
+          : sel.value;
+        if (_curTruck && _truckSince) {
+          const dur = Math.round((now - _truckSince) / 1000);
+          _log('truck_view', { truck: _curTruck, duration_sec: dur });
+        }
+        _curTruck  = newTruck;
+        _truckSince = now;
+        _log('truck_select', { truck: newTruck });
+      }
+
+      sel.addEventListener('change', _onTruckChange);
+
+      // Also capture the initial truck loaded on page ready
+      setTimeout(function() {
+        if (!_curTruck && sel.value) { _curTruck = sel.value; _truckSince = Date.now(); }
+      }, 2000);
+    });
+
+    // ── Track NOW / LAST mode switches ──
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest && e.target.closest('[data-range]');
+      if (btn) _log('mode_switch', { mode: btn.dataset.range });
+      // Map button
+      if (e.target.id === 'headerMapBtn' || e.target.closest('#headerMapBtn'))
+        _log('map_open', {});
+    });
+
+    // ── Session end: page hidden / closed ──
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'hidden') {
+        const dur = _truckSince ? Math.round((Date.now() - _truckSince) / 1000) : 0;
+        _log('session_end', { truck: _curTruck || '', final_duration_sec: dur,
+          ts_out: Math.round(Date.now()/1000) });
+      }
+    });
+
+  })();
   </script>
 
 </body>
