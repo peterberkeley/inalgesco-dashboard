@@ -3714,6 +3714,14 @@ if (FORCE_VARCACHE_REFRESH) delete variableCache[deviceID]; // optional
 
 if (deviceID) {
   // 6) Discovered addresses for this device — recompute per device
+  // Auto-switch to 'last' mode when truck is offline in 'now' view
+  // so all offline-truck gates (2h freshness, suppress, etc.) are bypassed cleanly
+  let __offlineModeOverride = false;
+  if (selectedRangeMode === 'now' && !isOnline) {
+    __offlineModeOverride = true;
+    selectedRangeMode = 'last';
+  }
+
   let discovered = [];
   try {
     const suppress = await shouldSuppressAutoDallas(deviceLabel, dataDeviceID, isOnline);
@@ -3821,6 +3829,12 @@ if (deviceID) {
     if (doCharts) {
       await updateCharts(dataDeviceID, SENSORS);
     }
+  }
+
+  // Restore mode if we overrode it for an offline truck
+  if (typeof __offlineModeOverride !== 'undefined' && __offlineModeOverride) {
+    selectedRangeMode = 'now';
+    __offlineModeOverride = false;
   }
 
   // If updateCharts ran, it completed this cycle: mark clean + stamp time.
