@@ -272,10 +272,8 @@ async function shouldSuppressAutoDallas(deviceLabel, deviceID, isOnline){
   }
 
   // No Admin ICCID configured:
-  // - Allow auto discovery only if the device is Online (recent activity).
-  // - If Offline, suppress discovery (we can't prove identity).
-  if (!isOnline) return true;
-
+  // Offline trucks: ALLOW discovery so we can show their last known data.
+  // Ghost-data risk is zero for offline devices — they can't be sending live data from another truck.
   return false;
 }
 /** While Offline, treat admin-mapped sensors as trusted only if we can prove identity via ICCID.
