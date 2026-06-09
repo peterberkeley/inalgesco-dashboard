@@ -3580,19 +3580,14 @@ const { deviceLabel, deviceID } = __resolveSelectedDevice(sensorMap);
 console.debug('[device binding]', { selected: document.getElementById('deviceSelect')?.value, deviceLabel, deviceID });
 
 
-    // 5) Pill Online logic: use the freshest timestamp from the actual data we just fetched.
-    //    tsList was built above from all bulk values (signal/volt/gps/sensors).
-    //    This is ground-truth — if everything is >5 min old the truck IS offline.
+    // 5) Pill Online logic: use sensorMap last_seen (tsList is only in scope inside poll(),
+    //    not here in updateAll() — using it here was the ReferenceError crash in V15.8–V16.2)
     const nowSec = Math.floor(Date.now() / 1000);
     const nowMs  = Date.now();
 
-    // Best timestamp from data we already have (tsList built from bulk values above)
-    let bestDataMs = tsList.length ? Math.max(...tsList) : 0;
-
-    // Also check Devices v2 last_seen as a cross-reference
-    const v2LastSeenMs = (sensorMap[deviceLabel]?.last_seen || 0) * 1000;
-    const lastSeenMs   = Math.max(bestDataMs, v2LastSeenMs);
-    const lastSeenSec  = Math.floor(lastSeenMs / 1000);
+    // Use Devices v2 last_seen from sensorMap — always in scope here
+    const lastSeenSec  = sensorMap[deviceLabel]?.last_seen || 0;
+    const lastSeenMs   = lastSeenSec * 1000;
 
     const isOnline = (nowMs - lastSeenMs) < (ONLINE_WINDOW_SEC * 1000);
 
