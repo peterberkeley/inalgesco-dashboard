@@ -740,11 +740,7 @@ async function fetchDallasAddresses(deviceID) {
       }
     } catch { }
 
-    // ---- B) Auto-discover sensors with a fixed 48h freshness gate ----
-const FRESH_MS = 2 * 60 * 60 * 1000; // 2 hours
-console.log('[fetchDallasAddresses] Using fixed 2h discovery window');
-
-
+    // ---- B) Auto-discover sensors — anchor freshness to device lastActivity for offline trucks ----
     // Try v2 bulk first
    if (USE_V2_BULK) {
       try {
@@ -753,14 +749,21 @@ console.log('[fetchDallasAddresses] Using fixed 2h discovery window');
         if (r.ok) {
           const bulk = await r.json();
           const nowMs = Date.now();
-          
+
+          // For offline trucks use their last-activity as reference so old data still counts
+          const allTs = Object.values(bulk)
+            .map(o => o && o.timestamp).filter(t => Number.isFinite(t));
+          const dataAnchorMs = allTs.length ? Math.max(...allTs) : nowMs;
+          // Allow anything within 2h of the most recent data point (works for online AND offline)
+          const FRESH_MS = 2 * 60 * 60 * 1000;
+          const refMs = Math.max(nowMs - 48*60*60*1000, dataAnchorMs); // never older than 48h
+
           const sensorsWithData = Object.entries(bulk)
             .filter(([lab, obj]) => {
               if (!/^[0-9a-fA-F]{16}$/.test(lab)) return false;
               if (!obj || obj.value == null) return false;
-              
-              // Apply freshness filter
-              const ageMs = nowMs - (obj.timestamp || 0);
+              // Within 2h of the anchor (last active data point)
+              const ageMs = refMs - (obj.timestamp || 0);
               return ageMs <= FRESH_MS;
             })
             .map(([lab, obj]) => ({
