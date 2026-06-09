@@ -1192,7 +1192,25 @@ async function updateCharts(deviceID, SENSORS){
       // --- 1) Compute window (absolute ms) ---
     let wndStart, wndEnd;
     if (selectedRangeMode === 'now') {
-      wndEnd   = Date.now();
+      // If the device has been offline longer than the view window, anchor to its last data
+      let _nowAnchor = Date.now();
+      try {
+        const _bulk = await fetchDeviceLastValuesV2(deviceID);
+        if (_bulk && typeof _bulk === 'object') {
+          let _tLast = -Infinity;
+          for (const s of SENSORS) {
+            if (!s.address) continue;
+            const _o = _bulk[s.address];
+            const _ts = _o && _o.timestamp;
+            if (Number.isFinite(_ts) && _ts > _tLast) _tLast = _ts;
+          }
+          // If last data is older than the view window, anchor there instead of now
+          if (Number.isFinite(_tLast) && _tLast < _nowAnchor - (selectedRangeMinutes * 60 * 1000)) {
+            _nowAnchor = _tLast;
+          }
+        }
+      } catch(_) {}
+      wndEnd   = _nowAnchor;
       wndStart = wndEnd - (selectedRangeMinutes * 60 * 1000);
               } else {
       // --- 'last' mode: anchor strictly to the selected device's freshest timestamp ---
